@@ -1381,6 +1381,10 @@ class RBIBacktestEngine:
         self.backtest_count = 0
         self.optimization_enabled = True
         self.target_return = Config.TARGET_RETURN_PERCENT
+        
+        # Debug memory to prevent repeating same errors
+        self.error_memory = []  # List of (error_pattern, attempted_fixes)
+        self.successful_patterns = []  # List of patterns that worked
 
     def run_continuous(self):
         """Main continuous loop for RBI backtesting"""
@@ -1514,15 +1518,22 @@ Return detailed analysis."""
         system_prompt = """You are an expert quant developer specializing in backtesting.py library.
 Generate COMPLETE, EXECUTABLE Python code for backtesting strategies.
 
-Requirements:
-- Use backtesting.py library
-- Include all necessary imports
+CRITICAL REQUIREMENTS:
+- Use backtesting.py library ONLY
+- DO NOT import talib (not available in environment)
+- Use pandas and numpy for all indicator calculations
+- Wrap indicators with self.I() method
+- Include all necessary imports (backtesting, pandas, numpy)
 - Define Strategy class with init() and next() methods
 - Implement entry/exit logic
-- Use self.I() wrapper for all indicators
 - Calculate position sizing with ATR
 - Print detailed Moon Dev themed messages 🌙
-- Return ONLY Python code, no explanations"""
+- Return ONLY Python code, no explanations
+
+INDICATOR EXAMPLES (NO TALIB):
+- SMA: self.I(lambda x: x.rolling(14).mean(), self.data.Close)
+- RSI: Use pandas calculations, not talib
+- EMA: self.I(lambda x: x.ewm(span=14).mean(), self.data.Close)"""
 
         user_prompt = f"""Generate complete backtest code for this strategy:
 
@@ -1540,11 +1551,13 @@ Research Analysis:
 Data path: {Config.BTC_DATA_PATH}
 
 Generate complete working code with:
-1. All imports (backtesting, talib, pandas, numpy)
+1. Imports: backtesting, pandas, numpy (NO TALIB!)
 2. Strategy class implementation
-3. Entry/exit logic with indicators
+3. Entry/exit logic with indicators (using pandas, NOT talib)
 4. Risk management
 5. Main execution block with stats printing
+
+CRITICAL: DO NOT import or use talib - use pandas for all calculations!
 
 Return ONLY the Python code."""
 
@@ -1586,8 +1599,11 @@ Return ONLY the Python code."""
         return response.strip()
 
     def _auto_debug_loop(self, code: str, strategy: Dict) -> Optional[str]:
-        """Auto-debug loop with LLM (Moon-Dev pattern - up to 10 iterations)"""
+        """Auto-debug loop with LLM and memory (Moon-Dev pattern - up to 10 iterations)"""
         self.logger.info("🔧 Starting auto-debug loop...")
+        
+        # Track errors in this debug session
+        session_errors = []
 
         for iteration in range(1, Config.MAX_DEBUG_ITERATIONS + 1):
             self.logger.info(f"   Iteration {iteration}/{Config.MAX_DEBUG_ITERATIONS}")
@@ -1597,8 +1613,15 @@ Return ONLY the Python code."""
                 ast.parse(code)
                 self.logger.info("   ✅ Syntax valid")
             except SyntaxError as e:
-                self.logger.warning(f"   ❌ Syntax error: {e}")
-                code = self._fix_code_with_llm(code, str(e), strategy)
+                error_msg = str(e)
+                self.logger.warning(f"   ❌ Syntax error: {error_msg}")
+                
+                # Check if we've seen this error before
+                if self._is_repeated_error(error_msg, session_errors):
+                    self.logger.warning("   ⚠️ Repeated error detected - using memory to avoid")
+                
+                session_errors.append(error_msg)
+                code = self._fix_code_with_llm(code, error_msg, strategy, session_errors)
                 continue
 
             # Try to execute in test environment
@@ -1606,20 +1629,76 @@ Return ONLY the Python code."""
 
             if success:
                 self.logger.info("✅ Code executes successfully")
+                # Store successful pattern
+                self._record_success(code, session_errors)
                 return code
             else:
-                self.logger.warning(f"   ❌ Execution error: {error}")
-                code = self._fix_code_with_llm(code, error, strategy)
+                error_msg = str(error)
+                self.logger.warning(f"   ❌ Execution error: {error_msg}")
+                
+                # Check if we've seen this error before
+                if self._is_repeated_error(error_msg, session_errors):
+                    self.logger.warning("   ⚠️ Repeated error detected - applying learned fix")
+                
+                session_errors.append(error_msg)
+                code = self._fix_code_with_llm(code, error_msg, strategy, session_errors)
 
         self.logger.error("❌ Auto-debug failed after max iterations")
+        self._record_failure(session_errors)
         return None
+    
+    def _is_repeated_error(self, error: str, session_errors: List[str]) -> bool:
+        """Check if this error pattern has been seen before"""
+        # Simple pattern matching for common repeated errors
+        error_lower = error.lower()
+        
+        # Check session errors
+        for prev_error in session_errors:
+            if prev_error.lower() == error_lower:
+                return True
+        
+        # Check global memory
+        for prev_error, _ in self.error_memory:
+            if prev_error.lower() in error_lower or error_lower in prev_error.lower():
+                return True
+        
+        return False
+    
+    def _record_success(self, code: str, errors_encountered: List[str]):
+        """Record successful pattern for future reference"""
+        # Extract key patterns from successful code
+        if 'talib' not in code.lower() and len(errors_encountered) > 0:
+            self.successful_patterns.append({
+                'pattern': 'avoid_talib',
+                'code_snippet': 'Use self.I() wrappers instead of direct talib calls'
+            })
+    
+    def _record_failure(self, errors: List[str]):
+        """Record failed debug session for future reference"""
+        if errors:
+            self.error_memory.append((errors[-1], errors))
 
-    def _fix_code_with_llm(self, code: str, error: str, strategy: Dict) -> str:
-        """Use LLM to fix code based on error"""
+    def _fix_code_with_llm(self, code: str, error: str, strategy: Dict, error_history: List[str]) -> str:
+        """Use LLM to fix code based on error with memory of previous attempts"""
         self.logger.info("🔧 Fixing code with LLM...")
 
-        system_prompt = """You are a debugging expert. Fix Python backtesting code based on error messages.
+        system_prompt = """You are a debugging expert for backtesting.py library. Fix Python backtesting code based on error messages.
+
+CRITICAL RULES:
+1. NEVER import talib directly - the module is not available
+2. Use backtesting.py's built-in indicators via self.I() wrapper
+3. Use pandas for calculations, not talib
+4. Data columns available: Open, High, Low, Close, Volume
+5. Learn from previous error attempts to avoid repeating same mistakes
+
 Return ONLY the fixed Python code, no explanations."""
+
+        # Build error history context
+        history_text = ""
+        if len(error_history) > 1:
+            history_text = f"\n\nPrevious errors in this session (DO NOT REPEAT THESE MISTAKES):\n"
+            for i, prev_error in enumerate(error_history[:-1], 1):
+                history_text += f"{i}. {prev_error}\n"
 
         user_prompt = f"""Fix this backtest code:
 
@@ -1627,13 +1706,20 @@ Return ONLY the fixed Python code, no explanations."""
 {code}
 ```
 
-Error encountered:
+Current error:
 {error}
+{history_text}
 
 Strategy context:
 - Name: {strategy.get('name', '')}
 - Entry: {strategy.get('entry_rules', '')}
 - Exit: {strategy.get('exit_rules', '')}
+
+IMPORTANT REMINDERS:
+- Do NOT use talib - it's not installed
+- Use self.I(pandas_function, self.data.Close, period) pattern
+- Example: self.I(lambda x: x.rolling(14).mean(), self.data.Close) for SMA
+- backtesting.py provides: self.data.Open, High, Low, Close, Volume
 
 Return the COMPLETE fixed Python code."""
 
