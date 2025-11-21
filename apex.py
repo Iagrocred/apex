@@ -1778,16 +1778,46 @@ Return ONLY the complete Python code."""
         """Use LLM to fix code based on error with memory of previous attempts"""
         self.logger.info("🔧 Fixing code with LLM...")
 
-        system_prompt = """You are a debugging expert for backtesting.py library. Fix Python backtesting code based on error messages.
+        system_prompt = """You are a debugging expert for backtesting.py library. Fix code FAST by applying these EXACT solutions:
 
-CRITICAL RULES:
-1. NEVER import talib directly - the module is not available
-2. Use backtesting.py's built-in indicators via self.I() wrapper
-3. Use pandas for calculations, not talib
-4. Data columns available: Open, High, Low, Close, Volume
-5. Learn from previous error attempts to avoid repeating same mistakes
+COMMON ERRORS & INSTANT FIXES:
 
-Return ONLY the fixed Python code, no explanations."""
+1. Column Names Error ("None of [Index(['Open',...)] are in columns"):
+   FIX: Add this BEFORE Backtest():
+   ```python
+   data.columns = [col.capitalize() for col in data.columns]
+   ```
+
+2. Indicator "λ(C)" or "RSI(C)" or "ema(C,12)" errors:
+   FIX: Use Moon Dev's pattern with pd.Series():
+   ```python
+   self.ema = self.I(lambda x: pd.Series(x).ewm(span=20).mean(), self.data.Close)
+   self.sma = self.I(lambda x: pd.Series(x).rolling(14).mean(), self.data.Close)
+   ```
+
+3. RSI calculation:
+   FIX: Use pandas RSI calculation:
+   ```python
+   def calculate_rsi(prices, period=14):
+       delta = pd.Series(prices).diff()
+       gain = (delta.where(delta > 0, 0)).rolling(window=period).mean()
+       loss = (-delta.where(delta < 0, 0)).rolling(window=period).mean()
+       rs = gain / loss
+       return 100 - (100 / (1 + rs))
+   
+   self.rsi = self.I(calculate_rsi, self.data.Close, 14)
+   ```
+
+4. Missing self.buy() call:
+   FIX: Always call self.buy() when entering:
+   ```python
+   self.buy(size=pos_size, sl=sl_price, tp=tp_price)
+   ```
+
+5. Talib errors:
+   FIX: NEVER use talib. Use pd.Series() for everything.
+
+Return ONLY the complete fixed Python code, no explanations."""
 
         # Build error history context
         history_text = ""
@@ -1796,28 +1826,25 @@ Return ONLY the fixed Python code, no explanations."""
             for i, prev_error in enumerate(error_history[:-1], 1):
                 history_text += f"{i}. {prev_error}\n"
 
-        user_prompt = f"""Fix this backtest code:
+        user_prompt = f"""Fix this backtest code QUICKLY using the instant fixes above:
 
 ```python
 {code}
 ```
 
-Current error:
-{error}
+ERROR: {error}
 {history_text}
 
-Strategy context:
-- Name: {strategy.get('name', '')}
-- Entry: {strategy.get('entry_rules', '')}
-- Exit: {strategy.get('exit_rules', '')}
+APPLY THE RIGHT INSTANT FIX:
+- If "None of [Index" → Add data.columns capitalization
+- If "λ" or "ema(" or "RSI(" → Use pd.Series() wrapper
+- If RSI calculation → Use pandas RSI function shown above
+- If no trades executing → Add self.buy(size=X, sl=Y, tp=Z)
+- Capitalize column names BEFORE creating Backtest
 
-IMPORTANT REMINDERS:
-- Do NOT use talib - it's not installed
-- Use self.I(pandas_function, self.data.Close, period) pattern
-- Example: self.I(lambda x: x.rolling(14).mean(), self.data.Close) for SMA
-- backtesting.py provides: self.data.Open, High, Low, Close, Volume
+Strategy: {strategy.get('name', '')}
 
-Return the COMPLETE fixed Python code."""
+Return the COMPLETE fixed Python code with the instant fix applied."""
 
         try:
             response = ModelFactory.call_llm(
