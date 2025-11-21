@@ -976,12 +976,12 @@ Focus areas (vary between):
 Create a UNIQUE query focusing on a specific strategy type.
 Return ONLY the search query text, nothing else."""
 
-                # Call LLM
+                # Call LLM - Moon-Dev pattern: DeepSeek for heavy lifting
                 if Config.OPENROUTER_API_KEY:
                     response = self._call_openrouter_glm(system_prompt + "\n\n" + user_prompt)
-                elif Config.OPENAI_API_KEY:
+                elif Config.DEEPSEEK_API_KEY:
                     response = ModelFactory.call_llm(
-                        {"type": "openai", "name": "gpt-4"},
+                        {"type": "deepseek", "name": "deepseek-chat"},
                         user_prompt,
                         system_prompt,
                         temperature=0.7,
@@ -1211,9 +1211,9 @@ Extract and return a JSON object with these fields:
 
 Return ONLY valid JSON, no other text."""
 
-                # Call LLM
+                # Call LLM - Moon-Dev pattern: DeepSeek-reasoner for heavy reasoning tasks
                 response = ModelFactory.call_llm(
-                    {"type": "gpt", "name": "gpt-4"},
+                    {"type": "deepseek", "name": "deepseek-reasoner"},
                     user_prompt,
                     system_prompt,
                     temperature=0.3,
