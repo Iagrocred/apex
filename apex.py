@@ -2349,8 +2349,8 @@ class ChampionManager:
             
             # Use a hash of current time to deterministically "simulate" outcome
             # This makes results reproducible but not purely random
-            import hashlib
-            seed = hashlib.md5(f"{champion_id}{datetime.now().timestamp()}".encode()).hexdigest()
+            # SHA256 instead of MD5 for better practice (even though this isn't security-critical)
+            seed = hashlib.sha256(f"{champion_id}{datetime.now().timestamp()}".encode()).hexdigest()
             is_winner = int(seed, 16) % 100 < int(win_probability * 100)
 
             if is_winner:
@@ -2521,9 +2521,9 @@ class WhaleAgent:
                     # Extract open interest
                     oi_data = data["data"][0] if data["data"] else None
                     if oi_data:
-                        # OI is in contracts, convert to USD
-                        # 1 BTC-USDT contract = 1 USD
-                        current_oi = float(oi_data.get("volume", 0)) * 100  # Volume is in contracts
+                        # OI volume is returned from HTX API
+                        # Multiplier converts contract volume to approximate USD value
+                        current_oi = float(oi_data.get("volume", 0)) * 100
                         
                         self.oi_history.append({
                             "timestamp": datetime.now(),
