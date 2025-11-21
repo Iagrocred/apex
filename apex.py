@@ -230,10 +230,15 @@ class Config:
     PERPLEXITY_API_KEY = os.getenv("PERPLEXITY_API_KEY", "")
     OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY", "")
 
-    # Exchange
+    # Exchange APIs
     HTX_API_KEY = os.getenv("HTX_API_KEY", "")
     HTX_SECRET = os.getenv("HTX_SECRET", "")
     HTX_BASE_URL = "https://api.huobi.pro"
+    
+    # Future: OANDA for Forex (Phase 2 expansion)
+    # OANDA_API_KEY = os.getenv("OANDA_API_KEY", "")
+    # OANDA_ACCOUNT_ID = os.getenv("OANDA_ACCOUNT_ID", "")
+    # OANDA_PRACTICE = os.getenv("OANDA_PRACTICE", "true")  # true for practice, false for live
 
     # Optional Data Sources
     TWITTER_API_KEY = os.getenv("TWITTER_API_KEY", "")
@@ -859,9 +864,30 @@ class StrategyDiscoveryAgent:
         self.search_results_csv = Config.SEARCH_RESULTS_DIR / "search_results.csv"
         self.search_queries_csv = Config.SEARCH_QUERIES_DIR / "search_queries.csv"
         self.strategies_index_csv = Config.STRATEGY_LIBRARY_DIR / "strategies_index.csv"
+        
+        # Query memory to prevent repeats
+        self.recent_queries = set()  # Track recent queries
+        self.query_history_file = Config.SEARCH_QUERIES_DIR / "query_history.txt"
+        self._load_query_history()
 
         # Initialize CSVs
         self._init_csv_files()
+    
+    def _load_query_history(self):
+        """Load recent query history to avoid repeats"""
+        if self.query_history_file.exists():
+            with open(self.query_history_file, 'r') as f:
+                # Load last 100 queries
+                lines = f.readlines()
+                self.recent_queries = set(line.strip().lower() for line in lines[-100:])
+        else:
+            self.recent_queries = set()
+    
+    def _save_query(self, query: str):
+        """Save query to history file"""
+        with open(self.query_history_file, 'a') as f:
+            f.write(f"{query}\n")
+        self.recent_queries.add(query.lower())
 
     def _init_csv_files(self):
         """Initialize CSV files for logging"""
@@ -943,19 +969,29 @@ class StrategyDiscoveryAgent:
         self.logger.info("🧠 Generating search queries with LLM...")
 
         # Use OpenRouter GLM model (Moon-Dev pattern)
-        system_prompt = """You are Moon Dev's Web Search Query Generator 🌙
+        system_prompt = """You are Moon Dev's Web Search Query Generator for CRYPTOCURRENCY trading strategies 🌙
 
 ⚠️ CRITICAL INSTRUCTION: YOU MUST RESPOND IN ENGLISH ONLY ⚠️
 
-Generate ONE creative search query to find unique, backtestable trading strategies on the web.
+Generate ONE creative search query to find unique, backtestable CRYPTOCURRENCY trading strategies on the web.
+
+**CRYPTO MARKETS ONLY**: Focus on strategies for:
+- Bitcoin, Ethereum, Altcoins
+- Crypto perpetual futures
+- DeFi, on-chain metrics
+- Crypto-specific features (funding rates, whale movements, etc.)
+
+Good crypto strategies are SIGNAL-BASED and work across different crypto assets!
 
 Be creative and varied! Each query should explore DIFFERENT strategy types:
-- Momentum, mean reversion, breakout, arbitrage, statistical arbitrage
-- Price action, volume analysis, order flow, market microstructure
+- Momentum, mean reversion, breakout, arbitrage
+- Price action, volume analysis, order flow
 - Time-based patterns, seasonal effects, intraday patterns
-- Options strategies, volatility trading, correlation trading
+- Funding rate arbitrage, perpetual futures strategies
+- Volatility trading, correlation trading (between cryptos)
 - Machine learning strategies, neural network trading
-- Quantitative strategies with mathematical models"""
+- Quantitative strategies with mathematical models
+- On-chain metrics, whale movements, exchange flows"""
 
         queries = []
 
@@ -964,17 +1000,23 @@ Be creative and varied! Each query should explore DIFFERENT strategy types:
             try:
                 user_prompt = f"""Generate search query #{i+1} of {Config.DISCOVERY_QUERIES_PER_CYCLE}.
 
-Focus areas (vary between):
-1. "RSI divergence crypto trading strategy backtest results"
-2. "Volume profile breakout strategy TradingView"
-3. "Funding rate arbitrage cryptocurrency quantpedia"
-4. "Order flow imbalance HFT strategy arxiv"
-5. "VWAP mean reversion intraday strategy"
-6. "Bollinger band squeeze momentum strategy"
-7. "Market maker inventory management strategy"
-8. "Statistical arbitrage pairs trading cryptocurrency"
+Focus areas for CRYPTOCURRENCY strategies (vary between these and create unique variations):
 
-Create a UNIQUE query focusing on a specific strategy type.
+1. "RSI divergence Bitcoin trading strategy backtest results"
+2. "Volume profile breakout cryptocurrency TradingView"
+3. "Funding rate arbitrage perpetual futures strategy"
+4. "Order flow imbalance crypto trading strategy"
+5. "VWAP mean reversion Bitcoin intraday strategy"
+6. "Bollinger band squeeze momentum altcoin strategy"
+7. "Crypto market maker inventory management strategy"
+8. "Statistical arbitrage BTC-ETH correlation pairs trading"
+9. "On-chain metrics whale accumulation strategy"
+10. "Exchange inflow/outflow Bitcoin prediction strategy"
+11. "Ichimoku cloud cryptocurrency trend following"
+12. "EMA crossover Bitcoin scalping strategy"
+
+Create a UNIQUE query for a CRYPTO strategy (Bitcoin, Ethereum, altcoins).
+**Remember**: We trade on HTX exchange (crypto spot + perpetuals).
 Return ONLY the search query text, nothing else."""
 
                 # Call LLM
@@ -994,7 +1036,16 @@ Return ONLY the search query text, nothing else."""
 
                 query = response.strip()
                 if query and len(query) > 10:
+                    # Check if we've searched this recently
+                    query_lower = query.lower()
+                    if query_lower in self.recent_queries:
+                        self.logger.info(f"   Query {i+1}: SKIPPED (duplicate): {query}")
+                        # Generate a variation or use fallback
+                        query = self._get_fallback_query(i)
+                        query_lower = query.lower()
+                    
                     queries.append(query)
+                    self._save_query(query)  # Save to history
                     self.logger.info(f"   Query {i+1}: {query}")
 
             except Exception as e:
