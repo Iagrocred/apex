@@ -976,19 +976,28 @@ Focus areas (vary between):
 Create a UNIQUE query focusing on a specific strategy type.
 Return ONLY the search query text, nothing else."""
 
-                # Call LLM
+                # Call LLM - Moon-Dev pattern: DeepSeek for heavy lifting
                 if Config.OPENROUTER_API_KEY:
                     response = self._call_openrouter_glm(system_prompt + "\n\n" + user_prompt)
-                elif Config.OPENAI_API_KEY:
+                elif Config.DEEPSEEK_API_KEY:
                     response = ModelFactory.call_llm(
-                        {"type": "openai", "name": "gpt-4"},
+                        {"type": "deepseek", "name": "deepseek-chat"},
+                        user_prompt,
+                        system_prompt,
+                        temperature=0.7,
+                        max_tokens=100
+                    )
+                elif Config.OPENAI_API_KEY:
+                    # Fallback to OpenAI if DeepSeek not available
+                    response = ModelFactory.call_llm(
+                        {"type": "openai", "name": "gpt-4o-mini"},
                         user_prompt,
                         system_prompt,
                         temperature=0.7,
                         max_tokens=100
                     )
                 else:
-                    # Fallback to predefined queries
+                    # Final fallback to predefined queries
                     response = self._get_fallback_query(i)
 
                 query = response.strip()
@@ -1211,14 +1220,55 @@ Extract and return a JSON object with these fields:
 
 Return ONLY valid JSON, no other text."""
 
-                # Call LLM
-                response = ModelFactory.call_llm(
-                    {"type": "gpt", "name": "gpt-4"},
-                    user_prompt,
-                    system_prompt,
-                    temperature=0.3,
-                    max_tokens=2000
-                )
+                # Call LLM - Moon-Dev pattern: DeepSeek-reasoner for heavy reasoning tasks
+                # Try DeepSeek first, fallback to other models if needed
+                try:
+                    if Config.DEEPSEEK_API_KEY:
+                        response = ModelFactory.call_llm(
+                            {"type": "deepseek", "name": "deepseek-reasoner"},
+                            user_prompt,
+                            system_prompt,
+                            temperature=0.3,
+                            max_tokens=2000
+                        )
+                    elif Config.OPENAI_API_KEY:
+                        # Fallback to OpenAI if DeepSeek not available
+                        response = ModelFactory.call_llm(
+                            {"type": "openai", "name": "gpt-4o-mini"},
+                            user_prompt,
+                            system_prompt,
+                            temperature=0.3,
+                            max_tokens=2000
+                        )
+                    elif Config.ANTHROPIC_API_KEY:
+                        # Fallback to Claude if OpenAI not available
+                        response = ModelFactory.call_llm(
+                            {"type": "anthropic", "name": "claude-3-5-haiku-latest"},
+                            user_prompt,
+                            system_prompt,
+                            temperature=0.3,
+                            max_tokens=2000
+                        )
+                    else:
+                        self.logger.error("❌ No API key available for strategy extraction")
+                        continue
+                except Exception as llm_error:
+                    self.logger.warning(f"Primary model failed, trying fallback: {llm_error}")
+                    # Try fallback model if primary fails
+                    try:
+                        if Config.ANTHROPIC_API_KEY:
+                            response = ModelFactory.call_llm(
+                                {"type": "anthropic", "name": "claude-3-5-haiku-latest"},
+                                user_prompt,
+                                system_prompt,
+                                temperature=0.3,
+                                max_tokens=2000
+                            )
+                        else:
+                            raise Exception("No fallback model available")
+                    except Exception as fallback_error:
+                        self.logger.warning(f"Fallback model also failed: {fallback_error}")
+                        continue
 
                 # Parse JSON response
                 try:
