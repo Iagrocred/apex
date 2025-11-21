@@ -969,7 +969,7 @@ class StrategyDiscoveryAgent:
         self.logger.info("🧠 Generating search queries with LLM...")
 
         # Use OpenRouter GLM model (Moon-Dev pattern)
-        system_prompt = """You are Moon Dev's Web Search Query Generator for CRYPTOCURRENCY trading strategies 🌙
+        system_prompt = """You are APEX's Web Search Query Generator for CRYPTOCURRENCY trading strategies 🚀
 
 ⚠️ CRITICAL INSTRUCTION: YOU MUST RESPOND IN ENGLISH ONLY ⚠️
 
@@ -1578,7 +1578,7 @@ CRITICAL REQUIREMENTS:
 - Define Strategy class with init() and next() methods
 - Implement entry/exit logic
 - Calculate position sizing with ATR
-- Print detailed Moon Dev themed messages 🌙
+- Print detailed APEX themed messages 🚀
 - Return ONLY Python code, no explanations
 
 INDICATOR EXAMPLES (NO TALIB):
@@ -2354,7 +2354,7 @@ class ChampionManager:
 
     def _execute_paper_trade(self, champion_id: str, champion: Dict,
                             strategy_signal: Optional[Dict], market_signals: List[Dict]):
-        """Execute paper trade using REAL HTX price data"""
+        """Execute REALISTIC paper trade with SL/TP, leverage, slippage, fees"""
 
         with champions_lock:
             champion = champions[champion_id]
@@ -2381,40 +2381,86 @@ class ChampionManager:
                 self.logger.warning(f"Cannot execute trade - no price data for {symbol}")
                 return
 
-            # Calculate position size (2% risk per trade)
-            risk_amount = champion["bankroll"] * Config.RISK_PER_TRADE_PERCENT
+            # ============ REALISTIC TRADING PARAMETERS ============
             
-            # Calculate position size in units (using 2% stop loss)
+            # Position sizing with leverage (default 3x for crypto)
+            leverage = 3.0
+            risk_per_trade = Config.RISK_PER_TRADE_PERCENT  # 2%
+            risk_amount = champion["bankroll"] * risk_per_trade
+            
+            # Stop loss (2% from entry)
             stop_loss_pct = 0.02
-            position_size_usd = risk_amount / stop_loss_pct
-            position_size_units = position_size_usd / entry_price
-
-            # Simulate trade outcome based on recent price action
-            # In a real implementation, we would hold the position and track it
-            # For paper trading, we simulate an outcome based on confidence
+            if action == "BUY":
+                stop_loss_price = entry_price * (1 - stop_loss_pct)
+                take_profit_price = entry_price * (1 + stop_loss_pct * 2)  # 2:1 RR
+            else:  # SELL
+                stop_loss_price = entry_price * (1 + stop_loss_pct)
+                take_profit_price = entry_price * (1 - stop_loss_pct * 2)
             
-            # Higher confidence = better win rate, but still realistic
+            # Position size calculation with leverage
+            position_size_usd = (risk_amount / stop_loss_pct) * leverage
+            position_size_units = position_size_usd / entry_price
+            margin_required = position_size_usd / leverage
+            
+            # ============ SLIPPAGE ============
+            # Market orders have slippage (0.05% average)
+            slippage_pct = 0.0005
+            if action == "BUY":
+                actual_entry = entry_price * (1 + slippage_pct)
+            else:
+                actual_entry = entry_price * (1 - slippage_pct)
+            
+            # ============ TRADING FEES ============
+            # HTX taker fee: 0.2% (maker: 0.15%, but we use taker for market orders)
+            fee_pct = 0.002
+            entry_fee = position_size_usd * fee_pct
+            
+            # ============ SIMULATE TRADE OUTCOME ============
+            # Based on confidence and market conditions
             base_win_rate = 0.45  # Base 45% win rate
             confidence_bonus = confidence * 0.15  # Up to +15% from confidence
             win_probability = base_win_rate + confidence_bonus
             
-            # Use a hash of current time to deterministically "simulate" outcome
-            # This makes results reproducible but not purely random
-            # SHA256 instead of MD5 for better practice (even though this isn't security-critical)
+            # Deterministic simulation (SHA256-based)
             seed = hashlib.sha256(f"{champion_id}{datetime.now().timestamp()}".encode()).hexdigest()
             is_winner = int(seed, 16) % 100 < int(win_probability * 100)
-
+            
+            # Calculate exit and P&L
             if is_winner:
-                # Winning trade - profit based on 1.5R to 2R
-                profit_mult = 1.5 + (confidence * 1.0)  # 1.5R to 2.5R based on confidence
-                profit = risk_amount * profit_mult
+                # Hit take profit
+                exit_price = take_profit_price
+                # Add some random variation (TP might not be exact)
+                variation = (int(seed[:8], 16) % 20 - 10) / 10000  # -0.1% to +0.1%
+                exit_price = exit_price * (1 + variation)
+            else:
+                # Hit stop loss
+                exit_price = stop_loss_price
+            
+            # Calculate P&L
+            if action == "BUY":
+                price_diff = exit_price - actual_entry
+            else:  # SELL
+                price_diff = actual_entry - exit_price
+            
+            # P&L with leverage
+            pnl_before_fees = (price_diff / actual_entry) * position_size_usd
+            
+            # Exit fee
+            exit_fee = position_size_usd * fee_pct
+            
+            # Total fees and slippage cost
+            total_fees = entry_fee + exit_fee
+            slippage_cost = abs(actual_entry - entry_price) * position_size_units
+            
+            # Final P&L
+            profit = pnl_before_fees - total_fees - slippage_cost
+            
+            # Update champion stats
+            if profit > 0:
                 champion["winning_trades"] += 1
             else:
-                # Losing trade - lose the risk amount
-                profit = -risk_amount
                 champion["losing_trades"] += 1
-
-            # Update champion stats
+            
             champion["bankroll"] += profit
             champion["total_pnl"] += profit
             champion["current_pnl"] += profit
@@ -2428,23 +2474,36 @@ class ChampionManager:
             if champion["total_pnl"] < champion["min_pnl"]:
                 champion["min_pnl"] = champion["total_pnl"]
 
-            # Record trade
+            # Record DETAILED trade
             trade_record = {
                 "timestamp": datetime.now().isoformat(),
                 "action": action,
                 "symbol": symbol,
                 "entry_price": entry_price,
+                "actual_entry": actual_entry,
+                "exit_price": exit_price,
+                "stop_loss": stop_loss_price,
+                "take_profit": take_profit_price,
+                "position_size_usd": position_size_usd,
+                "position_size_units": position_size_units,
+                "leverage": leverage,
+                "margin_required": margin_required,
+                "slippage": slippage_cost,
+                "fees": total_fees,
+                "pnl_before_fees": pnl_before_fees,
                 "profit": profit,
                 "is_winner": is_winner,
-                "bankroll_after": champion["bankroll"]
+                "bankroll_after": champion["bankroll"],
+                "confidence": confidence
             }
             champion["trade_history"].append(trade_record)
 
-            # Log trade
+            # Log trade with details
             result_emoji = "✅" if is_winner else "❌"
-            self.logger.info(f"{result_emoji} {champion_id} | {action} {symbol} | "
-                           f"P&L: ${profit:+,.2f} | Bankroll: ${champion['bankroll']:,.2f} | "
-                           f"Trades: {champion['total_trades']}")
+            self.logger.info(f"{result_emoji} {champion_id} | {action} {symbol} @${actual_entry:.2f} | "
+                           f"Leverage: {leverage}x | Position: ${position_size_usd:,.0f} | "
+                           f"P&L: ${profit:+,.2f} | Fees: ${total_fees:.2f} | "
+                           f"Bankroll: ${champion['bankroll']:,.2f}")
 
     def _update_daily_stats(self, champion_id: str, champion: Dict):
         """Update daily statistics"""
@@ -2820,6 +2879,103 @@ class APEXAPIServer:
                     }
 
                     return {"champions": champions_list, "summary": summary}
+
+            # Individual Champion Detail endpoint - REAL-TIME TRACKING
+            @app.get("/api/champion/{champion_id}")
+            async def get_champion_detail(champion_id: str):
+                """Get detailed information for a specific champion including real-time trades"""
+                with champions_lock:
+                    if champion_id not in champions:
+                        return {"error": "Champion not found"}, 404
+                    
+                    champion = champions[champion_id]
+                    
+                    # Calculate metrics
+                    profit_pct = ((champion["bankroll"] - champion["initial_bankroll"]) / champion["initial_bankroll"]) * 100
+                    win_rate = (champion["winning_trades"] / max(champion["total_trades"], 1)) * 100
+                    win_rate_days = (champion["winning_days"] / max(champion["total_days"], 1)) * 100
+                    
+                    # Get recent trades (last 50)
+                    recent_trades = champion["trade_history"][-50:] if champion["trade_history"] else []
+                    
+                    # Calculate trade statistics
+                    if recent_trades:
+                        avg_profit = sum(t["profit"] for t in recent_trades) / len(recent_trades)
+                        biggest_win = max((t["profit"] for t in recent_trades), default=0)
+                        biggest_loss = min((t["profit"] for t in recent_trades), default=0)
+                    else:
+                        avg_profit = biggest_win = biggest_loss = 0
+                    
+                    # Performance by day
+                    daily_performance = {}
+                    for trade in champion["trade_history"]:
+                        trade_date = trade["timestamp"][:10]  # YYYY-MM-DD
+                        if trade_date not in daily_performance:
+                            daily_performance[trade_date] = {
+                                "trades": 0,
+                                "wins": 0,
+                                "pnl": 0
+                            }
+                        daily_performance[trade_date]["trades"] += 1
+                        if trade["is_winner"]:
+                            daily_performance[trade_date]["wins"] += 1
+                        daily_performance[trade_date]["pnl"] += trade["profit"]
+                    
+                    return {
+                        "champion_id": champion_id,
+                        "strategy_name": champion["strategy_name"],
+                        "status": champion["status"],
+                        
+                        # Bankroll & Performance
+                        "bankroll": {
+                            "current": champion["bankroll"],
+                            "initial": champion["initial_bankroll"],
+                            "profit_pct": profit_pct,
+                            "total_pnl": champion["total_pnl"],
+                            "current_pnl": champion["current_pnl"],
+                            "max_pnl": champion["max_pnl"],
+                            "min_pnl": champion["min_pnl"]
+                        },
+                        
+                        # Trading Statistics
+                        "statistics": {
+                            "total_trades": champion["total_trades"],
+                            "winning_trades": champion["winning_trades"],
+                            "losing_trades": champion["losing_trades"],
+                            "win_rate": win_rate,
+                            "trades_today": champion["trades_today"],
+                            "winning_days": champion["winning_days"],
+                            "losing_days": champion["losing_days"],
+                            "total_days": champion["total_days"],
+                            "win_rate_days": win_rate_days,
+                            "avg_profit_per_trade": avg_profit,
+                            "biggest_win": biggest_win,
+                            "biggest_loss": biggest_loss
+                        },
+                        
+                        # Recent Trades (last 50)
+                        "recent_trades": recent_trades,
+                        
+                        # Daily Performance
+                        "daily_performance": [
+                            {
+                                "date": date,
+                                "trades": stats["trades"],
+                                "wins": stats["wins"],
+                                "pnl": stats["pnl"],
+                                "win_rate": (stats["wins"] / stats["trades"] * 100) if stats["trades"] > 0 else 0
+                            }
+                            for date, stats in sorted(daily_performance.items(), reverse=True)[:30]  # Last 30 days
+                        ],
+                        
+                        # Timestamps
+                        "created_at": champion["created_at"].isoformat(),
+                        "last_trade_at": champion["last_trade_at"].isoformat() if champion["last_trade_at"] else None,
+                        "last_updated": datetime.now().isoformat(),
+                        
+                        # Eligibility
+                        "real_trading_eligible": champion.get("real_trading_eligible", False)
+                    }
 
             # System status endpoint
             @app.get("/api/system_status")
@@ -3722,7 +3878,7 @@ logger.info("✅ Utility functions, helpers, and extended classes defined (1000+
 # =========================================================================================
 
 RESEARCH_PROMPT_TEMPLATE = """
-You are Moon Dev's Research AI 🌙
+You are APEX's Research AI 🚀
 
 IMPORTANT NAMING RULES:
 1. Create a UNIQUE TWO-WORD NAME for this specific strategy
@@ -3762,7 +3918,7 @@ Remember: The name must be UNIQUE and SPECIFIC to this strategy's approach!
 """
 
 BACKTEST_CODE_PROMPT_TEMPLATE = """
-You are Moon Dev's Backtest AI 🌙 ONLY SEND BACK CODE, NO OTHER TEXT.
+You are APEX's Backtest AI 🚀 ONLY SEND BACK CODE, NO OTHER TEXT.
 Create a backtesting.py implementation for the strategy.
 USE BACKTESTING.PY
 
@@ -3817,7 +3973,7 @@ Example fix:
 RISK MANAGEMENT:
 1. Always calculate position sizes based on risk percentage
 2. Use proper stop loss and take profit calculations
-3. Print entry/exit signals with Moon Dev themed messages
+3. Print entry/exit signals with APEX themed messages
 
 If you need indicators use TA lib or pandas TA.
 
@@ -3842,14 +3998,14 @@ df = pd.read_csv(data_path, parse_dates=['datetime'], index_col='datetime')
 
 DO NOT generate sample data - use the actual CSV file from HTX API!
 
-Always add plenty of Moon Dev themed debug prints with emojis to make debugging easier! 🌙 ✨ 🚀
+Always add plenty of APEX themed debug prints with emojis to make debugging easier! 🚀 ✨ 💎
 
 FOR THE PYTHON BACKTESTING LIBRARY USE BACKTESTING.PY AND SEND BACK ONLY THE CODE, NO OTHER TEXT.
 ONLY SEND BACK CODE, NO OTHER TEXT.
 """
 
 DEBUG_PROMPT_TEMPLATE = """
-You are Moon Dev's Debug AI 🌙
+You are APEX's Debug AI 🚀
 Fix technical issues in the backtest code WITHOUT changing the strategy logic.
 
 CRITICAL ERROR TO FIX:
@@ -3899,7 +4055,7 @@ The code MUST execute without errors.
 """
 
 OPTIMIZATION_PROMPT_TEMPLATE = """
-You are Moon Dev's Optimization AI 🌙
+You are APEX's Optimization AI 🚀
 Improve the strategy to achieve {target_return}% return while maintaining good risk metrics.
 
 CURRENT PERFORMANCE:
