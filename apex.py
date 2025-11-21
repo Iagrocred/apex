@@ -152,6 +152,7 @@ def setup_enhanced_logging():
     logger.addHandler(console_handler)
 
     # Specialized loggers for different components (E17FINAL pattern)
+    # Set propagate=False to prevent duplicate logging
     components = [
         "DISCOVERY", "RBI", "CHAMPION", "WHALE", "SENTIMENT", "FUNDING",
         "API-SERVER", "SYSTEM", "TRADING", "MONITORING", "BACKTEST", "SEARCH"
@@ -160,6 +161,7 @@ def setup_enhanced_logging():
     for component in components:
         comp_logger = logging.getLogger(f"APEX.{component}")
         comp_logger.setLevel(logging.INFO)
+        comp_logger.propagate = False  # CRITICAL: Prevent duplicate logs
         comp_logger.addHandler(file_handler)
         comp_logger.addHandler(console_handler)
 
@@ -1567,26 +1569,43 @@ Return detailed analysis."""
         self.logger.info("🤖 Generating backtest code...")
 
         system_prompt = """You are an expert quant developer specializing in backtesting.py library.
-Generate COMPLETE, EXECUTABLE Python code for backtesting strategies.
+Generate COMPLETE, EXECUTABLE Python code EXACTLY like Moon Dev's proven patterns.
 
 CRITICAL REQUIREMENTS:
 - Use backtesting.py library ONLY
-- DO NOT import talib (not available in environment)
-- Use pandas and numpy for all indicator calculations
+- DO NOT import talib (not available)
+- Use pandas for all calculations
 - Wrap indicators with self.I() method
-- Include all necessary imports (backtesting, pandas, numpy)
-- Define Strategy class with init() and next() methods
-- Implement entry/exit logic
-- Calculate position sizing with ATR
-- Print detailed APEX themed messages 🚀
+- MUST call self.buy(size=X, sl=Y, tp=Z) to execute trades
+- Calculate stop loss and take profit prices explicitly
+- Print APEX themed messages 🚀
 - Return ONLY Python code, no explanations
 
-INDICATOR EXAMPLES (NO TALIB):
-- SMA: self.I(lambda x: x.rolling(14).mean(), self.data.Close)
-- RSI: Use pandas calculations, not talib
-- EMA: self.I(lambda x: x.ewm(span=14).mean(), self.data.Close)"""
+MOON DEV'S PROVEN PATTERN (COPY THIS):
+```python
+def next(self):
+    price = self.data.Close[-1]
+    
+    if entry_condition and not self.position:
+        # Calculate position size
+        pos_size = 0.01  # 1% of equity
+        
+        # Calculate SL/TP prices
+        sl_price = price * (1 - self.stop_loss/100)
+        tp_price = price * (1 + self.take_profit/100)
+        
+        print(f"🚀 APEX ENTRY LONG: Price: {price:.2f}, SL: {sl_price:.2f}, TP: {tp_price:.2f}")
+        
+        # CRITICAL: Actually execute trade
+        self.buy(size=pos_size, sl=sl_price, tp=tp_price)
+```
 
-        user_prompt = f"""Generate complete backtest code for this strategy:
+INDICATOR EXAMPLES (pandas only, NO TALIB):
+- EMA: self.I(lambda x: pd.Series(x).ewm(span=20).mean(), self.data.Close)
+- SMA: self.I(lambda x: pd.Series(x).rolling(14).mean(), self.data.Close)
+- Volume MA: self.I(lambda x: pd.Series(x).rolling(50).mean(), self.data.Volume)"""
+
+        user_prompt = f"""Generate complete backtest code EXACTLY like Moon Dev's pattern:
 
 Name: {strategy.get('name', '')}
 Description: {strategy.get('description', '')}
@@ -1601,16 +1620,42 @@ Research Analysis:
 
 Data path: {Config.BTC_DATA_PATH}
 
-Generate complete working code with:
-1. Imports: backtesting, pandas, numpy (NO TALIB!)
-2. Strategy class implementation
-3. Entry/exit logic with indicators (using pandas, NOT talib)
-4. Risk management
-5. Main execution block with stats printing
+REQUIRED STRUCTURE (Moon Dev's proven pattern):
+1. Imports: pandas, numpy, backtesting (NO TALIB!)
+2. Strategy class with class parameters (stop_loss, take_profit, etc.)
+3. init() method: Calculate indicators using self.I(lambda...) with pd.Series()
+4. next() method: 
+   - Check entry conditions
+   - Calculate pos_size, sl_price, tp_price
+   - Call self.buy(size=pos_size, sl=sl_price, tp=tp_price)
+   - Print APEX entry message
+5. Load data, run backtest, print stats
 
-CRITICAL: DO NOT import or use talib - use pandas for all calculations!
+CRITICAL EXAMPLE (Moon Dev's pattern):
+```python
+class MyStrategy(Strategy):
+    stop_loss = 2.0  # %
+    take_profit = 4.0  # %
+    
+    def init(self):
+        self.ema = self.I(lambda x: pd.Series(x).ewm(span=20).mean(), self.data.Close)
+    
+    def next(self):
+        if entry_condition and not self.position:
+            price = self.data.Close[-1]
+            pos_size = 0.01
+            sl_price = price * (1 - self.stop_loss/100)
+            tp_price = price * (1 + self.take_profit/100)
+            print(f"🚀 APEX ENTRY: Price {{price:.2f}}")
+            self.buy(size=pos_size, sl=sl_price, tp=tp_price)  # CRITICAL!
+```
 
-Return ONLY the Python code."""
+CRITICAL: 
+- DO NOT use talib - use pd.Series(x) for pandas functions
+- MUST call self.buy() with size, sl, tp parameters
+- Use pd.Series(x).ewm() or pd.Series(x).rolling() patterns
+
+Return ONLY the complete Python code."""
 
         try:
             response = ModelFactory.call_llm(
