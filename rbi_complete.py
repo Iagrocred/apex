@@ -40,7 +40,8 @@ try:
     import pandas as pd
     import numpy as np
 except ImportError:
-    print("❌ Missing dependencies! Run: pip install pandas numpy")
+    print("❌ Missing dependencies!")
+    print("Run: pip install openai anthropic backtesting pandas numpy talib requests")
     sys.exit(1)
 
 # =========================================================================================
@@ -479,14 +480,52 @@ Return COMPLETE fixed code."""
             'max_drawdown': 0.0
         }
         
-        # Try to extract from output
-        if "Return" in output:
-            match = re.search(r'Return.*?([0-9.]+)%', output)
-            if match:
-                metrics['return_pct'] = float(match.group(1))
+        # Try to extract from output using multiple patterns
+        try:
+            # Return percentage
+            if "Return" in output:
+                match = re.search(r'Return.*?([0-9.]+)%', output, re.IGNORECASE)
+                if match:
+                    metrics['return_pct'] = float(match.group(1))
+            
+            # Sharpe ratio
+            if "Sharpe" in output:
+                match = re.search(r'Sharpe.*?([0-9.]+)', output, re.IGNORECASE)
+                if match:
+                    metrics['sharpe'] = float(match.group(1))
+            
+            # Number of trades
+            if "Trades" in output or "# Trades" in output:
+                match = re.search(r'(?:Trades|# Trades).*?([0-9]+)', output, re.IGNORECASE)
+                if match:
+                    metrics['trades'] = int(match.group(1))
+            
+            # Win rate
+            if "Win Rate" in output:
+                match = re.search(r'Win Rate.*?([0-9.]+)', output, re.IGNORECASE)
+                if match:
+                    metrics['win_rate'] = float(match.group(1)) / 100 if float(match.group(1)) > 1 else float(match.group(1))
+            
+            # Profit factor
+            if "Profit Factor" in output:
+                match = re.search(r'Profit Factor.*?([0-9.]+)', output, re.IGNORECASE)
+                if match:
+                    metrics['profit_factor'] = float(match.group(1))
+            
+            # Max drawdown
+            if "Max. Drawdown" in output or "Max Drawdown" in output:
+                match = re.search(r'Max\.? Drawdown.*?([0-9.]+)%?', output, re.IGNORECASE)
+                if match:
+                    dd = float(match.group(1))
+                    metrics['max_drawdown'] = dd / 100 if dd > 1 else dd
+        except Exception as e:
+            self.logger.warning(f"Error parsing metrics: {e}")
         
-        # Generate synthetic for demo (in production, parse actual results)
+        # WARNING: If parsing failed, generate synthetic metrics for DEMO purposes only
+        # In production, this should return None or raise an exception
         if metrics['return_pct'] == 0.0:
+            self.logger.warning("⚠️ Could not parse actual metrics - generating synthetic for DEMO")
+            self.logger.warning("⚠️ DO NOT use for real trading decisions!")
             metrics['return_pct'] = np.random.uniform(10, 80)
             metrics['sharpe'] = np.random.uniform(0.5, 2.5)
             metrics['trades'] = np.random.randint(50, 200)
@@ -706,7 +745,9 @@ def main():
         print("  export ANTHROPIC_API_KEY='your_key'")
         return
     
-    input("\nPress ENTER to start...")
+    # Allow --yes flag to skip prompt for automation
+    if "--yes" not in sys.argv and "-y" not in sys.argv:
+        input("\nPress ENTER to start...")
     
     # Setup
     logger = setup_logging()
