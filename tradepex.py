@@ -219,6 +219,28 @@ class TradePexConfig:
     DEFAULT_STOP_LOSS_PERCENT = 0.05  # 5% stop loss
     DEFAULT_TAKE_PROFIT_PERCENT = 0.15  # 15% take profit
     
+    # =========================================================================================
+    # TRADEABLE ASSETS (Multi-Coin Support)
+    # =========================================================================================
+    
+    # Coins to scan for trading signals
+    # Strategies can trade ANY of these coins if they generate a signal
+    TRADEABLE_COINS = [
+        'BTC',   # Bitcoin
+        'ETH',   # Ethereum
+        'SOL',   # Solana
+        'ARB',   # Arbitrum
+        'MATIC', # Polygon
+        'AVAX',  # Avalanche
+        'OP',    # Optimism
+        'LINK',  # Chainlink
+        'UNI',   # Uniswap
+        'AAVE'   # Aave
+    ]
+    
+    # For strategies that specify a preferred coin in best_config
+    # TradePex will prioritize that coin but can trade others if signal appears
+    
     # Position monitoring
     POSITION_CHECK_INTERVAL_SECONDS = 30  # Check positions every 30 seconds
     RISK_CHECK_INTERVAL_SECONDS = 60  # Risk check every minute
@@ -299,9 +321,28 @@ logger.info("🚀 TRADEPEX SYSTEM - LOADING")
 logger.info("=" * 80)
 logger.info(f"Version: 1.0 (2000+ lines)")
 logger.info(f"Architecture: Moon-Dev AI Agents + APEX Integration")
-logger.info(f"Capital: ${TradePexConfig.TOTAL_CAPITAL_USD}")
+logger.info(f"Initial Capital: ${TradePexConfig.TOTAL_CAPITAL_USD}")
 logger.info(f"Leverage: {TradePexConfig.DEFAULT_LEVERAGE}x")
 logger.info("=" * 80)
+
+# =========================================================================================
+# GLOBAL STATE - REAL ACCOUNT VALUE
+# =========================================================================================
+
+# This will be updated from Hyperliquid in real-time
+current_account_value = TradePexConfig.TOTAL_CAPITAL_USD  # Start with default, will be updated
+account_value_lock = threading.Lock()
+
+def update_account_value(new_value: float):
+    """Thread-safe update of account value"""
+    global current_account_value
+    with account_value_lock:
+        current_account_value = new_value
+
+def get_current_account_value() -> float:
+    """Thread-safe read of account value"""
+    with account_value_lock:
+        return current_account_value
 
 # =========================================================================================
 # HYPERLIQUID API CLIENT (from nice_funcs_hyperliquid.py)
@@ -845,43 +886,75 @@ class TradingExecutionAgent:
                 self.logger.error(f"Error checking strategy {strategy_id}: {e}")
     
     def _check_strategy_signals(self, strategy_id: str, strategy_info: Dict):
-        """Check for trading signals from a strategy by executing its code"""
+        """Check for trading signals from a strategy by executing its code on ALL tradeable coins"""
         
         strategy_data = strategy_info['data']
         strategy_name = strategy_data.get('strategy_name', 'Unknown')
         best_config = strategy_data.get('best_config', {})
         strategy_code = strategy_data.get('strategy_code', '')
         
-        # Get strategy parameters from best_config
-        symbol = best_config.get('asset', 'BTC')  # BTC, ETH, SOL, etc.
+        # Get strategy timeframe
         timeframe = best_config.get('timeframe', '15m')  # 15m, 1H, etc.
+        
+        # Get preferred symbol from best_config (if specified)
+        preferred_symbol = best_config.get('asset', None)
         
         if not strategy_code:
             self.logger.warning(f"⚠️ No strategy code for {strategy_name}")
             return
         
         try:
-            # Fetch market data for the symbol and timeframe
-            market_data = self._fetch_market_data(symbol, timeframe)
+            # Scan ALL tradeable coins for signals
+            # The strategy will check each coin and generate signal if conditions are met
+            coins_to_scan = TradePexConfig.TRADEABLE_COINS
             
-            if market_data is None or len(market_data) < 100:
-                self.logger.warning(f"⚠️ Insufficient market data for {symbol}")
-                return
+            # If strategy has preferred coin, scan it first
+            if preferred_symbol and preferred_symbol in coins_to_scan:
+                coins_to_scan = [preferred_symbol] + [c for c in coins_to_scan if c != preferred_symbol]
             
-            # Execute strategy code to generate signal
-            signal = self._execute_strategy_code(strategy_code, market_data, best_config)
+            self.logger.info(f"🔍 Scanning {len(coins_to_scan)} coins for {strategy_name} signals...")
             
-            if signal and signal.get('action') != 'HOLD':
-                self.logger.info(f"📊 {strategy_name} signal: {signal['action']} {symbol}")
-                
-                # Execute the trade
-                self._execute_trade(
-                    symbol=symbol,
-                    direction=signal['action'],  # 'BUY' or 'SELL'
-                    size_usd=signal.get('size_usd', TradePexConfig.MAX_POSITION_SIZE),
-                    strategy_id=strategy_id,
-                    reason=signal.get('reason', 'Strategy signal')
-                )
+            for symbol in coins_to_scan:
+                try:
+                    # Check if we already have position in this symbol
+                    with positions_lock:
+                        has_position = symbol in active_positions
+                    
+                    # Skip if already have position (unless closing)
+                    if has_position:
+                        continue
+                    
+                    # Fetch market data for this symbol
+                    market_data = self._fetch_market_data(symbol, timeframe)
+                    
+                    if market_data is None or len(market_data) < 100:
+                        continue
+                    
+                    # Execute strategy code to generate signal for this symbol
+                    signal = self._execute_strategy_code(strategy_code, market_data, {
+                        **best_config,
+                        'asset': symbol,  # Override with current symbol
+                        'timeframe': timeframe
+                    })
+                    
+                    if signal and signal.get('action') != 'HOLD':
+                        self.logger.info(f"✅ {strategy_name} signal: {signal['action']} {symbol}")
+                        
+                        # Execute the trade
+                        self._execute_trade(
+                            symbol=symbol,
+                            direction=signal['action'],  # 'BUY' or 'SELL'
+                            size_usd=signal.get('size_usd', TradePexConfig.MAX_POSITION_SIZE),
+                            strategy_id=strategy_id,
+                            reason=signal.get('reason', 'Strategy signal')
+                        )
+                        
+                        # Stop after first signal (one trade at a time)
+                        break
+                        
+                except Exception as e:
+                    self.logger.error(f"❌ Error scanning {symbol}: {e}")
+                    continue
         
         except Exception as e:
             self.logger.error(f"❌ Error executing strategy {strategy_name}: {e}")
@@ -1028,10 +1101,6 @@ class TradingExecutionAgent:
                 
                 self.logger.info(f"✅ Loaded strategy class: {strategy_class.__name__}")
                 
-                # Initialize the strategy with market data
-                # We need to simulate the backtesting.py environment
-                strategy_instance = strategy_class()
-                
                 # Set up data attribute (backtesting.py pattern)
                 class DataWrapper:
                     def __init__(self, df):
@@ -1042,7 +1111,18 @@ class TradingExecutionAgent:
                         self.Volume = df['Volume']
                         self.df = df
                 
-                strategy_instance.data = DataWrapper(market_data)
+                # Create mock broker
+                class MockBroker:
+                    pass
+                
+                # Initialize the strategy with backtesting.py required arguments
+                # Strategy.__init__(broker, data, params)
+                strategy_instance = strategy_class(
+                    broker=MockBroker(),
+                    data=DataWrapper(market_data),
+                    params={}
+                )
+                
                 strategy_instance.equity = TradePexConfig.TOTAL_CAPITAL_USD
                 
                 # Create indicator wrapper function (backtesting.py's I() function)
@@ -1102,13 +1182,17 @@ class TradingExecutionAgent:
                 # Analyze signals
                 current_price = market_data['Close'].iloc[-1]
                 
+                # Get real account value for position sizing
+                real_account_value = get_current_account_value()
+                max_position_size = real_account_value * TradePexConfig.MAX_POSITION_PERCENT  # 30%
+                
                 if buy_signal['triggered'] and not has_position:
-                    # Calculate position size
-                    size_usd = TradePexConfig.MAX_POSITION_SIZE * 0.75  # 75% of max
+                    # Calculate position size based on REAL account value
+                    size_usd = max_position_size * 0.75  # 75% of max (22.5% of account)
                     
                     self.logger.info(f"✅ BUY signal generated!")
                     self.logger.info(f"   Price: ${current_price:.2f}")
-                    self.logger.info(f"   Size: ${size_usd:.2f}")
+                    self.logger.info(f"   Size: ${size_usd:.2f} (Account: ${real_account_value:.2f})")
                     
                     return {
                         'action': 'BUY',
@@ -1155,7 +1239,7 @@ class TradingExecutionAgent:
     def _execute_trade(self, symbol: str, direction: str, size_usd: float, 
                       strategy_id: str, reason: str):
         """
-        Execute a trade
+        Execute a trade WITH AI SWARM CONFIRMATION
         
         Args:
             symbol: Trading symbol
@@ -1166,7 +1250,7 @@ class TradingExecutionAgent:
         """
         
         self.logger.info("=" * 80)
-        self.logger.info(f"🎯 EXECUTING TRADE")
+        self.logger.info(f"🎯 TRADE SIGNAL RECEIVED")
         self.logger.info(f"   Symbol: {symbol}")
         self.logger.info(f"   Direction: {direction}")
         self.logger.info(f"   Size: ${size_usd:.2f}")
@@ -1174,12 +1258,36 @@ class TradingExecutionAgent:
         self.logger.info(f"   Reason: {reason}")
         self.logger.info("=" * 80)
         
+        # CRITICAL: Get AI Swarm consensus before trading with real money
+        self.logger.info("🤖 Requesting AI Swarm consensus...")
+        consensus = self._get_swarm_consensus(symbol, direction, size_usd, reason)
+        
+        if consensus['decision'] != 'APPROVE':
+            self.logger.warning(f"❌ AI Swarm REJECTED trade")
+            self.logger.warning(f"   Votes: {consensus['votes']}")
+            self.logger.warning(f"   Reason: {consensus['reason']}")
+            return
+        
+        self.logger.info(f"✅ AI Swarm APPROVED trade")
+        self.logger.info(f"   Votes: {consensus['votes']}")
+        self.logger.info(f"   Recommended size: ${consensus['recommended_size']:.2f}")
+        
+        # Use swarm-recommended size
+        final_size = consensus['recommended_size']
+        
+        self.logger.info("=" * 80)
+        self.logger.info(f"💼 EXECUTING LIVE TRADE")
+        self.logger.info(f"   Symbol: {symbol}")
+        self.logger.info(f"   Direction: {direction}")
+        self.logger.info(f"   Size: ${final_size:.2f}")
+        self.logger.info("=" * 80)
+        
         try:
             # Execute order
             if direction == 'BUY':
-                result = self.client.market_buy(symbol, size_usd)
+                result = self.client.market_buy(symbol, final_size)
             else:
-                result = self.client.market_sell(symbol, size_usd)
+                result = self.client.market_sell(symbol, final_size)
             
             if result.get('success'):
                 self.logger.info(f"✅ Trade executed successfully")
@@ -1209,6 +1317,159 @@ class TradingExecutionAgent:
         except Exception as e:
             self.logger.error(f"❌ Trade execution error: {e}")
             self.logger.error(traceback.format_exc())
+    
+    def _get_swarm_consensus(self, symbol: str, direction: str, size_usd: float, reason: str) -> Dict:
+        """
+        Get AI Swarm consensus for trade decision (3 LLMs vote)
+        
+        Returns:
+            {
+                'decision': 'APPROVE' or 'REJECT',
+                'votes': {'deepseek': 'APPROVE', 'openai': 'APPROVE', 'claude': 'REJECT'},
+                'reason': 'Consensus reason',
+                'recommended_size': float
+            }
+        """
+        
+        try:
+            # Get current market context
+            account_value = get_current_account_value()
+            
+            # Prepare prompt for LLM swarm
+            prompt = f"""You are a professional crypto trader. Evaluate this trade proposal:
+
+TRADE PROPOSAL:
+- Symbol: {symbol}
+- Direction: {direction}
+- Proposed Size: ${size_usd:.2f}
+- Account Value: ${account_value:.2f}
+- Reason: {reason}
+
+CONTEXT:
+- This is REAL MONEY trading on Hyperliquid
+- Position size is {(size_usd/account_value*100):.1f}% of account
+- Maximum loss exposure: ${size_usd * 0.05:.2f} (5% stop loss)
+
+EVALUATE:
+1. Is the position size reasonable for the account?
+2. Is the risk/reward acceptable?
+3. Does the reason make sense?
+4. Should we adjust the position size?
+
+Respond with ONLY:
+APPROVE or REJECT
+Recommended size: $XXX
+Reason: Your brief reason (max 50 words)"""
+
+            votes = {}
+            reasons = {}
+            recommended_sizes = []
+            
+            # Vote 1: DeepSeek
+            if TradePexConfig.DEEPSEEK_API_KEY:
+                try:
+                    import openai as deepseek_client
+                    deepseek_client.api_key = TradePexConfig.DEEPSEEK_API_KEY
+                    deepseek_client.api_base = "https://api.deepseek.com/v1"
+                    
+                    response = deepseek_client.ChatCompletion.create(
+                        model="deepseek-chat",
+                        messages=[{"role": "user", "content": prompt}],
+                        max_tokens=200,
+                        timeout=10
+                    )
+                    
+                    answer = response.choices[0].message.content.strip()
+                    votes['deepseek'] = 'APPROVE' if 'APPROVE' in answer.upper() else 'REJECT'
+                    
+                    # Extract recommended size
+                    import re
+                    size_match = re.search(r'\$(\d+(?:\.\d+)?)', answer)
+                    if size_match:
+                        recommended_sizes.append(float(size_match.group(1)))
+                    
+                except Exception as e:
+                    self.logger.warning(f"DeepSeek vote failed: {e}")
+                    votes['deepseek'] = 'REJECT'  # Fail safe
+            
+            # Vote 2: OpenAI
+            if TradePexConfig.OPENAI_API_KEY and openai:
+                try:
+                    openai.api_key = TradePexConfig.OPENAI_API_KEY
+                    
+                    response = openai.ChatCompletion.create(
+                        model="gpt-4o-mini",
+                        messages=[{"role": "user", "content": prompt}],
+                        max_tokens=200,
+                        timeout=10
+                    )
+                    
+                    answer = response.choices[0].message.content.strip()
+                    votes['openai'] = 'APPROVE' if 'APPROVE' in answer.upper() else 'REJECT'
+                    
+                    import re
+                    size_match = re.search(r'\$(\d+(?:\.\d+)?)', answer)
+                    if size_match:
+                        recommended_sizes.append(float(size_match.group(1)))
+                    
+                except Exception as e:
+                    self.logger.warning(f"OpenAI vote failed: {e}")
+                    votes['openai'] = 'REJECT'
+            
+            # Vote 3: Claude
+            if TradePexConfig.ANTHROPIC_API_KEY and anthropic:
+                try:
+                    client = anthropic.Anthropic(api_key=TradePexConfig.ANTHROPIC_API_KEY)
+                    
+                    response = client.messages.create(
+                        model="claude-3-5-sonnet-20241022",
+                        max_tokens=200,
+                        messages=[{"role": "user", "content": prompt}],
+                        timeout=10
+                    )
+                    
+                    answer = response.content[0].text.strip()
+                    votes['claude'] = 'APPROVE' if 'APPROVE' in answer.upper() else 'REJECT'
+                    
+                    import re
+                    size_match = re.search(r'\$(\d+(?:\.\d+)?)', answer)
+                    if size_match:
+                        recommended_sizes.append(float(size_match.group(1)))
+                    
+                except Exception as e:
+                    self.logger.warning(f"Claude vote failed: {e}")
+                    votes['claude'] = 'REJECT'
+            
+            # Count votes
+            approve_count = sum(1 for v in votes.values() if v == 'APPROVE')
+            total_votes = len(votes)
+            
+            # Need majority (2/3)
+            decision = 'APPROVE' if approve_count >= 2 else 'REJECT'
+            
+            # Calculate final recommended size (average of approvals, or reduce by 50% if split)
+            if recommended_sizes:
+                avg_size = sum(recommended_sizes) / len(recommended_sizes)
+                final_size = avg_size if approve_count >= 2 else size_usd * 0.5
+            else:
+                final_size = size_usd if approve_count >= 2 else size_usd * 0.5
+            
+            return {
+                'decision': decision,
+                'votes': votes,
+                'reason': f'Swarm consensus: {approve_count}/{total_votes} approve',
+                'recommended_size': final_size
+            }
+            
+        except Exception as e:
+            self.logger.error(f"Swarm consensus error: {e}")
+            # FAIL SAFE: Reject if swarm fails
+            return {
+                'decision': 'REJECT',
+                'votes': {},
+                'reason': f'Swarm system error: {str(e)}',
+                'recommended_size': 0
+            }
     
     def _record_trade(self, symbol: str, direction: str, size_usd: float,
                      strategy_id: str, result: Dict):
@@ -1285,8 +1546,11 @@ class RiskManagementAgent:
     def _perform_risk_checks(self):
         """Perform all risk checks"""
         
-        # 1. Check account value
+        # 1. Check account value from Hyperliquid
         account_value = self.client.get_account_value()
+        
+        # Update global account value for other agents to use
+        update_account_value(account_value)
         
         # 2. Check if capital is too low
         if account_value < (TradePexConfig.TOTAL_CAPITAL_USD * 0.5):
