@@ -97,21 +97,36 @@ for component in components:
 
 ---
 
-### Issue 5: ✅ CORRECT DEEPSEEK MODELS FIXED
-**Problem**: Using Grok for all tasks instead of DeepSeek Reasoner/Chat.
+### Issue 5: ✅ CORRECT MODELS FIXED (VERIFIED FROM MOON DEV REPO!)
+**Problem**: Using wrong models - needed to check actual Moon Dev implementation.
 
-**Solution Applied** (Lines 272-276):
+**Moon Dev Actually Uses** (verified from repo):
+- **rbi_agent_v3.py**: Grok 4 Fast Reasoning (xai) for ALL RBI tasks
+- **rbi_agent_pp_multi.py**: Grok 4 Fast Reasoning (xai) for ALL RBI tasks  
+- **swarm_agent.py**: DeepSeek Chat, Grok 4, Qwen, Claude in swarm
+
+**Solution Applied** (Lines 272-277):
 ```python
-# Use DeepSeek Reasoner for reasoning tasks
-RBI_RESEARCH_MODEL = {"type": "deepseek", "name": "deepseek-reasoner"}
-RBI_OPTIMIZE_MODEL = {"type": "deepseek", "name": "deepseek-reasoner"}
-
-# Use DeepSeek Chat for coding tasks
-RBI_BACKTEST_MODEL = {"type": "deepseek", "name": "deepseek-chat"}
-RBI_DEBUG_MODEL = {"type": "deepseek", "name": "deepseek-chat"}
+# Following Moon Dev exactly - using Grok 4 for all RBI tasks
+RBI_RESEARCH_MODEL = {"type": "xai", "name": "grok-4-fast-reasoning"}
+RBI_BACKTEST_MODEL = {"type": "xai", "name": "grok-4-fast-reasoning"}
+RBI_DEBUG_MODEL = {"type": "xai", "name": "grok-4-fast-reasoning"}
+RBI_OPTIMIZE_MODEL = {"type": "xai", "name": "grok-4-fast-reasoning"}
 ```
 
-**Result**: Using correct models for correct tasks - Reasoner for analysis, Chat for code generation.
+**Swarm Consensus Models** (Line 1922):
+```python
+models = [
+    {"type": "deepseek", "name": "deepseek-chat"},            # DeepSeek Chat
+    {"type": "openai", "name": "gpt-4"},                      # GPT-4
+    {"type": "claude", "name": "claude-3-5-sonnet-20241022"}  # Latest Claude
+]
+```
+
+**Result**: 
+- Using Grok 4 Fast Reasoning (2M context, cheap, fast) for all RBI operations
+- Matches Moon Dev's implementation EXACTLY
+- DeepSeek Chat + GPT-4 + Claude for swarm voting
 
 ---
 

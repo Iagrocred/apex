@@ -55,15 +55,15 @@ else:
     print("❌ FAIL: Wrong Claude model")
     sys.exit(1)
 
-# 5. Check DeepSeek models
-if 'RBI_RESEARCH_MODEL = {"type": "deepseek", "name": "deepseek-reasoner"}' in code:
-    print("✅ PASS: DeepSeek Reasoner for research")
+# 5. Check correct models (Moon Dev uses Grok for RBI)
+if 'RBI_RESEARCH_MODEL = {"type": "xai", "name": "grok-4-fast-reasoning"}' in code:
+    print("✅ PASS: Grok 4 for research (matches Moon Dev)")
 else:
     print("❌ FAIL: Wrong model for research")
     sys.exit(1)
 
-if 'RBI_BACKTEST_MODEL = {"type": "deepseek", "name": "deepseek-chat"}' in code:
-    print("✅ PASS: DeepSeek Chat for backtest coding")
+if 'RBI_BACKTEST_MODEL = {"type": "xai", "name": "grok-4-fast-reasoning"}' in code:
+    print("✅ PASS: Grok 4 for backtest coding (matches Moon Dev)")
 else:
     print("❌ FAIL: Wrong model for backtest")
     sys.exit(1)
@@ -116,4 +116,7 @@ print("  ✅ Swarm consensus fixed")
 print("  ✅ Successful strategies tracked")
 print("\n🌙 Following Moon Dev best practices from:")
 print("   https://github.com/Iagrocred/moon-dev-ai-agents")
+print("   Using: Grok 4 Fast Reasoning (xai) for all RBI tasks")
+print("          Claude 3.5 Sonnet (20241022) for swarm consensus")
+print("          DeepSeek Chat for swarm voting")
 print("="*80)

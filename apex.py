@@ -276,11 +276,12 @@ class Config:
     # THREAD 2: RBI BACKTEST ENGINE CONFIGURATION (Moon-Dev v3 Full)
     # =========================================================================================
 
-    # LLM Models for RBI (Moon-Dev pattern - using correct models for each task)
-    RBI_RESEARCH_MODEL = {"type": "deepseek", "name": "deepseek-reasoner"}  # Reasoning for research
-    RBI_BACKTEST_MODEL = {"type": "deepseek", "name": "deepseek-chat"}      # Coding for backtest
-    RBI_DEBUG_MODEL = {"type": "deepseek", "name": "deepseek-chat"}         # Coding for debug
-    RBI_OPTIMIZE_MODEL = {"type": "deepseek", "name": "deepseek-reasoner"}  # Reasoning for optimization
+    # LLM Models for RBI (Moon-Dev pattern - using Grok 4 for all tasks)
+    # Moon Dev uses grok-4-fast-reasoning for everything (2M context, cheap, fast)
+    RBI_RESEARCH_MODEL = {"type": "xai", "name": "grok-4-fast-reasoning"}
+    RBI_BACKTEST_MODEL = {"type": "xai", "name": "grok-4-fast-reasoning"}
+    RBI_DEBUG_MODEL = {"type": "xai", "name": "grok-4-fast-reasoning"}
+    RBI_OPTIMIZE_MODEL = {"type": "xai", "name": "grok-4-fast-reasoning"}
 
     # Execution settings
     MAX_DEBUG_ITERATIONS = 10
@@ -1975,12 +1976,12 @@ Return the COMPLETE optimized Python code."""
             self.logger.info(f"   Total Trades: {best_config['total_trades']} (need {Config.MIN_TRADES})")
             return False, {}, None
 
-        # Get votes from LLM swarm (using latest Claude model)
+        # Get votes from LLM swarm (Moon Dev pattern - using current best models)
         votes = {}
         models = [
-            {"type": "deepseek", "name": "deepseek-reasoner"},
-            {"type": "openai", "name": "gpt-4"},
-            {"type": "claude", "name": "claude-3-5-sonnet-20241022"}  # Latest Claude model (FIX!)
+            {"type": "deepseek", "name": "deepseek-chat"},            # DeepSeek Chat
+            {"type": "openai", "name": "gpt-4"},                      # GPT-4
+            {"type": "claude", "name": "claude-3-5-sonnet-20241022"}  # Latest Claude
         ]
 
         for model in models:
