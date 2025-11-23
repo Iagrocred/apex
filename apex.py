@@ -1445,7 +1445,7 @@ class RBIBacktestEngine:
                 )
 
                 if approved:
-                    self.logger.info(f"✅ STRATEGY APPROVED by LLM consensus")
+                    self.logger.info(f"✅ STRATEGY APPROVED by swarm: {strategy.get('name', 'Unknown')}")
 
                     # Queue for champion manager
                     validated_strategy = {
@@ -1463,8 +1463,11 @@ class RBIBacktestEngine:
                     # Save to final backtest directory
                     self._save_approved_strategy(validated_strategy)
                 else:
-                    self.logger.info(f"❌ STRATEGY REJECTED by LLM consensus")
-                    self.logger.info(f"   Votes: {votes}")
+                    self.logger.info(f"❌ STRATEGY REJECTED by swarm: {strategy.get('name', 'Unknown')}")
+                    if votes:
+                        self.logger.info(f"   Votes: {votes}")
+                    else:
+                        self.logger.info(f"   Votes: (none - failed preliminary criteria)")
 
             except queue.Empty:
                 continue
