@@ -394,20 +394,88 @@ Return ONLY Python code."""
         return response.strip()
     
     def _auto_debug_loop(self, code: str, strategy: Dict) -> Optional[str]:
-        """Phase 3: Auto-debug loop"""
+        """Phase 3: Auto-debug loop with auto-install and execution testing"""
         for iteration in range(1, Config.MAX_DEBUG_ITERATIONS + 1):
             self.logger.info(f"   Iteration {iteration}/{Config.MAX_DEBUG_ITERATIONS}")
             
-            # Test syntax
+            # Test syntax first
             try:
                 compile(code, '<string>', 'exec')
                 self.logger.info("   ✅ Syntax valid")
-                return code  # Success!
             except SyntaxError as e:
                 self.logger.warning(f"   ❌ Syntax error: {e}")
                 code = self._fix_code_with_llm(code, str(e), strategy)
+                continue
+            
+            # Try to execute it
+            try:
+                with tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False) as f:
+                    f.write(code)
+                    temp_path = f.name
+                
+                # Auto-install missing packages
+                self._auto_install_packages(code)
+                
+                # Execute
+                result = subprocess.run(
+                    [sys.executable, temp_path],
+                    capture_output=True,
+                    text=True,
+                    timeout=30
+                )
+                
+                os.unlink(temp_path)
+                
+                # Check if it ran successfully
+                if result.returncode == 0 and "Return" in result.stdout:
+                    self.logger.info("   ✅ Code executes successfully")
+                    return code  # Success!
+                else:
+                    # Code has runtime error - fix it
+                    error_msg = result.stderr + result.stdout
+                    self.logger.warning(f"   ❌ Runtime error detected")
+                    self.logger.debug(f"Error: {error_msg[:500]}")
+                    code = self._fix_code_with_llm(code, error_msg[:2000], strategy)
+                    
+            except subprocess.TimeoutExpired:
+                self.logger.warning("   ❌ Execution timeout")
+                code = self._fix_code_with_llm(code, "Code execution timed out", strategy)
+            except Exception as e:
+                self.logger.warning(f"   ❌ Execution error: {e}")
+                code = self._fix_code_with_llm(code, str(e), strategy)
         
         return None
+    
+    def _auto_install_packages(self, code: str):
+        """Auto-install missing packages"""
+        # Extract imports from code
+        imports = set(re.findall(r'(?:from|import)\s+([a-zA-Z0-9_]+)', code))
+        
+        # Package name mapping
+        package_map = {
+            'statsmodels': 'statsmodels',
+            'sklearn': 'scikit-learn',
+            'scipy': 'scipy',
+            'talib': 'TA-Lib',
+        }
+        
+        for imp in imports:
+            if imp in package_map:
+                try:
+                    __import__(imp)
+                except ImportError:
+                    package = package_map[imp]
+                    self.logger.info(f"   📦 Installing {package}...")
+                    try:
+                        subprocess.run(
+                            [sys.executable, '-m', 'pip', 'install', package],
+                            check=True,
+                            capture_output=True,
+                            timeout=120
+                        )
+                        self.logger.info(f"   ✅ Installed {package}")
+                    except Exception as e:
+                        self.logger.warning(f"   ⚠️ Could not install {package}: {e}")
     
     def _fix_code_with_llm(self, code: str, error: str, strategy: Dict) -> str:
         """Fix code with LLM"""
