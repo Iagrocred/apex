@@ -1700,16 +1700,44 @@ Return the COMPLETE fixed Python code."""
             self.logger.info("=" * 80)
             self.logger.info("📊 FULL BACKTEST OUTPUT:")
             self.logger.info("=" * 80)
+            
+            # Limit output to prevent excessive logging (max 200 lines)
+            max_log_lines = 200
+            
             if result.stdout:
                 self.logger.info("--- STDOUT ---")
-                for line in result.stdout.split('\n'):
-                    if line.strip():
-                        self.logger.info(f"   {line}")
+                stdout_lines = result.stdout.split('\n')
+                if len(stdout_lines) > max_log_lines:
+                    # Show first 100 and last 100 lines
+                    for line in stdout_lines[:100]:
+                        if line.strip():
+                            self.logger.info(f"   {line}")
+                    self.logger.info(f"   ... ({len(stdout_lines) - 200} lines omitted) ...")
+                    for line in stdout_lines[-100:]:
+                        if line.strip():
+                            self.logger.info(f"   {line}")
+                else:
+                    for line in stdout_lines:
+                        if line.strip():
+                            self.logger.info(f"   {line}")
+            
             if result.stderr:
                 self.logger.info("--- STDERR ---")
-                for line in result.stderr.split('\n'):
-                    if line.strip():
-                        self.logger.info(f"   {line}")
+                stderr_lines = result.stderr.split('\n')
+                if len(stderr_lines) > max_log_lines:
+                    # Show first 100 and last 100 lines
+                    for line in stderr_lines[:100]:
+                        if line.strip():
+                            self.logger.info(f"   {line}")
+                    self.logger.info(f"   ... ({len(stderr_lines) - 200} lines omitted) ...")
+                    for line in stderr_lines[-100:]:
+                        if line.strip():
+                            self.logger.info(f"   {line}")
+                else:
+                    for line in stderr_lines:
+                        if line.strip():
+                            self.logger.info(f"   {line}")
+            
             self.logger.info("=" * 80)
             self.logger.info("")
 
@@ -1959,11 +1987,16 @@ Return the COMPLETE optimized Python code."""
             except Exception as e:
                 self.logger.warning(f"⚠️  Vote from {model['type']} failed: {e}")
                 self.logger.warning(f"   Model attempted: {model['name']}")
-                # Don't auto-reject on error - just skip this vote
-                # This way 2/2 can still approve instead of requiring 2/3 when one fails
+                # Skip failed votes instead of auto-rejecting
+                # This allows approval with fewer votes (e.g., 2/2 instead of 2/3)
+                # The approval threshold (Config.CONSENSUS_REQUIRED_VOTES) still applies
+                # but only to the votes that were successfully collected
                 continue
 
-        # Count approvals
+        # Count approvals from successfully collected votes
+        # Note: If a model fails, it doesn't vote - the approval threshold applies to
+        # the votes we actually received. E.g., if Claude fails, 2/2 APPROVE still works
+        # as long as CONSENSUS_REQUIRED_VOTES=2 (which is the default)
         approvals = sum(1 for v in votes.values() if v == "APPROVE")
         approved = approvals >= Config.CONSENSUS_REQUIRED_VOTES
 
