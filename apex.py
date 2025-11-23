@@ -1406,7 +1406,134 @@ class RBIBacktestEngine:
                     if line.strip() and not line.startswith('#'):
                         self.processed_strategies.add(line.strip().split(',')[0])
             self.logger.info(f"📚 Loaded {len(self.processed_strategies)} processed strategies from history")
+    
+    def _load_existing_strategies_from_library(self):
+        """Load all existing strategies from strategy_library folder for re-processing with swarm"""
+        self.logger.info("🔍 Scanning strategy_library for existing strategies...")
+        
+        strategy_files = list(Config.STRATEGY_LIBRARY_DIR.glob("*.json"))
+        self.logger.info(f"📂 Found {len(strategy_files)} strategy files in library")
+        
+        loaded_strategies = []
+        seen_hashes = set()  # Track duplicates within the folder itself
+        
+        for strategy_file in strategy_files:
+            try:
+                with open(strategy_file, 'r') as f:
+                    strategy_data = json.load(f)
+                    
+                    # Generate hash to check for duplicates within the folder
+                    strategy_hash = self._get_strategy_hash(strategy_data)
+                    
+                    # Skip ONLY if duplicate in folder (not if in processed_strategies)
+                    # We WANT to re-process these since swarm was bugged before!
+                    if strategy_hash in seen_hashes:
+                        self.logger.debug(f"⏭️  Skipping {strategy_file.name} - duplicate in folder")
+                        continue
+                    
+                    seen_hashes.add(strategy_hash)
+                    loaded_strategies.append(strategy_data)
+                    self.logger.info(f"✅ Loaded: {strategy_data.get('name', 'Unknown')}")
+                    
+            except Exception as e:
+                self.logger.warning(f"⚠️  Failed to load {strategy_file.name}: {e}")
+        
+        self.logger.info(f"📊 Total strategies to re-backtest with swarm: {len(loaded_strategies)}")
+        return loaded_strategies
 
+    def _process_existing_strategy(self, strategy: Dict) -> bool:
+        """
+        Process an existing strategy from library - ACTUALLY BACKTEST with swarm consensus
+        This re-runs strategies that were rejected before due to missing Claude in swarm
+        Returns True if approved, False otherwise
+        """
+        strategy_name = strategy.get('name', 'Unknown')
+        self.logger.info("=" * 80)
+        self.logger.info(f"🔄 RE-BACKTESTING EXISTING: {strategy_name}")
+        self.logger.info("   (Some got 70% but were denied - now with working Claude swarm!)")
+        self.logger.info("=" * 80)
+        
+        try:
+            # PHASE 1: Research (use existing data if available)
+            research = strategy.get('research', {})
+            if not research:
+                research = self._research_strategy(strategy)
+            
+            # PHASE 2: Generate backtest code (or use existing)
+            code = strategy.get('code', '')
+            if not code:
+                code = self._generate_backtest_code(strategy, research)
+                if not code:
+                    self.logger.error("❌ Code generation failed")
+                    return False
+            
+            # PHASE 3: Auto-debug loop (ensure code is executable)
+            executable_code = self._auto_debug_loop(code, strategy)
+            if not executable_code:
+                self.logger.error("❌ Auto-debug failed")
+                return False
+            
+            # PHASE 4: Execute backtest - ACTUALLY RUN IT!
+            results = self._execute_backtest(executable_code, strategy)
+            if not results:
+                self.logger.error("❌ Backtest execution failed")
+                return False
+            
+            self.logger.info(f"📊 Backtest Results: {results.get('return_pct', 0):.1f}% return")
+            
+            # PHASE 5: Check if optimization needed
+            if results['return_pct'] < self.target_return and self.optimization_enabled:
+                self.logger.info(f"📊 Return {results['return_pct']:.1f}% < Target {self.target_return}%")
+                self.logger.info("🔄 Starting optimization loop...")
+                
+                optimized_code, optimized_results = self._optimization_loop(
+                    executable_code, strategy, results
+                )
+                
+                if optimized_results and optimized_results['return_pct'] >= self.target_return:
+                    self.logger.info(f"🎯 TARGET HIT! {optimized_results['return_pct']:.1f}%")
+                    executable_code = optimized_code
+                    results = optimized_results
+            
+            # PHASE 6: Multi-configuration testing
+            config_results = self._multi_config_testing(executable_code, strategy)
+            
+            # PHASE 7: SWARM CONSENSUS - This is what was missing Claude!
+            approved, votes, best_config = self._llm_swarm_consensus(
+                config_results, strategy, results
+            )
+            
+            if approved:
+                self.logger.info(f"✅ STRATEGY APPROVED by swarm: {strategy_name}")
+                
+                # Save to successful strategies
+                validated_strategy = {
+                    "strategy_name": strategy_name,
+                    "strategy_data": strategy,
+                    "code": executable_code,
+                    "best_config": best_config,
+                    "results": results,
+                    "llm_votes": votes,
+                    "timestamp": datetime.now().isoformat(),
+                    "reprocessed": True  # Mark as reprocessed from library
+                }
+                
+                # Queue for champion manager
+                validated_strategy_queue.put(validated_strategy)
+                
+                # Save to successful strategies
+                self._save_approved_strategy(validated_strategy)
+                return True
+            else:
+                self.logger.info(f"❌ STRATEGY REJECTED by swarm: {strategy_name}")
+                self.logger.info(f"   Votes: {votes}")
+                return False
+                
+        except Exception as e:
+            self.logger.error(f"❌ Error processing existing strategy: {e}")
+            self.logger.error(traceback.format_exc())
+            return False
+    
     def _get_strategy_hash(self, strategy: Dict) -> str:
         """Generate unique hash for strategy to detect duplicates"""
         # Create signature from key strategy elements
@@ -1456,7 +1583,47 @@ class RBIBacktestEngine:
         self.logger.info("🚀 RBI Backtest Engine started (FULL Moon-Dev v3)")
         self.logger.info("   Features: Auto-debug, Multi-config, Optimization, LLM Consensus")
         self.logger.info("   Deduplication: Enabled - will skip previously processed strategies")
-
+        
+        # ========================================================================
+        # STARTUP PHASE: Process existing strategies from library FIRST
+        # ========================================================================
+        self.logger.info("")
+        self.logger.info("=" * 80)
+        self.logger.info("🔄 STARTUP: Processing existing strategies from library")
+        self.logger.info("   (Some got 70% but were denied - now with working Claude!)")
+        self.logger.info("=" * 80)
+        
+        existing_strategies = self._load_existing_strategies_from_library()
+        
+        if existing_strategies:
+            approved_count = 0
+            rejected_count = 0
+            
+            for idx, strategy in enumerate(existing_strategies, 1):
+                self.logger.info(f"\n📂 Processing existing strategy {idx}/{len(existing_strategies)}")
+                
+                approved = self._process_existing_strategy(strategy)
+                if approved:
+                    approved_count += 1
+                else:
+                    rejected_count += 1
+                
+                # Small delay between strategies
+                time.sleep(2)
+            
+            self.logger.info("")
+            self.logger.info("=" * 80)
+            self.logger.info(f"✅ STARTUP COMPLETE: {approved_count} approved, {rejected_count} rejected")
+            self.logger.info("=" * 80)
+            self.logger.info("")
+        else:
+            self.logger.info("📂 No existing strategies to process - starting fresh")
+        
+        # ========================================================================
+        # MAIN LOOP: Continue with normal discovery
+        # ========================================================================
+        self.logger.info("🔄 Starting normal discovery loop...")
+        
         while True:
             try:
                 # Wait for strategy from discovery queue
