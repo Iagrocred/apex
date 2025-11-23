@@ -328,7 +328,7 @@ Provide brief implementation guidance."""
         
         try:
             response = ModelFactory.call_llm(
-                "deepseek", "deepseek-reasoner",
+                "deepseek", "deepseek-chat",
                 prompt, temperature=0.3, max_tokens=2000
             )
             return {"analysis": response}
@@ -364,7 +364,7 @@ Return ONLY Python code."""
 
         try:
             response = ModelFactory.call_llm(
-                "deepseek", "deepseek-reasoner",
+                "deepseek", "deepseek-coder",
                 user_prompt, system_prompt,
                 temperature=0.3, max_tokens=4000
             )
@@ -425,7 +425,7 @@ Return COMPLETE fixed code."""
 
         try:
             response = ModelFactory.call_llm(
-                "deepseek", "deepseek-reasoner",
+                "deepseek", "deepseek-coder",
                 prompt,
                 "Fix Python code. Return ONLY code.",
                 temperature=0.2, max_tokens=4000
