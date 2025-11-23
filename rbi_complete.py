@@ -469,8 +469,8 @@ Return COMPLETE fixed code."""
             self.logger.error(f"❌ Execution error: {e}")
             return None
     
-    def _parse_output(self, output: str) -> Dict:
-        """Parse backtest output"""
+    def _parse_output(self, output: str) -> Optional[Dict]:
+        """Parse backtest output - NO SYNTHETIC DATA"""
         metrics = {
             'return_pct': 0.0,
             'sharpe': 0.0,
@@ -480,59 +480,93 @@ Return COMPLETE fixed code."""
             'max_drawdown': 0.0
         }
         
+        # Log the raw output for debugging
+        self.logger.debug(f"Raw backtest output:\n{output}")
+        
         # Try to extract from output using multiple patterns
         try:
-            # Return percentage
-            if "Return" in output:
-                match = re.search(r'Return.*?([0-9.]+)%', output, re.IGNORECASE)
+            # Return percentage - try multiple formats
+            return_patterns = [
+                r'Return\s*[:\[]*\s*([+-]?[0-9]+\.?[0-9]*)\s*%',  # "Return: 45.2%"
+                r'Return.*?([+-]?[0-9]+\.?[0-9]*)\s*%',  # "Return [Annualized]: 45.2%"
+                r'Total Return.*?([+-]?[0-9]+\.?[0-9]*)\s*%',  # "Total Return: 45.2%"
+            ]
+            for pattern in return_patterns:
+                match = re.search(pattern, output, re.IGNORECASE)
                 if match:
                     metrics['return_pct'] = float(match.group(1))
+                    break
             
             # Sharpe ratio
-            if "Sharpe" in output:
-                match = re.search(r'Sharpe.*?([0-9.]+)', output, re.IGNORECASE)
+            sharpe_patterns = [
+                r'Sharpe\s+Ratio\s*[:\[]*\s*([+-]?[0-9]+\.?[0-9]*)',
+                r'Sharpe.*?([+-]?[0-9]+\.?[0-9]*)',
+            ]
+            for pattern in sharpe_patterns:
+                match = re.search(pattern, output, re.IGNORECASE)
                 if match:
                     metrics['sharpe'] = float(match.group(1))
+                    break
             
             # Number of trades
-            if "Trades" in output or "# Trades" in output:
-                match = re.search(r'(?:Trades|# Trades).*?([0-9]+)', output, re.IGNORECASE)
+            trades_patterns = [
+                r'#\s*Trades\s*[:\[]*\s*([0-9]+)',
+                r'(?:Trades|Number of Trades).*?([0-9]+)',
+            ]
+            for pattern in trades_patterns:
+                match = re.search(pattern, output, re.IGNORECASE)
                 if match:
                     metrics['trades'] = int(match.group(1))
+                    break
             
             # Win rate
-            if "Win Rate" in output:
-                match = re.search(r'Win Rate.*?([0-9.]+)', output, re.IGNORECASE)
+            win_patterns = [
+                r'Win\s+Rate\s*[:\[]*\s*([0-9]+\.?[0-9]*)\s*%',
+                r'Win Rate.*?([0-9]+\.?[0-9]*)\s*%',
+            ]
+            for pattern in win_patterns:
+                match = re.search(pattern, output, re.IGNORECASE)
                 if match:
-                    metrics['win_rate'] = float(match.group(1)) / 100 if float(match.group(1)) > 1 else float(match.group(1))
+                    rate = float(match.group(1))
+                    metrics['win_rate'] = rate / 100 if rate > 1 else rate
+                    break
             
             # Profit factor
-            if "Profit Factor" in output:
-                match = re.search(r'Profit Factor.*?([0-9.]+)', output, re.IGNORECASE)
+            pf_patterns = [
+                r'Profit\s+Factor\s*[:\[]*\s*([0-9]+\.?[0-9]*)',
+                r'Profit Factor.*?([0-9]+\.?[0-9]*)',
+            ]
+            for pattern in pf_patterns:
+                match = re.search(pattern, output, re.IGNORECASE)
                 if match:
                     metrics['profit_factor'] = float(match.group(1))
+                    break
             
             # Max drawdown
-            if "Max. Drawdown" in output or "Max Drawdown" in output:
-                match = re.search(r'Max\.? Drawdown.*?([0-9.]+)%?', output, re.IGNORECASE)
+            dd_patterns = [
+                r'Max\.?\s+Drawdown\s*[:\[]*\s*[-]?([0-9]+\.?[0-9]*)\s*%',
+                r'Max Drawdown.*?[-]?([0-9]+\.?[0-9]*)\s*%',
+            ]
+            for pattern in dd_patterns:
+                match = re.search(pattern, output, re.IGNORECASE)
                 if match:
                     dd = float(match.group(1))
                     metrics['max_drawdown'] = dd / 100 if dd > 1 else dd
+                    break
+                    
         except Exception as e:
-            self.logger.warning(f"Error parsing metrics: {e}")
+            self.logger.error(f"❌ Error parsing metrics: {e}")
+            self.logger.error(f"Output was: {output[:500]}")
+            return None
         
-        # WARNING: If parsing failed, generate synthetic metrics for DEMO purposes only
-        # In production, this should return None or raise an exception
-        if metrics['return_pct'] == 0.0:
-            self.logger.warning("⚠️ Could not parse actual metrics - generating synthetic for DEMO")
-            self.logger.warning("⚠️ DO NOT use for real trading decisions!")
-            metrics['return_pct'] = np.random.uniform(10, 80)
-            metrics['sharpe'] = np.random.uniform(0.5, 2.5)
-            metrics['trades'] = np.random.randint(50, 200)
-            metrics['win_rate'] = np.random.uniform(0.50, 0.75)
-            metrics['profit_factor'] = np.random.uniform(1.2, 2.5)
-            metrics['max_drawdown'] = np.random.uniform(0.05, 0.25)
+        # CRITICAL: If parsing failed, return None (strategy fails)
+        # NO SYNTHETIC DATA - this wastes premium API calls
+        if metrics['return_pct'] == 0.0 and metrics['trades'] == 0:
+            self.logger.error("❌ FAILED to parse backtest output - NO METRICS FOUND")
+            self.logger.error(f"Output sample: {output[:1000]}")
+            return None
         
+        self.logger.info(f"✅ Parsed metrics: Return {metrics['return_pct']:.1f}%, Sharpe {metrics['sharpe']:.2f}, Trades {metrics['trades']}")
         return metrics
     
     def _optimization_loop(self, code: str, strategy: Dict, results: Dict) -> Tuple[str, Dict]:
