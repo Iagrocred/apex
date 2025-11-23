@@ -1111,19 +1111,31 @@ class TradingExecutionAgent:
                         self.Volume = df['Volume']
                         self.df = df
                 
-                # Create mock broker
+                # Create mock broker with equity property
                 class MockBroker:
-                    pass
+                    def __init__(self, cash):
+                        self._cash = cash
+                        self._equity = cash
+                    
+                    @property
+                    def equity(self):
+                        return self._equity
+                    
+                    @property
+                    def cash(self):
+                        return self._cash
                 
                 # Initialize the strategy with backtesting.py required arguments
                 # Strategy.__init__(broker, data, params)
+                broker = MockBroker(cash=TradePexConfig.TOTAL_CAPITAL_USD)
                 strategy_instance = strategy_class(
-                    broker=MockBroker(),
+                    broker=broker,
                     data=DataWrapper(market_data),
                     params={}
                 )
                 
-                strategy_instance.equity = TradePexConfig.TOTAL_CAPITAL_USD
+                # Note: equity is now accessed via strategy_instance.broker.equity
+                # or strategy_instance._broker._equity depending on backtesting.py internals
                 
                 # Create indicator wrapper function (backtesting.py's I() function)
                 def indicator_wrapper(func, name=''):
