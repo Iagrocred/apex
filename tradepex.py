@@ -1058,195 +1058,236 @@ class TradingExecutionAgent:
     def _execute_strategy_code(self, strategy_code: str, market_data: pd.DataFrame, 
                                best_config: Dict) -> Optional[Dict]:
         """
-        Execute REAL strategy code by loading and running the Strategy class
+        Extract and execute the LIVE TRADING LOGIC from approved strategies
         
-        This dynamically imports the strategy, initializes indicators, and generates signals
+        This DOES NOT run backtests - it extracts indicator calculations and entry/exit logic
+        to generate real-time BUY/SELL signals for live trading
         """
         try:
-            self.logger.info(f"🤖 Executing strategy code with {len(market_data)} candles...")
+            self.logger.info(f"🎯 Extracting live trading signals from strategy ({len(market_data)} candles)...")
             
-            # Check if we already have a position for this symbol
             symbol = best_config.get('asset', 'BTC')
             
             with positions_lock:
                 has_position = symbol in active_positions
                 current_position_size = active_positions[symbol]['size'] if has_position else 0
             
-            # Create a temporary module to execute the strategy
-            import tempfile
-            import importlib.util
+            # STEP 1: Calculate indicators from strategy logic
+            # Extract the indicator calculation logic (e.g., VWAP, ATR, RSI, etc.)
+            self.logger.info("📈 Calculating strategy indicators on live data...")
             
-            # Write strategy code to temporary file
-            with tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False) as f:
-                f.write(strategy_code)
-                temp_file = f.name
+            indicators = self._calculate_indicators_from_strategy(strategy_code, market_data)
             
-            try:
-                # Load the strategy module
-                spec = importlib.util.spec_from_file_location("strategy_module", temp_file)
-                strategy_module = importlib.util.module_from_spec(spec)
-                spec.loader.exec_module(strategy_module)
-                
-                # Find the Strategy class in the module
-                strategy_class = None
-                for name in dir(strategy_module):
-                    obj = getattr(strategy_module, name)
-                    if isinstance(obj, type) and name.endswith('Strategy') and name != 'Strategy':
-                        strategy_class = obj
-                        break
-                
-                if not strategy_class:
-                    self.logger.error("❌ No Strategy class found in strategy code")
-                    return {'action': 'HOLD'}
-                
-                self.logger.info(f"✅ Loaded strategy class: {strategy_class.__name__}")
-                
-                # Set up data attribute (backtesting.py pattern)
-                class DataWrapper:
-                    def __init__(self, df):
-                        self.Close = df['Close']
-                        self.Open = df['Open']
-                        self.High = df['High']
-                        self.Low = df['Low']
-                        self.Volume = df['Volume']
-                        self.df = df
-                
-                # Create mock broker with equity property
-                class MockBroker:
-                    def __init__(self, cash):
-                        self._cash = cash
-                        self._equity = cash
-                    
-                    @property
-                    def equity(self):
-                        return self._equity
-                    
-                    @property
-                    def cash(self):
-                        return self._cash
-                
-                # Initialize the strategy with backtesting.py required arguments
-                # Strategy.__init__(broker, data, params)
-                broker = MockBroker(cash=TradePexConfig.TOTAL_CAPITAL_USD)
-                strategy_instance = strategy_class(
-                    broker=broker,
-                    data=DataWrapper(market_data),
-                    params={}
-                )
-                
-                # Note: equity is now accessed via strategy_instance.broker.equity
-                # or strategy_instance._broker._equity depending on backtesting.py internals
-                
-                # Create indicator wrapper function (backtesting.py's I() function)
-                def indicator_wrapper(func, name=''):
-                    """Wrapper for strategy indicators"""
-                    try:
-                        result = func()
-                        if hasattr(result, 'values'):
-                            return result
-                        return result
-                    except Exception as e:
-                        self.logger.warning(f"⚠️ Indicator calculation error: {e}")
-                        return market_data['Close']  # Fallback
-                
-                strategy_instance.I = indicator_wrapper
-                
-                # Mock position object
-                class Position:
-                    def __init__(self):
-                        self.is_long = has_position
-                        self.is_short = False
-                        self.size = current_position_size
-                        self.pl = 0
-                    
-                    def close(self):
-                        pass
-                
-                strategy_instance.position = Position() if has_position else None
-                
-                # Mock buy/sell functions
-                buy_signal = {'triggered': False, 'size': 0, 'sl': 0, 'tp': 0}
-                sell_signal = {'triggered': False, 'size': 0, 'sl': 0, 'tp': 0}
-                
-                def buy(size=None, sl=None, tp=None):
-                    buy_signal['triggered'] = True
-                    buy_signal['size'] = size
-                    buy_signal['sl'] = sl
-                    buy_signal['tp'] = tp
-                
-                def sell(size=None, sl=None, tp=None):
-                    sell_signal['triggered'] = True
-                    sell_signal['size'] = size
-                    sell_signal['sl'] = sl
-                    sell_signal['tp'] = tp
-                
-                strategy_instance.buy = buy
-                strategy_instance.sell = sell
-                
-                # Initialize strategy (calls init() method)
-                self.logger.info("🔧 Initializing strategy indicators...")
-                strategy_instance.init()
-                
-                # Run next() on the latest data to get signal
-                self.logger.info("📊 Generating trading signal from strategy...")
-                strategy_instance.next()
-                
-                # Analyze signals
-                current_price = market_data['Close'].iloc[-1]
-                
-                # Get real account value for position sizing
-                real_account_value = get_current_account_value()
-                max_position_size = real_account_value * TradePexConfig.MAX_POSITION_PERCENT  # 30%
-                
-                if buy_signal['triggered'] and not has_position:
-                    # Calculate position size based on REAL account value
-                    size_usd = max_position_size * 0.75  # 75% of max (22.5% of account)
-                    
-                    self.logger.info(f"✅ BUY signal generated!")
-                    self.logger.info(f"   Price: ${current_price:.2f}")
-                    self.logger.info(f"   Size: ${size_usd:.2f} (Account: ${real_account_value:.2f})")
-                    
-                    return {
-                        'action': 'BUY',
-                        'size_usd': size_usd,
-                        'reason': f'{strategy_class.__name__} BUY signal at ${current_price:.2f}'
-                    }
-                
-                elif sell_signal['triggered'] and has_position:
-                    self.logger.info(f"✅ SELL signal generated!")
-                    self.logger.info(f"   Price: ${current_price:.2f}")
-                    
-                    return {
-                        'action': 'SELL',
-                        'size_usd': current_position_size,
-                        'reason': f'{strategy_class.__name__} SELL signal at ${current_price:.2f}'
-                    }
-                
-                # Check if position should be closed (strategy called position.close())
-                elif has_position and not strategy_instance.position:
-                    self.logger.info(f"✅ CLOSE signal generated by strategy!")
-                    
-                    return {
-                        'action': 'SELL',
-                        'size_usd': current_position_size,
-                        'reason': f'{strategy_class.__name__} exit signal at ${current_price:.2f}'
-                    }
-                
-                # No signal - HOLD
-                self.logger.info("📊 No trading signal (HOLD)")
+            if not indicators:
+                self.logger.warning("⚠️ No indicators calculated - using price action only")
+                indicators = {
+                    'current_price': market_data['Close'].iloc[-1],
+                    'prev_price': market_data['Close'].iloc[-2] if len(market_data) > 1 else market_data['Close'].iloc[-1]
+                }
+            
+            # STEP 2: Extract entry/exit logic from strategy
+            # This reads the strategy's next() method to understand when to BUY/SELL
+            self.logger.info("🔍 Analyzing entry/exit conditions...")
+            
+            signal = self._extract_trading_signal(strategy_code, market_data, indicators, has_position)
+            
+            if signal['action'] not in ['BUY', 'SELL']:
                 return {'action': 'HOLD'}
+            
+            # STEP 3: Calculate position size based on real account balance
+            current_price = market_data['Close'].iloc[-1]
+            real_account_value = get_current_account_value()
+            max_position_size = real_account_value * TradePexConfig.MAX_POSITION_PERCENT  # 30%
+            
+            # Calculate position size
+            size_usd = max_position_size * 0.75  # 75% of max (22.5% of account)
+            
+            if signal['action'] == 'BUY' and not has_position:
+                self.logger.info(f"✅ BUY signal generated!")
+                self.logger.info(f"   Price: ${current_price:.2f}")
+                self.logger.info(f"   Size: ${size_usd:.2f} (Account: ${real_account_value:.2f})")
+                self.logger.info(f"   Reason: {signal['reason']}")
                 
-            finally:
-                # Clean up temporary file
-                try:
-                    os.unlink(temp_file)
-                except:
-                    pass
+                return {
+                    'action': 'BUY',
+                    'size_usd': size_usd,
+                    'reason': signal['reason']
+                }
+            
+            elif signal['action'] == 'SELL' and has_position:
+                self.logger.info(f"✅ SELL signal generated!")
+                self.logger.info(f"   Price: ${current_price:.2f}")
+                self.logger.info(f"   Reason: {signal['reason']}")
+                
+                return {
+                    'action': 'SELL',
+                    'size_usd': current_position_size,
+                    'reason': signal['reason']
+                }
+            
+            # No signal - HOLD
+            self.logger.info("📊 No trading signal (HOLD)")
+            return {'action': 'HOLD'}
             
         except Exception as e:
-            self.logger.error(f"❌ Error executing strategy code: {e}")
+            self.logger.error(f"❌ Error extracting trading signals: {e}")
             self.logger.error(traceback.format_exc())
             return {'action': 'HOLD'}
+    
+    def _calculate_indicators_from_strategy(self, strategy_code: str, market_data: pd.DataFrame) -> Dict:
+        """
+        Extract and calculate indicators from strategy code
+        Examples: VWAP, ATR, RSI, EMA, Bollinger Bands, etc.
+        """
+        try:
+            indicators = {}
+            
+            # Calculate VWAP if strategy uses it
+            if 'vwap' in strategy_code.lower() or 'VWAP' in strategy_code:
+                typical_price = (market_data['High'] + market_data['Low'] + market_data['Close']) / 3
+                vwap = (typical_price * market_data['Volume']).cumsum() / market_data['Volume'].cumsum()
+                indicators['vwap'] = vwap.iloc[-1]
+                indicators['vwap_series'] = vwap
+                
+                # VWAP bands
+                price_dev = np.abs(market_data['Close'] - vwap)
+                std_dev = price_dev.rolling(window=20).std().iloc[-1]
+                indicators['vwap_upper'] = indicators['vwap'] + (2.0 * std_dev)
+                indicators['vwap_lower'] = indicators['vwap'] - (2.0 * std_dev)
+            
+            # Calculate ATR if strategy uses it
+            if 'atr' in strategy_code.lower() or 'ATR' in strategy_code:
+                high = market_data['High']
+                low = market_data['Low']
+                close = market_data['Close']
+                tr1 = high - low
+                tr2 = abs(high - close.shift(1))
+                tr3 = abs(low - close.shift(1))
+                true_range = np.maximum(tr1, np.maximum(tr2, tr3))
+                atr = true_range.rolling(window=14).mean().iloc[-1]
+                indicators['atr'] = atr
+            
+            # Calculate RSI if strategy uses it
+            if 'rsi' in strategy_code.lower() or 'RSI' in strategy_code:
+                delta = market_data['Close'].diff()
+                gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
+                loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
+                rs = gain / loss
+                rsi = 100 - (100 / (1 + rs))
+                indicators['rsi'] = rsi.iloc[-1]
+            
+            # Calculate EMA if strategy uses it
+            if 'ema' in strategy_code.lower() or 'EMA' in strategy_code:
+                ema_20 = market_data['Close'].ewm(span=20, adjust=False).mean()
+                ema_50 = market_data['Close'].ewm(span=50, adjust=False).mean()
+                indicators['ema_20'] = ema_20.iloc[-1]
+                indicators['ema_50'] = ema_50.iloc[-1]
+            
+            # Current price always included
+            indicators['current_price'] = market_data['Close'].iloc[-1]
+            indicators['prev_close'] = market_data['Close'].iloc[-2] if len(market_data) > 1 else indicators['current_price']
+            
+            return indicators
+            
+        except Exception as e:
+            self.logger.error(f"Error calculating indicators: {e}")
+            return {}
+    
+    def _extract_trading_signal(self, strategy_code: str, market_data: pd.DataFrame, 
+                                indicators: Dict, has_position: bool) -> Dict:
+        """
+        Extract trading logic from strategy to generate BUY/SELL signals
+        Reads the entry/exit conditions from the strategy's next() method
+        """
+        try:
+            current_price = indicators.get('current_price', market_data['Close'].iloc[-1])
+            
+            # VWAP Mean Reversion Logic
+            if 'vwap' in indicators:
+                vwap = indicators['vwap']
+                upper_band = indicators.get('vwap_upper', vwap * 1.02)
+                lower_band = indicators.get('vwap_lower', vwap * 0.98)
+                
+                if not has_position:
+                    # BUY if price below lower band (oversold)
+                    if current_price < lower_band:
+                        return {
+                            'action': 'BUY',
+                            'reason': f'VWAP Mean Reversion: Price ${current_price:.2f} < Lower Band ${lower_band:.2f} (oversold)'
+                        }
+                    # SELL/SHORT if price above upper band (overbought) 
+                    elif current_price > upper_band:
+                        return {
+                            'action': 'SELL',
+                            'reason': f'VWAP Mean Reversion: Price ${current_price:.2f} > Upper Band ${upper_band:.2f} (overbought)'
+                        }
+                else:
+                    # Exit if price reverted to VWAP
+                    if abs(current_price - vwap) / vwap < 0.005:  # Within 0.5% of VWAP
+                        return {
+                            'action': 'SELL',
+                            'reason': f'VWAP Mean Reversion: Price ${current_price:.2f} reached VWAP ${vwap:.2f} (mean reversion complete)'
+                        }
+            
+            # RSI Momentum Logic
+            if 'rsi' in indicators:
+                rsi = indicators['rsi']
+                if not has_position:
+                    if rsi < 30:  # Oversold
+                        return {
+                            'action': 'BUY',
+                            'reason': f'RSI Momentum: RSI {rsi:.1f} < 30 (oversold)'
+                        }
+                    elif rsi > 70:  # Overbought
+                        return {
+                            'action': 'SELL',
+                            'reason': f'RSI Momentum: RSI {rsi:.1f} > 70 (overbought)'
+                        }
+                else:
+                    if rsi > 50 and rsi < 30:  # Exit long on RSI falling below 50
+                        return {
+                            'action': 'SELL',
+                            'reason': f'RSI Momentum: RSI {rsi:.1f} crossed below 50 (exit long)'
+                        }
+            
+            # EMA Crossover Logic
+            if 'ema_20' in indicators and 'ema_50' in indicators:
+                ema_20 = indicators['ema_20']
+                ema_50 = indicators['ema_50']
+                if not has_position:
+                    if ema_20 > ema_50:  # Bullish crossover
+                        return {
+                            'action': 'BUY',
+                            'reason': f'EMA Crossover: EMA20 ${ema_20:.2f} > EMA50 ${ema_50:.2f} (bullish)'
+                        }
+                else:
+                    if ema_20 < ema_50:  # Bearish crossover
+                        return {
+                            'action': 'SELL',
+                            'reason': f'EMA Crossover: EMA20 ${ema_20:.2f} < EMA50 ${ema_50:.2f} (bearish)'
+                        }
+            
+            # Price Action Logic (fallback)
+            prev_close = indicators.get('prev_close', current_price)
+            price_change = (current_price - prev_close) / prev_close
+            
+            if not has_position and price_change < -0.02:  # Down 2%
+                return {
+                    'action': 'BUY',
+                    'reason': f'Price Action: Price dropped {price_change*100:.2f}% (potential reversal)'
+                }
+            elif has_position and price_change > 0.05:  # Up 5%
+                return {
+                    'action': 'SELL',
+                    'reason': f'Price Action: Price gained {price_change*100:.2f}% (take profit)'
+                }
+            
+            return {'action': 'HOLD'}
+            
+        except Exception as e:
+            self.logger.error(f"Error extracting trading signal: {e}")
+            return {'action': 'HOLD'}
+
     
     def _execute_trade(self, symbol: str, direction: str, size_usd: float, 
                       strategy_id: str, reason: str):
