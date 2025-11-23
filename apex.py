@@ -1448,13 +1448,14 @@ class RBIBacktestEngine:
     def _process_existing_strategy(self, strategy: Dict) -> bool:
         """
         Process an existing strategy from library - ACTUALLY BACKTEST with swarm consensus
-        This re-runs strategies that were rejected before due to missing Claude in swarm
+        This re-runs strategies to approve ALL that meet criteria
+        (Previously Claude was broken, so good strategies were denied)
         Returns True if approved, False otherwise
         """
         strategy_name = strategy.get('name', 'Unknown')
         self.logger.info("=" * 80)
         self.logger.info(f"🔄 RE-BACKTESTING EXISTING: {strategy_name}")
-        self.logger.info("   (Some got 70% but were denied - now with working Claude swarm!)")
+        self.logger.info("   Will approve if meets criteria (now with working Claude swarm!)")
         self.logger.info("=" * 80)
         
         try:
@@ -1594,7 +1595,8 @@ class RBIBacktestEngine:
         self.logger.info("")
         self.logger.info("=" * 80)
         self.logger.info("🔄 STARTUP: Processing existing strategies from library")
-        self.logger.info("   (Some got 70% but were denied - now with working Claude!)")
+        self.logger.info("   Will approve ALL strategies that meet criteria!")
+        self.logger.info("   (Some got great results but were denied - Claude was broken)")
         self.logger.info("=" * 80)
         
         existing_strategies = self._load_existing_strategies_from_library()
