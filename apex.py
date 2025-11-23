@@ -2247,7 +2247,7 @@ Return the COMPLETE optimized Python code."""
         models = [
             {"type": "deepseek", "name": "deepseek-reasoner"},
             {"type": "openai", "name": "gpt-4"},
-            {"type": "anthropic", "name": "claude-3-5-sonnet-20240620"}  # Using stable June 2024 release
+            {"type": "anthropic", "name": "claude-3-opus-20240229"}  # Using Claude 3 Opus (most reliable)
         ]
 
         for model in models:
