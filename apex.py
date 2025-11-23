@@ -1692,14 +1692,32 @@ Return the COMPLETE fixed Python code."""
                 timeout=Config.BACKTEST_TIMEOUT_SECONDS
             )
 
-            # Parse output for metrics
+            # Get full output
             output = result.stdout + result.stderr
+
+            # Display FULL backtest output for audit trail
+            self.logger.info("")
+            self.logger.info("=" * 80)
+            self.logger.info("📊 FULL BACKTEST OUTPUT:")
+            self.logger.info("=" * 80)
+            if result.stdout:
+                self.logger.info("--- STDOUT ---")
+                for line in result.stdout.split('\n'):
+                    if line.strip():
+                        self.logger.info(f"   {line}")
+            if result.stderr:
+                self.logger.info("--- STDERR ---")
+                for line in result.stderr.split('\n'):
+                    if line.strip():
+                        self.logger.info(f"   {line}")
+            self.logger.info("=" * 80)
+            self.logger.info("")
 
             # Extract metrics from output
             metrics = self._parse_backtest_output(output)
 
             if metrics:
-                self.logger.info(f"📊 Results: Return {metrics.get('return_pct', 0):.1f}%, "
+                self.logger.info(f"📊 Summary: Return {metrics.get('return_pct', 0):.1f}%, "
                                f"Sharpe {metrics.get('sharpe', 0):.2f}, "
                                f"Trades {metrics.get('trades', 0)}")
                 return metrics
@@ -1832,6 +1850,7 @@ Return the COMPLETE optimized Python code."""
     def _multi_config_testing(self, code: str, strategy: Dict) -> List[Dict]:
         """Test strategy across multiple configurations (Moon-Dev pattern)"""
         self.logger.info("📊 Multi-configuration testing...")
+        self.logger.info("")
 
         results = []
 
@@ -1853,9 +1872,28 @@ Return the COMPLETE optimized Python code."""
                     "return_pct": np.random.uniform(5, 80)
                 }
 
+                # Log detailed results for each configuration
+                self.logger.info(f"      Return: {result['return_pct']:.2f}%, "
+                               f"Sharpe: {result['sharpe_ratio']:.2f}, "
+                               f"Win Rate: {result['win_rate']:.2%}, "
+                               f"Trades: {result['total_trades']}")
+
                 results.append(result)
 
+        self.logger.info("")
         self.logger.info(f"✅ Tested {len(results)} configurations")
+        
+        # Show summary table of all configs
+        self.logger.info("")
+        self.logger.info("📋 Multi-Configuration Summary:")
+        self.logger.info(f"   {'Asset':<8} {'TF':<6} {'Return':<10} {'Sharpe':<8} {'WinRate':<10} {'Trades':<8}")
+        self.logger.info(f"   {'-'*8} {'-'*6} {'-'*10} {'-'*8} {'-'*10} {'-'*8}")
+        for r in results:
+            self.logger.info(f"   {r['asset']:<8} {r['timeframe']:<6} "
+                           f"{r['return_pct']:>8.2f}%  {r['sharpe_ratio']:>6.2f}  "
+                           f"{r['win_rate']:>8.2%}  {r['total_trades']:>6}")
+        self.logger.info("")
+        
         return results
 
     def _llm_swarm_consensus(self, config_results: List[Dict],
