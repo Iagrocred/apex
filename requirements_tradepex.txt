@@ -1,0 +1,30 @@
+# TradePex Requirements
+# Based on moon-dev-ai-agents dependencies
+
+# Core Data Processing
+numpy>=1.24.0
+pandas>=2.0.0
+
+# Configuration
+python-dotenv>=1.0.0
+
+# Terminal Output
+termcolor>=2.3.0
+
+# Ethereum Account (for Hyperliquid)
+eth-account>=0.10.0
+web3>=6.0.0
+
+# HTTP Requests
+requests>=2.31.0
+
+# Optional: LLM APIs (for AI risk decisions)
+openai>=1.0.0
+anthropic>=0.18.0
+
+# Optional: Hyperliquid SDK
+# Note: Hyperliquid integration is done via REST API
+# The full SDK can be installed separately if needed
+
+# Optional: Technical Analysis
+pandas-ta>=0.3.14b0
