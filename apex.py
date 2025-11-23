@@ -276,12 +276,13 @@ class Config:
     # THREAD 2: RBI BACKTEST ENGINE CONFIGURATION (Moon-Dev v3 Full)
     # =========================================================================================
 
-    # LLM Models for RBI (Moon-Dev pattern - using Grok 4 for all tasks)
-    # Moon Dev uses grok-4-fast-reasoning for everything (2M context, cheap, fast)
-    RBI_RESEARCH_MODEL = {"type": "xai", "name": "grok-4-fast-reasoning"}
-    RBI_BACKTEST_MODEL = {"type": "xai", "name": "grok-4-fast-reasoning"}
-    RBI_DEBUG_MODEL = {"type": "xai", "name": "grok-4-fast-reasoning"}
-    RBI_OPTIMIZE_MODEL = {"type": "xai", "name": "grok-4-fast-reasoning"}
+    # LLM Models for RBI (Cost-effective DeepSeek models)
+    # DeepSeek Reasoner V3 for reasoning tasks (research, optimization)
+    # DeepSeek Coder for coding tasks (backtest, debug)
+    RBI_RESEARCH_MODEL = {"type": "deepseek", "name": "deepseek-reasoner"}  # V3 - Great for trading!
+    RBI_BACKTEST_MODEL = {"type": "deepseek", "name": "deepseek-coder"}     # Coder for generating code
+    RBI_DEBUG_MODEL = {"type": "deepseek", "name": "deepseek-coder"}        # Coder for fixing code
+    RBI_OPTIMIZE_MODEL = {"type": "deepseek", "name": "deepseek-reasoner"}  # V3 - Reasoning for optimization
 
     # Execution settings
     MAX_DEBUG_ITERATIONS = 10

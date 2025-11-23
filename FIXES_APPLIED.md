@@ -97,36 +97,38 @@ for component in components:
 
 ---
 
-### Issue 5: ✅ CORRECT MODELS FIXED (VERIFIED FROM MOON DEV REPO!)
-**Problem**: Using wrong models - needed to check actual Moon Dev implementation.
+### Issue 5: ✅ COST-EFFECTIVE MODELS (DeepSeek instead of expensive Grok!)
+**Problem**: Grok 4 Fast Reasoning is TOO EXPENSIVE! User ran out of tokens.
 
-**Moon Dev Actually Uses** (verified from repo):
-- **rbi_agent_v3.py**: Grok 4 Fast Reasoning (xai) for ALL RBI tasks
-- **rbi_agent_pp_multi.py**: Grok 4 Fast Reasoning (xai) for ALL RBI tasks  
-- **swarm_agent.py**: DeepSeek Chat, Grok 4, Qwen, Claude in swarm
+**User Request**:
+- Use **DeepSeek Reasoner V3** - "FANTASTIC AND VERY GOOD WITH TRADING!"
+- Use **DeepSeek Coder** for coding tasks (backtest, debug)
+- DeepSeek Chat can stay for swarm voting
+- Grok 4 XAI is MUCH MORE EXPENSIVE
 
-**Solution Applied** (Lines 272-277):
+**Solution Applied** (Lines 279-285):
 ```python
-# Following Moon Dev exactly - using Grok 4 for all RBI tasks
-RBI_RESEARCH_MODEL = {"type": "xai", "name": "grok-4-fast-reasoning"}
-RBI_BACKTEST_MODEL = {"type": "xai", "name": "grok-4-fast-reasoning"}
-RBI_DEBUG_MODEL = {"type": "xai", "name": "grok-4-fast-reasoning"}
-RBI_OPTIMIZE_MODEL = {"type": "xai", "name": "grok-4-fast-reasoning"}
+# Cost-effective DeepSeek models
+RBI_RESEARCH_MODEL = {"type": "deepseek", "name": "deepseek-reasoner"}  # V3 - Great for trading!
+RBI_BACKTEST_MODEL = {"type": "deepseek", "name": "deepseek-coder"}     # Coder for generating code
+RBI_DEBUG_MODEL = {"type": "deepseek", "name": "deepseek-coder"}        # Coder for fixing code
+RBI_OPTIMIZE_MODEL = {"type": "deepseek", "name": "deepseek-reasoner"}  # V3 - Reasoning for optimization
 ```
 
-**Swarm Consensus Models** (Line 1922):
+**Swarm Consensus Models** (Line 1982):
 ```python
 models = [
-    {"type": "deepseek", "name": "deepseek-chat"},            # DeepSeek Chat
+    {"type": "deepseek", "name": "deepseek-chat"},            # DeepSeek Chat for voting
     {"type": "openai", "name": "gpt-4"},                      # GPT-4
     {"type": "claude", "name": "claude-3-5-sonnet-20241022"}  # Latest Claude
 ]
 ```
 
 **Result**: 
-- Using Grok 4 Fast Reasoning (2M context, cheap, fast) for all RBI operations
-- Matches Moon Dev's implementation EXACTLY
-- DeepSeek Chat + GPT-4 + Claude for swarm voting
+- **Much cheaper than Grok!** No more token exhaustion
+- DeepSeek Reasoner V3 excellent for trading strategy research
+- DeepSeek Coder specialized for generating and fixing backtest code
+- All other fixes maintained (deduplication, logging, etc.)
 
 ---
 
