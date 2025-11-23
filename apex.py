@@ -219,6 +219,9 @@ class Config:
     
     # Successful strategies directory (separate from final backtests)
     SUCCESSFUL_STRATEGIES_DIR = PROJECT_ROOT / "successful_strategies"
+    
+    # Approved strategies directory (for live trading on Hyperliquid!)
+    APPROVED_STRATEGIES_DIR = PROJECT_ROOT / "approved_strategies"
 
     # =========================================================================================
     # API KEYS
@@ -433,6 +436,7 @@ class Config:
             cls.CHAMPION_LOGS_DIR,
             cls.CHAMPION_STRATEGIES_DIR,
             cls.SUCCESSFUL_STRATEGIES_DIR,
+            cls.APPROVED_STRATEGIES_DIR,
             cls.MARKET_DATA_PATH
         ]
 
@@ -2214,7 +2218,7 @@ Respond with ONLY one word: APPROVE or REJECT"""
             return "REJECT"
 
     def _save_approved_strategy(self, validated_strategy: Dict):
-        """Save approved strategy to both final directory and successful_strategies"""
+        """Save approved strategy to multiple directories including approved_strategies for live trading"""
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         strategy_name = validated_strategy.get("strategy_name", "unknown").replace(" ", "_")
 
@@ -2248,10 +2252,28 @@ Respond with ONLY one word: APPROVE or REJECT"""
                 "llm_votes": validated_strategy.get("llm_votes"),
                 "timestamp": validated_strategy.get("timestamp")
             }, f, indent=2)
+        
+        # 🚀 APPROVED_STRATEGIES folder for live trading on Hyperliquid!
+        approved_code_file = Config.APPROVED_STRATEGIES_DIR / f"{timestamp}_{strategy_name}.py"
+        with open(approved_code_file, 'w') as f:
+            f.write(validated_strategy.get("code", ""))
+        
+        approved_meta_file = Config.APPROVED_STRATEGIES_DIR / f"{timestamp}_{strategy_name}_meta.json"
+        with open(approved_meta_file, 'w') as f:
+            json.dump({
+                "strategy_name": validated_strategy.get("strategy_name"),
+                "best_config": validated_strategy.get("best_config"),
+                "results": validated_strategy.get("results"),
+                "llm_votes": validated_strategy.get("llm_votes"),
+                "timestamp": validated_strategy.get("timestamp"),
+                "approved_for_live_trading": True,  # Flag for live trading system
+                "exchange": "hyperliquid"
+            }, f, indent=2)
 
         self.logger.info(f"💾 Approved strategy saved: {strategy_name}")
         self.logger.info(f"   📂 Final backtest: {code_file}")
         self.logger.info(f"   ✅ Successful strategies: {success_code_file}")
+        self.logger.info(f"   🚀 APPROVED for live trading: {approved_code_file}")
 
 logger.info("✅ RBI Backtest Engine class defined (FULL IMPLEMENTATION - 700+ lines)")
 
