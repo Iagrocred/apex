@@ -1863,14 +1863,42 @@ Return the COMPLETE optimized Python code."""
         # Find best configuration
         best_config = max(config_results, key=lambda x: x.get("profit_factor", 0) * x.get("win_rate", 0))
 
-        # Check minimum criteria
-        if (best_config["win_rate"] < Config.MIN_WIN_RATE or
-            best_config["profit_factor"] < Config.MIN_PROFIT_FACTOR or
-            best_config["max_drawdown"] > Config.MAX_DRAWDOWN or
-            best_config["sharpe_ratio"] < Config.MIN_SHARPE_RATIO or
-            best_config["total_trades"] < Config.MIN_TRADES):
+        # Display detailed backtest results FIRST (for audit trail)
+        self.logger.info("")
+        self.logger.info("📊 Best Configuration Backtest Results:")
+        self.logger.info(f"   Asset: {best_config.get('asset', 'N/A')}")
+        self.logger.info(f"   Timeframe: {best_config.get('timeframe', 'N/A')}")
+        self.logger.info(f"   Win Rate: {best_config['win_rate']:.2%} (need {Config.MIN_WIN_RATE:.2%})")
+        self.logger.info(f"   Profit Factor: {best_config['profit_factor']:.2f} (need {Config.MIN_PROFIT_FACTOR:.2f})")
+        self.logger.info(f"   Max Drawdown: {best_config['max_drawdown']:.2%} (max {Config.MAX_DRAWDOWN:.2%})")
+        self.logger.info(f"   Sharpe Ratio: {best_config['sharpe_ratio']:.2f} (need {Config.MIN_SHARPE_RATIO:.2f})")
+        self.logger.info(f"   Total Trades: {best_config['total_trades']} (need {Config.MIN_TRADES})")
+        self.logger.info(f"   Return: {best_config.get('return_pct', 0):.2f}%")
+        self.logger.info("")
 
+        # Check minimum criteria and provide detailed feedback
+        criteria_passed = {
+            "win_rate": best_config["win_rate"] >= Config.MIN_WIN_RATE,
+            "profit_factor": best_config["profit_factor"] >= Config.MIN_PROFIT_FACTOR,
+            "max_drawdown": best_config["max_drawdown"] <= Config.MAX_DRAWDOWN,
+            "sharpe_ratio": best_config["sharpe_ratio"] >= Config.MIN_SHARPE_RATIO,
+            "total_trades": best_config["total_trades"] >= Config.MIN_TRADES
+        }
+
+        all_criteria_met = all(criteria_passed.values())
+
+        if not all_criteria_met:
             self.logger.info("❌ Does not meet minimum criteria")
+            self.logger.info("")
+            self.logger.info("📋 Criteria Check Results:")
+            self.logger.info(f"   {'✅' if criteria_passed['win_rate'] else '❌'} Win Rate: {best_config['win_rate']:.2%} (need {Config.MIN_WIN_RATE:.2%})")
+            self.logger.info(f"   {'✅' if criteria_passed['profit_factor'] else '❌'} Profit Factor: {best_config['profit_factor']:.2f} (need {Config.MIN_PROFIT_FACTOR:.2f})")
+            self.logger.info(f"   {'✅' if criteria_passed['max_drawdown'] else '❌'} Max Drawdown: {best_config['max_drawdown']:.2%} (max {Config.MAX_DRAWDOWN:.2%})")
+            self.logger.info(f"   {'✅' if criteria_passed['sharpe_ratio'] else '❌'} Sharpe Ratio: {best_config['sharpe_ratio']:.2f} (need {Config.MIN_SHARPE_RATIO:.2f})")
+            self.logger.info(f"   {'✅' if criteria_passed['total_trades'] else '❌'} Total Trades: {best_config['total_trades']} (need {Config.MIN_TRADES})")
+            self.logger.info("")
+            self.logger.info("ℹ️  Explanation: Strategy failed preliminary criteria check")
+            self.logger.info("ℹ️  LLM swarm voting skipped (not needed for clearly failing strategies)")
             return False, {}, None
 
         # Get votes from LLM swarm
@@ -1878,7 +1906,7 @@ Return the COMPLETE optimized Python code."""
         models = [
             {"type": "deepseek", "name": "deepseek-reasoner"},
             {"type": "openai", "name": "gpt-4"},
-            {"type": "claude", "name": "claude-3-5-sonnet-20240620"}
+            {"type": "anthropic", "name": "claude-3-5-sonnet-20240620"}  # Using stable June 2024 release
         ]
 
         for model in models:
@@ -1888,8 +1916,11 @@ Return the COMPLETE optimized Python code."""
                 votes[model_name] = vote
                 self.logger.info(f"   {model_name}: {vote}")
             except Exception as e:
-                self.logger.warning(f"Vote from {model['type']} failed: {e}")
-                votes[model["type"]] = "REJECT"
+                self.logger.warning(f"⚠️  Vote from {model['type']} failed: {e}")
+                self.logger.warning(f"   Model attempted: {model['name']}")
+                # Don't auto-reject on error - just skip this vote
+                # This way 2/2 can still approve instead of requiring 2/3 when one fails
+                continue
 
         # Count approvals
         approvals = sum(1 for v in votes.values() if v == "APPROVE")
