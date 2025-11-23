@@ -888,85 +888,267 @@ class TradingExecutionAgent:
             self.logger.error(traceback.format_exc())
     
     def _fetch_market_data(self, symbol: str, timeframe: str = '15m', bars: int = 500) -> Optional[pd.DataFrame]:
-        """Fetch market data from Hyperliquid for the symbol"""
+        """Fetch REAL OHLCV candle data from Hyperliquid API"""
         try:
-            # For now, we'll use the Hyperliquid client to get recent price data
-            # In production, this would fetch full OHLCV data
+            self.logger.info(f"📊 Fetching {bars} bars of {timeframe} data for {symbol} from Hyperliquid...")
             
-            # Get current price to build a simple data structure
-            ask, bid = self.client.get_ask_bid(symbol)
-            mid_price = (ask + bid) / 2
+            # Convert timeframe to Hyperliquid format
+            interval_map = {
+                '1m': '1m', '3m': '3m', '5m': '5m', '15m': '15m', '30m': '30m',
+                '1H': '1h', '2H': '2h', '4H': '4h', '1D': '1d'
+            }
+            hl_interval = interval_map.get(timeframe, '15m')
             
-            if mid_price == 0:
+            # Fetch historical candles from Hyperliquid
+            url = 'https://api.hyperliquid.xyz/info'
+            headers = {'Content-Type': 'application/json'}
+            
+            # Calculate start time for the requested bars
+            now = int(time.time() * 1000)  # milliseconds
+            
+            # Estimate milliseconds per bar
+            interval_ms = {
+                '1m': 60000, '3m': 180000, '5m': 300000, '15m': 900000,
+                '30m': 1800000, '1h': 3600000, '2h': 7200000, 
+                '4h': 14400000, '1d': 86400000
+            }
+            ms_per_bar = interval_ms.get(hl_interval, 900000)
+            start_time = now - (bars * ms_per_bar)
+            
+            # Request candle data
+            data = {
+                'type': 'candleSnapshot',
+                'req': {
+                    'coin': symbol,
+                    'interval': hl_interval,
+                    'startTime': start_time,
+                    'endTime': now
+                }
+            }
+            
+            response = requests.post(url, headers=headers, json=data, timeout=30)
+            response.raise_for_status()
+            result = response.json()
+            
+            if not result or len(result) == 0:
+                self.logger.warning(f"⚠️ No candle data returned for {symbol}")
                 return None
             
-            # For initial implementation, return minimal data
-            # In production, you'd fetch full historical OHLCV from Hyperliquid API
-            current_time = datetime.now()
+            # Parse candles into DataFrame
+            candles = []
+            for candle in result:
+                # Hyperliquid candle format: [time, open, high, low, close, volume]
+                candles.append({
+                    'datetime': pd.to_datetime(candle['t'], unit='ms'),
+                    'Open': float(candle['o']),
+                    'High': float(candle['h']),
+                    'Low': float(candle['l']),
+                    'Close': float(candle['c']),
+                    'Volume': float(candle['v'])
+                })
             
-            df = pd.DataFrame({
-                'datetime': [current_time],
-                'Open': [mid_price],
-                'High': [mid_price],
-                'Low': [mid_price],
-                'Close': [mid_price],
-                'Volume': [1000000]  # Placeholder
-            })
+            df = pd.DataFrame(candles)
             df.set_index('datetime', inplace=True)
+            df = df.sort_index()
             
-            self.logger.info(f"📊 Fetched market data for {symbol}: ${mid_price:.2f}")
+            self.logger.info(f"✅ Fetched {len(df)} real candles for {symbol}")
+            self.logger.info(f"   Latest: ${df['Close'].iloc[-1]:.2f} | Volume: {df['Volume'].iloc[-1]:,.0f}")
+            
             return df
             
         except Exception as e:
-            self.logger.error(f"Error fetching market data for {symbol}: {e}")
+            self.logger.error(f"❌ Error fetching candle data for {symbol}: {e}")
+            self.logger.error(traceback.format_exc())
+            
+            # Fallback: try to get at least current price
+            try:
+                ask, bid = self.client.get_ask_bid(symbol)
+                mid_price = (ask + bid) / 2
+                
+                if mid_price > 0:
+                    self.logger.warning(f"⚠️ Using fallback: single price point ${mid_price:.2f}")
+                    df = pd.DataFrame({
+                        'datetime': [datetime.now()],
+                        'Open': [mid_price],
+                        'High': [mid_price],
+                        'Low': [mid_price],
+                        'Close': [mid_price],
+                        'Volume': [1000000]
+                    })
+                    df.set_index('datetime', inplace=True)
+                    return df
+            except:
+                pass
+            
             return None
     
     def _execute_strategy_code(self, strategy_code: str, market_data: pd.DataFrame, 
                                best_config: Dict) -> Optional[Dict]:
         """
-        Execute strategy code to generate trading signal
+        Execute REAL strategy code by loading and running the Strategy class
         
-        This adapts the backtesting.py Strategy class to work in real-time
+        This dynamically imports the strategy, initializes indicators, and generates signals
         """
         try:
-            # For real-time trading, we need to:
-            # 1. Extract the strategy logic from the backtesting.py Strategy class
-            # 2. Run it on current market data
-            # 3. Generate BUY/SELL/HOLD signal
-            
-            # For now, we'll use a simplified signal generation
-            # based on the strategy parameters and current price
-            
-            current_price = market_data['Close'].iloc[-1]
+            self.logger.info(f"🤖 Executing strategy code with {len(market_data)} candles...")
             
             # Check if we already have a position for this symbol
             symbol = best_config.get('asset', 'BTC')
             
             with positions_lock:
                 has_position = symbol in active_positions
+                current_position_size = active_positions[symbol]['size'] if has_position else 0
             
-            # Simple signal logic based on strategy type
-            # In production, this would actually execute the strategy class's next() method
+            # Create a temporary module to execute the strategy
+            import tempfile
+            import importlib.util
             
-            if 'vwap' in strategy_code.lower() or 'mean reversion' in strategy_code.lower():
-                # Mean reversion strategy - trade on oversold/overbought
-                # This is simplified - real version would calculate VWAP, bands, etc.
+            # Write strategy code to temporary file
+            with tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False) as f:
+                f.write(strategy_code)
+                temp_file = f.name
+            
+            try:
+                # Load the strategy module
+                spec = importlib.util.spec_from_file_location("strategy_module", temp_file)
+                strategy_module = importlib.util.module_from_spec(spec)
+                spec.loader.exec_module(strategy_module)
                 
-                if not has_position:
-                    # Random entry for testing (in production, calculate real signals)
-                    import random
-                    if random.random() < 0.1:  # 10% chance to enter
-                        return {
-                            'action': 'BUY',
-                            'size_usd': TradePexConfig.MAX_POSITION_SIZE * 0.5,  # Start with 50% of max
-                            'reason': f'VWAP Mean Reversion entry at ${current_price:.2f}'
-                        }
-            
-            # No signal - HOLD
-            return {'action': 'HOLD'}
+                # Find the Strategy class in the module
+                strategy_class = None
+                for name in dir(strategy_module):
+                    obj = getattr(strategy_module, name)
+                    if isinstance(obj, type) and name.endswith('Strategy') and name != 'Strategy':
+                        strategy_class = obj
+                        break
+                
+                if not strategy_class:
+                    self.logger.error("❌ No Strategy class found in strategy code")
+                    return {'action': 'HOLD'}
+                
+                self.logger.info(f"✅ Loaded strategy class: {strategy_class.__name__}")
+                
+                # Initialize the strategy with market data
+                # We need to simulate the backtesting.py environment
+                strategy_instance = strategy_class()
+                
+                # Set up data attribute (backtesting.py pattern)
+                class DataWrapper:
+                    def __init__(self, df):
+                        self.Close = df['Close']
+                        self.Open = df['Open']
+                        self.High = df['High']
+                        self.Low = df['Low']
+                        self.Volume = df['Volume']
+                        self.df = df
+                
+                strategy_instance.data = DataWrapper(market_data)
+                strategy_instance.equity = TradePexConfig.TOTAL_CAPITAL_USD
+                
+                # Create indicator wrapper function (backtesting.py's I() function)
+                def indicator_wrapper(func, name=''):
+                    """Wrapper for strategy indicators"""
+                    try:
+                        result = func()
+                        if hasattr(result, 'values'):
+                            return result
+                        return result
+                    except Exception as e:
+                        self.logger.warning(f"⚠️ Indicator calculation error: {e}")
+                        return market_data['Close']  # Fallback
+                
+                strategy_instance.I = indicator_wrapper
+                
+                # Mock position object
+                class Position:
+                    def __init__(self):
+                        self.is_long = has_position
+                        self.is_short = False
+                        self.size = current_position_size
+                        self.pl = 0
+                    
+                    def close(self):
+                        pass
+                
+                strategy_instance.position = Position() if has_position else None
+                
+                # Mock buy/sell functions
+                buy_signal = {'triggered': False, 'size': 0, 'sl': 0, 'tp': 0}
+                sell_signal = {'triggered': False, 'size': 0, 'sl': 0, 'tp': 0}
+                
+                def buy(size=None, sl=None, tp=None):
+                    buy_signal['triggered'] = True
+                    buy_signal['size'] = size
+                    buy_signal['sl'] = sl
+                    buy_signal['tp'] = tp
+                
+                def sell(size=None, sl=None, tp=None):
+                    sell_signal['triggered'] = True
+                    sell_signal['size'] = size
+                    sell_signal['sl'] = sl
+                    sell_signal['tp'] = tp
+                
+                strategy_instance.buy = buy
+                strategy_instance.sell = sell
+                
+                # Initialize strategy (calls init() method)
+                self.logger.info("🔧 Initializing strategy indicators...")
+                strategy_instance.init()
+                
+                # Run next() on the latest data to get signal
+                self.logger.info("📊 Generating trading signal from strategy...")
+                strategy_instance.next()
+                
+                # Analyze signals
+                current_price = market_data['Close'].iloc[-1]
+                
+                if buy_signal['triggered'] and not has_position:
+                    # Calculate position size
+                    size_usd = TradePexConfig.MAX_POSITION_SIZE * 0.75  # 75% of max
+                    
+                    self.logger.info(f"✅ BUY signal generated!")
+                    self.logger.info(f"   Price: ${current_price:.2f}")
+                    self.logger.info(f"   Size: ${size_usd:.2f}")
+                    
+                    return {
+                        'action': 'BUY',
+                        'size_usd': size_usd,
+                        'reason': f'{strategy_class.__name__} BUY signal at ${current_price:.2f}'
+                    }
+                
+                elif sell_signal['triggered'] and has_position:
+                    self.logger.info(f"✅ SELL signal generated!")
+                    self.logger.info(f"   Price: ${current_price:.2f}")
+                    
+                    return {
+                        'action': 'SELL',
+                        'size_usd': current_position_size,
+                        'reason': f'{strategy_class.__name__} SELL signal at ${current_price:.2f}'
+                    }
+                
+                # Check if position should be closed (strategy called position.close())
+                elif has_position and not strategy_instance.position:
+                    self.logger.info(f"✅ CLOSE signal generated by strategy!")
+                    
+                    return {
+                        'action': 'SELL',
+                        'size_usd': current_position_size,
+                        'reason': f'{strategy_class.__name__} exit signal at ${current_price:.2f}'
+                    }
+                
+                # No signal - HOLD
+                self.logger.info("📊 No trading signal (HOLD)")
+                return {'action': 'HOLD'}
+                
+            finally:
+                # Clean up temporary file
+                try:
+                    os.unlink(temp_file)
+                except:
+                    pass
             
         except Exception as e:
-            self.logger.error(f"Error executing strategy code: {e}")
+            self.logger.error(f"❌ Error executing strategy code: {e}")
             self.logger.error(traceback.format_exc())
             return {'action': 'HOLD'}
     
