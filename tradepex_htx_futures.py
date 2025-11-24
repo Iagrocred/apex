@@ -26,10 +26,11 @@ import pandas as pd
 class HTXFuturesClient:
     """HTX Futures API Client with HMAC authentication"""
     
-    def __init__(self, api_key, secret_key):
+    def __init__(self, api_key, secret_key, use_usdt_margined=True):
         self.api_key = api_key
         self.secret_key = secret_key
         self.base_url = "https://api.hbdm.com"  # HTX Futures endpoint
+        self.use_usdt_margined = use_usdt_margined  # True = USDT-margined, False = Coin-margined
         self.account_id = None
         
     def _sign_request(self, method, path, params=None):
@@ -65,7 +66,13 @@ class HTXFuturesClient:
     def get_balance(self):
         """Get futures account balance"""
         try:
-            path = "/api/v1/contract_account_info"
+            if self.use_usdt_margined:
+                # USDT-margined futures (perpetual swaps)
+                path = "/linear-swap-api/v1/swap_account_info"
+            else:
+                # Coin-margined futures (quarterly/weekly contracts)
+                path = "/api/v1/contract_account_info"
+            
             params = self._sign_request("POST", path)
             
             url = f"{self.base_url}{path}"
@@ -75,8 +82,14 @@ class HTXFuturesClient:
             if data.get('status') == 'ok':
                 balance_info = {}
                 for item in data.get('data', []):
-                    symbol = item.get('symbol', 'UNKNOWN')
-                    margin_balance = float(item.get('margin_balance', 0))
+                    if self.use_usdt_margined:
+                        # USDT-margined: contract_code is like "BTC-USDT"
+                        symbol = item.get('contract_code', 'UNKNOWN').split('-')[0]
+                        margin_balance = float(item.get('margin_balance', 0))
+                    else:
+                        # Coin-margined: symbol is like "BTC"
+                        symbol = item.get('symbol', 'UNKNOWN')
+                        margin_balance = float(item.get('margin_balance', 0))
                     balance_info[symbol] = margin_balance
                 return balance_info
             else:
@@ -86,12 +99,18 @@ class HTXFuturesClient:
             print(f"❌ Balance fetch failed: {e}")
             return {}
     
-    def get_klines(self, symbol="BTC_CQ", period="15min", size=200):
+    def get_klines(self, symbol="BTC-USDT", period="15min", size=200):
         """Get futures klines/candles (public endpoint, no auth needed)"""
         try:
-            url = f"{self.base_url}/market/history/kline"
+            if self.use_usdt_margined:
+                # USDT-margined perpetual swaps
+                url = f"{self.base_url}/linear-swap-ex/market/history/kline"
+            else:
+                # Coin-margined futures
+                url = f"{self.base_url}/market/history/kline"
+            
             params = {
-                'symbol': symbol,
+                'contract_code': symbol,  # For USDT-margined
                 'period': period,
                 'size': size
             }
@@ -120,11 +139,15 @@ class HTXFuturesClient:
             print(f"❌ Klines fetch failed: {e}")
             return []
     
-    def get_market_price(self, symbol="BTC_CQ"):
+    def get_market_price(self, symbol="BTC-USDT"):
         """Get current market price"""
         try:
-            url = f"{self.base_url}/market/detail/merged"
-            params = {'symbol': symbol}
+            if self.use_usdt_margined:
+                url = f"{self.base_url}/linear-swap-ex/market/detail/merged"
+                params = {'contract_code': symbol}
+            else:
+                url = f"{self.base_url}/market/detail/merged"
+                params = {'symbol': symbol}
             
             response = requests.get(url, params=params, timeout=10)
             data = response.json()
@@ -149,21 +172,34 @@ class HTXFuturesClient:
         price: limit price (None for market order)
         """
         try:
-            path = "/api/v1/contract_order"
-            
-            # Build order params
-            order_params = {
-                'symbol': symbol.split('_')[0],  # BTC_CQ -> BTC
-                'contract_type': 'quarter',  # or 'this_week', 'next_week', 'next_quarter'
-                'contract_code': symbol,
-                'client_order_id': int(time.time() * 1000),
-                'price': price if price else '',
-                'volume': volume,
-                'direction': direction,
-                'offset': 'open',
-                'lever_rate': 5,  # 5x leverage
-                'order_price_type': 'limit' if price else 'optimal_20'  # optimal_20 = market order
-            }
+            if self.use_usdt_margined:
+                # USDT-margined perpetual swap order
+                path = "/linear-swap-api/v1/swap_order"
+                order_params = {
+                    'contract_code': symbol,  # BTC-USDT
+                    'client_order_id': int(time.time() * 1000),
+                    'price': price if price else '',
+                    'volume': volume,
+                    'direction': direction,
+                    'offset': 'open',
+                    'lever_rate': 5,  # 5x leverage
+                    'order_price_type': 'limit' if price else 'optimal_20'  # optimal_20 = market order
+                }
+            else:
+                # Coin-margined futures order
+                path = "/api/v1/contract_order"
+                order_params = {
+                    'symbol': symbol.split('_')[0],  # BTC_CQ -> BTC
+                    'contract_type': 'quarter',
+                    'contract_code': symbol,
+                    'client_order_id': int(time.time() * 1000),
+                    'price': price if price else '',
+                    'volume': volume,
+                    'direction': direction,
+                    'offset': 'open',
+                    'lever_rate': 5,  # 5x leverage
+                    'order_price_type': 'limit' if price else 'optimal_20'
+                }
             
             # Sign request
             signed_params = self._sign_request("POST", path, order_params)
@@ -297,8 +333,8 @@ def main():
     print(f"✅ HTX API Key found: {api_key[:10]}...")
     print()
     
-    # Initialize HTX client
-    client = HTXFuturesClient(api_key, secret_key)
+    # Initialize HTX client (use USDT-margined perpetual swaps)
+    client = HTXFuturesClient(api_key, secret_key, use_usdt_margined=True)
     
     # Get account balance
     print("💰 Fetching HTX Futures balance...")
@@ -349,7 +385,7 @@ def main():
     print()
     
     # Trading parameters
-    symbol = "BTC_CQ"  # HTX Futures symbol (CQ = Current Quarter)
+    symbol = "BTC-USDT"  # HTX USDT-margined perpetual swap
     timeframe = metadata.get('timeframe', '15min') if metadata else '15min'
     
     print("=" * 80)
