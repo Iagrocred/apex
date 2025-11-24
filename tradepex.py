@@ -66,6 +66,7 @@ from dotenv import load_dotenv
 import requests
 import eth_account
 from eth_account.signers.local import LocalAccount
+from eth_account.messages import encode_structured_data
 
 # LLM APIs
 try:
@@ -491,7 +492,7 @@ class HyperliquidClient:
     def market_order(self, symbol: str, is_buy: bool, size: float, 
                     reduce_only: bool = False) -> Dict:
         """
-        Place a market order
+        Place a market order on Hyperliquid
         
         Args:
             symbol: Trading symbol (e.g., "BTC")
@@ -522,24 +523,101 @@ class HyperliquidClient:
             if contracts == 0:
                 return {'success': False, 'error': 'Position size too small'}
             
-            self.logger.info(f"{'BUYING' if is_buy else 'SELLING'} {contracts} {symbol} @ ${price:.2f}")
+            self.logger.info(f"🔥 {'BUYING' if is_buy else 'SELLING'} {contracts} {symbol} @ ${price:.2f} (${size:.2f})")
             
-            # In a real implementation, this would submit to Hyperliquid exchange
-            # For now, we log the order
-            order_result = {
-                'success': True,
-                'symbol': symbol,
-                'side': 'buy' if is_buy else 'sell',
-                'size': contracts,
-                'price': price,
-                'usd_value': size,
-                'timestamp': datetime.now().isoformat()
+            # Build order for Hyperliquid
+            timestamp = int(time.time() * 1000)
+            
+            # Use limit price with slippage protection (acts like market order with IOC)
+            limit_price = price * 1.02 if is_buy else price * 0.98  # 2% slippage
+            
+            order = {
+                "asset": symbol,
+                "isBuy": is_buy,
+                "limitPx": str(limit_price),
+                "sz": str(contracts),
+                "reduceOnly": reduce_only,
+                "orderType": {"limit": {"tif": "Ioc"}}  # Immediate-or-cancel = market execution
             }
             
-            return order_result
+            # Create action
+            action = {
+                "type": "order",
+                "orders": [order],
+                "grouping": "na"
+            }
+            
+            # Sign the action using EIP-712
+            connection_id = json.dumps(action)
+            
+            signature_data = {
+                "domain": {
+                    "name": "Exchange",
+                    "version": "1",
+                    "chainId": 1337,
+                    "verifyingContract": "0x0000000000000000000000000000000000000000"
+                },
+                "types": {
+                    "Agent": [
+                        {"name": "source", "type": "string"},
+                        {"name": "connectionId", "type": "bytes32"}
+                    ]
+                },
+                "primaryType": "Agent",
+                "message": {
+                    "source": "a",
+                    "connectionId": connection_id
+                }
+            }
+            
+            structured_data = encode_structured_data(signature_data)
+            signed_message = self.account.sign_message(structured_data)
+            
+            # Build request payload
+            payload = {
+                "action": action,
+                "nonce": timestamp,
+                "signature": {
+                    "r": hex(signed_message.r),
+                    "s": hex(signed_message.s),
+                    "v": signed_message.v
+                },
+                "vaultAddress": None
+            }
+            
+            # Submit order to Hyperliquid
+            response = requests.post(
+                self.exchange_url,
+                headers={"Content-Type": "application/json"},
+                json=payload,
+                timeout=15
+            )
+            
+            result = response.json()
+            
+            # Check result
+            if "status" in result and result["status"] == "ok":
+                self.logger.info(f"✅ Order executed successfully!")
+                self.logger.info(f"   Response: {result}")
+                
+                order_result = {
+                    'success': True,
+                    'symbol': symbol,
+                    'side': 'buy' if is_buy else 'sell',
+                    'size': contracts,
+                    'price': price,
+                    'usd_value': size,
+                    'timestamp': datetime.now().isoformat(),
+                    'hyperliquid_response': result
+                }
+                
+                return order_result
+            else:
+                self.logger.error(f"❌ Order failed: {result}")
+                return {'success': False, 'error': result.get('error', 'Unknown error'), 'response': result}
             
         except Exception as e:
-            self.logger.error(f"Error placing market order: {e}")
+            self.logger.error(f"❌ Error placing market order: {e}")
             self.logger.error(traceback.format_exc())
             return {'success': False, 'error': str(e)}
     

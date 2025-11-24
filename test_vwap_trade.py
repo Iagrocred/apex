@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-🧪 MINIMAL VWAP STRATEGY TEST - Verify Trading Execution
-Tests VWAP Mean Reversion strategy with minimal code to verify trading works
+🧪 REAL TRADING TEST - Execute Actual Buy/Sell on Hyperliquid
+Tests real order execution with minimal risk ($10 position)
 """
 
 import os
@@ -15,15 +15,16 @@ from datetime import datetime
 from dotenv import load_dotenv
 import eth_account
 from eth_account.signers.local import LocalAccount
+from eth_account.messages import encode_defunct
 
 load_dotenv()
 
 # =========================================================================================
-# HYPERLIQUID CLIENT (MINIMAL)
+# HYPERLIQUID CLIENT WITH ORDER EXECUTION
 # =========================================================================================
 
 class HyperliquidClient:
-    """Minimal Hyperliquid client for testing"""
+    """Full Hyperliquid client with trading capabilities"""
     
     def __init__(self, account: LocalAccount):
         self.account = account
@@ -32,19 +33,21 @@ class HyperliquidClient:
         self.exchange_url = f"{self.base_url}/exchange"
         print(f"✅ Connected to Hyperliquid")
         print(f"   Account: {account.address[:6]}...{account.address[-4:]}")
+        print(f"   Full Address: {account.address}")
     
-    def get_account_value(self) -> float:
-        """Get account balance"""
+    def get_account_value(self, address: str = None) -> float:
+        """Get account balance - can check any address"""
         try:
+            check_address = address or self.account.address
             response = requests.post(
                 self.info_url,
                 headers={"Content-Type": "application/json"},
-                json={"type": "clearinghouseState", "user": self.account.address},
+                json={"type": "clearinghouseState", "user": check_address},
                 timeout=10
             )
             data = response.json()
             balance = float(data.get('marginSummary', {}).get('accountValue', 0))
-            print(f"💰 Account Balance: ${balance:.2f}")
+            print(f"💰 Account Balance ({check_address[:6]}...{check_address[-4:]}): ${balance:.2f}")
             return balance
         except Exception as e:
             print(f"❌ Error fetching balance: {e}")
@@ -57,8 +60,12 @@ class HyperliquidClient:
             interval_map = {'15m': '15m', '1H': '1h', '4H': '4h', '1D': '1d'}
             hl_interval = interval_map.get(interval, interval.lower())
             
+            # Calculate time range based on interval
+            interval_minutes = {'15m': 15, '1h': 60, '4h': 240, '1d': 1440}
+            minutes = interval_minutes.get(hl_interval, 15)
+            
             end_time = int(time.time() * 1000)
-            start_time = end_time - (num_bars * 15 * 60 * 1000)  # 15m bars
+            start_time = end_time - (num_bars * minutes * 60 * 1000)
             
             response = requests.post(
                 self.info_url,
@@ -76,18 +83,37 @@ class HyperliquidClient:
             )
             
             candles = response.json()
-            if not candles:
+            if not candles or len(candles) == 0:
                 print(f"⚠️  No candle data for {symbol}")
                 return pd.DataFrame()
             
-            df = pd.DataFrame(candles, columns=['time', 'open', 'high', 'low', 'close', 'volume'])
-            df = df.astype({'open': float, 'high': float, 'low': float, 'close': float, 'volume': float})
-            print(f"✅ Fetched {len(df)} candles for {symbol} @ {interval}")
-            print(f"   Latest: ${df['close'].iloc[-1]:.2f} | Volume: {df['volume'].iloc[-1]:,.0f}")
-            return df
+            # Create DataFrame with proper column names
+            df = pd.DataFrame(candles)
+            
+            # Hyperliquid returns: [timestamp, open, high, low, close, volume]
+            if len(df.columns) >= 6:
+                df.columns = ['time', 'open', 'high', 'low', 'close', 'volume']
+                df = df[['time', 'open', 'high', 'low', 'close', 'volume']]
+                df = df.astype({
+                    'time': int,
+                    'open': float, 
+                    'high': float, 
+                    'low': float, 
+                    'close': float, 
+                    'volume': float
+                })
+                print(f"✅ Fetched {len(df)} candles for {symbol} @ {interval}")
+                if len(df) > 0:
+                    print(f"   Latest: ${df['close'].iloc[-1]:.2f} | Volume: {df['volume'].iloc[-1]:,.0f}")
+                return df
+            else:
+                print(f"⚠️  Unexpected candle format for {symbol}")
+                return pd.DataFrame()
             
         except Exception as e:
             print(f"❌ Error fetching candles: {e}")
+            import traceback
+            traceback.print_exc()
             return pd.DataFrame()
     
     def get_mid_price(self, symbol: str) -> float:
@@ -104,6 +130,64 @@ class HyperliquidClient:
             return price
         except:
             return 0.0
+    
+    def place_order(self, symbol: str, is_buy: bool, size: float, price: float = None, 
+                   reduce_only: bool = False) -> dict:
+        """Place a limit or market order"""
+        try:
+            # Build order request
+            order = {
+                "coin": symbol,
+                "is_buy": is_buy,
+                "sz": size,
+                "limit_px": price if price else self.get_mid_price(symbol),
+                "order_type": {"limit": {"tif": "Ioc"}} if price else {"market": {}},
+                "reduce_only": reduce_only
+            }
+            
+            # Sign the order
+            timestamp = int(time.time() * 1000)
+            message = json.dumps({
+                "action": {"type": "order", "orders": [order]},
+                "nonce": timestamp,
+                "signature": None
+            })
+            
+            # Create signature
+            message_hash = encode_defunct(text=message)
+            signed = self.account.sign_message(message_hash)
+            
+            # Send order
+            payload = {
+                "action": {
+                    "type": "order",
+                    "orders": [order],
+                    "grouping": "na"
+                },
+                "nonce": timestamp,
+                "signature": {
+                    "r": hex(signed.r),
+                    "s": hex(signed.s),
+                    "v": signed.v
+                },
+                "vaultAddress": None
+            }
+            
+            response = requests.post(
+                self.exchange_url,
+                headers={"Content-Type": "application/json"},
+                json=payload,
+                timeout=10
+            )
+            
+            result = response.json()
+            return result
+            
+        except Exception as e:
+            print(f"❌ Error placing order: {e}")
+            import traceback
+            traceback.print_exc()
+            return {"error": str(e)}
 
 # =========================================================================================
 # VWAP STRATEGY LOGIC (SIMPLIFIED)
