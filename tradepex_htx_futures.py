@@ -15,6 +15,7 @@ import requests
 import importlib.util
 from datetime import datetime
 from urllib.parse import urlencode
+from pathlib import Path
 import numpy as np
 import pandas as pd
 
@@ -319,11 +320,13 @@ def main():
     print(f"📂 Loading strategies from: {strategy_dir}")
     print(f"   (Current working directory: {Path.cwd()})")
     
-    if not os.path.exists(strategy_dir):
+    if not strategy_dir.exists():
         print(f"❌ Directory not found: {strategy_dir}")
+        print(f"   Make sure to run this script from: /root/KEEP_SAFE/v1/APEX")
+        print(f"   (The same directory where you run tradepex.py)")
         return
     
-    strategy_files = [f for f in os.listdir(strategy_dir) if f.endswith('.py') and not f.startswith('__')]
+    strategy_files = [f for f in os.listdir(str(strategy_dir)) if f.endswith('.py') and not f.startswith('__')]
     
     if not strategy_files:
         print("❌ No strategy files found!")
@@ -331,7 +334,7 @@ def main():
     
     # Use first strategy found
     strategy_file = strategy_files[0]
-    strategy_path = os.path.join(strategy_dir, strategy_file)
+    strategy_path = str(strategy_dir / strategy_file)
     meta_path = strategy_path.replace('.py', '_meta.json')
     
     print(f"✅ Selected strategy: {strategy_file}")
