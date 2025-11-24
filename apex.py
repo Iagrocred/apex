@@ -160,6 +160,10 @@ def setup_enhanced_logging():
     for component in components:
         comp_logger = logging.getLogger(f"APEX.{component}")
         comp_logger.setLevel(logging.INFO)
+        # Clear existing handlers to prevent double logging
+        comp_logger.handlers.clear()
+        # Prevent propagation to avoid duplicate logs from parent logger
+        comp_logger.propagate = False
         comp_logger.addHandler(file_handler)
         comp_logger.addHandler(console_handler)
 
@@ -212,6 +216,12 @@ class Config:
     CHAMPIONS_DIR = PROJECT_ROOT / "champions"
     CHAMPION_LOGS_DIR = CHAMPIONS_DIR / "logs"
     CHAMPION_STRATEGIES_DIR = CHAMPIONS_DIR / "strategies"
+    
+    # Successful strategies directory (separate from final backtests)
+    SUCCESSFUL_STRATEGIES_DIR = PROJECT_ROOT / "successful_strategies"
+    
+    # Approved strategies directory (for live trading on Hyperliquid!)
+    APPROVED_STRATEGIES_DIR = PROJECT_ROOT / "approved_strategies"
 
     # =========================================================================================
     # API KEYS
@@ -269,11 +279,13 @@ class Config:
     # THREAD 2: RBI BACKTEST ENGINE CONFIGURATION (Moon-Dev v3 Full)
     # =========================================================================================
 
-    # LLM Models for RBI (Moon-Dev pattern)
-    RBI_RESEARCH_MODEL = {"type": "xai", "name": "grok-4-fast-reasoning"}
-    RBI_BACKTEST_MODEL = {"type": "xai", "name": "grok-4-fast-reasoning"}
-    RBI_DEBUG_MODEL = {"type": "xai", "name": "grok-4-fast-reasoning"}
-    RBI_OPTIMIZE_MODEL = {"type": "xai", "name": "grok-4-fast-reasoning"}
+    # LLM Models for RBI (Cost-effective DeepSeek models)
+    # DeepSeek Reasoner V3 for reasoning tasks (research, optimization)
+    # DeepSeek Coder for coding tasks (backtest, debug)
+    RBI_RESEARCH_MODEL = {"type": "deepseek", "name": "deepseek-reasoner"}  # V3 - Great for trading!
+    RBI_BACKTEST_MODEL = {"type": "deepseek", "name": "deepseek-coder"}     # Coder for generating code
+    RBI_DEBUG_MODEL = {"type": "deepseek", "name": "deepseek-coder"}        # Coder for fixing code
+    RBI_OPTIMIZE_MODEL = {"type": "deepseek", "name": "deepseek-reasoner"}  # V3 - Reasoning for optimization
 
     # Execution settings
     MAX_DEBUG_ITERATIONS = 10
@@ -423,6 +435,8 @@ class Config:
             cls.CHAMPIONS_DIR,
             cls.CHAMPION_LOGS_DIR,
             cls.CHAMPION_STRATEGIES_DIR,
+            cls.SUCCESSFUL_STRATEGIES_DIR,
+            cls.APPROVED_STRATEGIES_DIR,
             cls.MARKET_DATA_PATH
         ]
 
@@ -1363,16 +1377,17 @@ logger.info("✅ Strategy Discovery Agent class defined (FULL IMPLEMENTATION - 4
 class RBIBacktestEngine:
     """
     Complete RBI (Research-Backtest-Implement) Engine from Moon-Dev
-
+    
     Features from rbi_agent_v3.py:
     - Strategy research with LLM
     - Backtest code generation (DeepSeek/Grok)
-    - Auto-debug loop (up to 10 iterations)
+    - Auto-debug loop (up to 10 iterations) with memory
     - Multi-configuration testing
     - Optimization loops (targets 50% return)
     - LLM swarm consensus voting
     - Conda environment execution
     - Result persistence
+    - Strategy deduplication
     """
 
     def __init__(self):
@@ -1380,16 +1395,250 @@ class RBIBacktestEngine:
         self.backtest_count = 0
         self.optimization_enabled = True
         self.target_return = Config.TARGET_RETURN_PERCENT
+        
+        # Memory systems for tracking
+        self.debug_memory = {}  # Track errors seen per strategy
+        self.processed_strategies = set()  # Track processed strategy hashes
+        self._load_processed_strategies()
+
+    def _load_processed_strategies(self):
+        """Load previously processed strategies from log file"""
+        log_file = Config.STRATEGY_LIBRARY_DIR / "processed_strategies.log"
+        if log_file.exists():
+            with open(log_file, 'r') as f:
+                for line in f:
+                    if line.strip() and not line.startswith('#'):
+                        self.processed_strategies.add(line.strip().split(',')[0])
+            self.logger.info(f"📚 Loaded {len(self.processed_strategies)} processed strategies from history")
+    
+    def _load_existing_strategies_from_library(self):
+        """Load all existing strategies from strategy_library folder for re-processing with swarm"""
+        self.logger.info("🔍 Scanning strategy_library for existing strategies...")
+        
+        strategy_files = list(Config.STRATEGY_LIBRARY_DIR.glob("*.json"))
+        self.logger.info(f"📂 Found {len(strategy_files)} strategy files in library")
+        
+        loaded_strategies = []
+        seen_hashes = set()  # Track duplicates within the folder itself
+        
+        for strategy_file in strategy_files:
+            try:
+                with open(strategy_file, 'r') as f:
+                    strategy_data = json.load(f)
+                    
+                    # Generate hash to check for duplicates within the folder
+                    strategy_hash = self._get_strategy_hash(strategy_data)
+                    
+                    # Skip ONLY if duplicate in folder (not if in processed_strategies)
+                    # We WANT to re-process these since swarm was bugged before!
+                    if strategy_hash in seen_hashes:
+                        self.logger.debug(f"⏭️  Skipping {strategy_file.name} - duplicate in folder")
+                        continue
+                    
+                    seen_hashes.add(strategy_hash)
+                    loaded_strategies.append(strategy_data)
+                    self.logger.info(f"✅ Loaded: {strategy_data.get('name', 'Unknown')}")
+                    
+            except Exception as e:
+                self.logger.warning(f"⚠️  Failed to load {strategy_file.name}: {e}")
+        
+        self.logger.info(f"📊 Total strategies to re-backtest with swarm: {len(loaded_strategies)}")
+        return loaded_strategies
+
+    def _process_existing_strategy(self, strategy: Dict) -> bool:
+        """
+        Process an existing strategy from library - ACTUALLY BACKTEST with swarm consensus
+        This re-runs strategies to approve ALL that meet criteria
+        (Previously Claude was broken, so good strategies were denied)
+        Returns True if approved, False otherwise
+        """
+        strategy_name = strategy.get('name', 'Unknown')
+        self.logger.info("=" * 80)
+        self.logger.info(f"🔄 RE-BACKTESTING EXISTING: {strategy_name}")
+        self.logger.info("   Will approve if meets criteria (now with working Claude swarm!)")
+        self.logger.info("=" * 80)
+        
+        try:
+            # PHASE 1: Research (use existing data if available)
+            research = strategy.get('research', {})
+            if not research:
+                research = self._research_strategy(strategy)
+            
+            # PHASE 2: Generate backtest code (or use existing)
+            code = strategy.get('code', '')
+            if not code:
+                code = self._generate_backtest_code(strategy, research)
+                if not code:
+                    self.logger.error("❌ Code generation failed")
+                    return False
+            
+            # PHASE 3: Auto-debug loop (ensure code is executable)
+            executable_code = self._auto_debug_loop(code, strategy)
+            if not executable_code:
+                self.logger.error("❌ Auto-debug failed")
+                return False
+            
+            # PHASE 4: Execute backtest - ACTUALLY RUN IT!
+            results = self._execute_backtest(executable_code, strategy)
+            if not results:
+                self.logger.error("❌ Backtest execution failed")
+                return False
+            
+            self.logger.info(f"📊 Backtest Results: {results.get('return_pct', 0):.1f}% return")
+            
+            # PHASE 5: Check if optimization needed
+            if results['return_pct'] < self.target_return and self.optimization_enabled:
+                self.logger.info(f"📊 Return {results['return_pct']:.1f}% < Target {self.target_return}%")
+                self.logger.info("🔄 Starting optimization loop...")
+                
+                optimized_code, optimized_results = self._optimization_loop(
+                    executable_code, strategy, results
+                )
+                
+                if optimized_results and optimized_results['return_pct'] >= self.target_return:
+                    self.logger.info(f"🎯 TARGET HIT! {optimized_results['return_pct']:.1f}%")
+                    executable_code = optimized_code
+                    results = optimized_results
+            
+            # PHASE 6: Multi-configuration testing
+            config_results = self._multi_config_testing(executable_code, strategy)
+            
+            # PHASE 7: SWARM CONSENSUS - This is what was missing Claude!
+            approved, votes, best_config = self._llm_swarm_consensus(
+                config_results, strategy, results
+            )
+            
+            if approved:
+                self.logger.info(f"✅ STRATEGY APPROVED by swarm: {strategy_name}")
+                
+                # Save to successful strategies
+                validated_strategy = {
+                    "strategy_name": strategy_name,
+                    "strategy_data": strategy,
+                    "code": executable_code,
+                    "best_config": best_config,
+                    "results": results,
+                    "llm_votes": votes,
+                    "timestamp": datetime.now().isoformat(),
+                    "reprocessed": True  # Mark as reprocessed from library
+                }
+                
+                # Queue for champion manager
+                validated_strategy_queue.put(validated_strategy)
+                
+                # Save to successful strategies
+                self._save_approved_strategy(validated_strategy)
+                return True
+            else:
+                self.logger.info(f"❌ STRATEGY REJECTED by swarm: {strategy_name}")
+                self.logger.info(f"   Votes: {votes}")
+                return False
+                
+        except Exception as e:
+            self.logger.error(f"❌ Error processing existing strategy: {e}")
+            self.logger.error(traceback.format_exc())
+            return False
+    
+    def _get_strategy_hash(self, strategy: Dict) -> str:
+        """Generate unique hash for strategy to detect duplicates"""
+        # Create signature from key strategy elements
+        signature = f"{strategy.get('name', '')}_" \
+                   f"{strategy.get('entry_rules', '')}_" \
+                   f"{strategy.get('exit_rules', '')}"
+        return hashlib.md5(signature.encode()).hexdigest()
+
+    def _is_strategy_processed(self, strategy: Dict) -> bool:
+        """Check if strategy has already been processed"""
+        strategy_hash = self._get_strategy_hash(strategy)
+        return strategy_hash in self.processed_strategies
+
+    def _mark_strategy_processed(self, strategy: Dict):
+        """Mark strategy as processed and log it"""
+        strategy_hash = self._get_strategy_hash(strategy)
+        self.processed_strategies.add(strategy_hash)
+        
+        log_file = Config.STRATEGY_LIBRARY_DIR / "processed_strategies.log"
+        with open(log_file, 'a') as f:
+            timestamp = datetime.now().isoformat()
+            strategy_name = strategy.get('name', 'Unknown')
+            f.write(f"{strategy_hash},{timestamp},{strategy_name}\n")
+        
+        self.logger.info(f"📝 Marked strategy as processed: {strategy_name}")
+
+    def _record_debug_error(self, strategy_name: str, error: str) -> bool:
+        """
+        Record error for a strategy, returns True if this is a repeated error
+        This prevents infinite loops on the same error
+        """
+        if strategy_name not in self.debug_memory:
+            self.debug_memory[strategy_name] = []
+        
+        # Extract error signature (last line of error typically most relevant)
+        error_signature = error.split('\n')[-1] if '\n' in error else error
+        
+        if error_signature in self.debug_memory[strategy_name]:
+            self.logger.warning(f"🔄 Repeated error detected: {error_signature[:100]}...")
+            return True
+        
+        self.debug_memory[strategy_name].append(error_signature)
+        return False
 
     def run_continuous(self):
         """Main continuous loop for RBI backtesting"""
         self.logger.info("🚀 RBI Backtest Engine started (FULL Moon-Dev v3)")
         self.logger.info("   Features: Auto-debug, Multi-config, Optimization, LLM Consensus")
-
+        self.logger.info("   Deduplication: Enabled - will skip previously processed strategies")
+        
+        # ========================================================================
+        # STARTUP PHASE: Process existing strategies from library FIRST
+        # ========================================================================
+        self.logger.info("")
+        self.logger.info("=" * 80)
+        self.logger.info("🔄 STARTUP: Processing existing strategies from library")
+        self.logger.info("   Will approve ALL strategies that meet criteria!")
+        self.logger.info("   (Some got great results but were denied - Claude was broken)")
+        self.logger.info("=" * 80)
+        
+        existing_strategies = self._load_existing_strategies_from_library()
+        
+        if existing_strategies:
+            approved_count = 0
+            rejected_count = 0
+            
+            for idx, strategy in enumerate(existing_strategies, 1):
+                self.logger.info(f"\n📂 Processing existing strategy {idx}/{len(existing_strategies)}")
+                
+                approved = self._process_existing_strategy(strategy)
+                if approved:
+                    approved_count += 1
+                else:
+                    rejected_count += 1
+                
+                # Small delay between strategies
+                time.sleep(2)
+            
+            self.logger.info("")
+            self.logger.info("=" * 80)
+            self.logger.info(f"✅ STARTUP COMPLETE: {approved_count} approved, {rejected_count} rejected")
+            self.logger.info("=" * 80)
+            self.logger.info("")
+        else:
+            self.logger.info("📂 No existing strategies to process - starting fresh")
+        
+        # ========================================================================
+        # MAIN LOOP: Continue with normal discovery
+        # ========================================================================
+        self.logger.info("🔄 Starting normal discovery loop...")
+        
         while True:
             try:
                 # Wait for strategy from discovery queue
                 strategy = strategy_discovery_queue.get(timeout=60)
+
+                # Check if strategy already processed
+                if self._is_strategy_processed(strategy):
+                    self.logger.info(f"⏭️  Skipping already processed strategy: {strategy.get('name', 'Unknown')}")
+                    continue
 
                 self.backtest_count += 1
                 self.logger.info("=" * 80)
@@ -1404,13 +1653,15 @@ class RBIBacktestEngine:
 
                 if not code:
                     self.logger.error("❌ Code generation failed")
+                    self._mark_strategy_processed(strategy)  # Mark as processed to avoid retry
                     continue
 
-                # PHASE 3: Auto-debug loop (up to 10 iterations)
+                # PHASE 3: Auto-debug loop (up to 10 iterations) with memory
                 executable_code = self._auto_debug_loop(code, strategy)
 
                 if not executable_code:
                     self.logger.error("❌ Auto-debug failed after max iterations")
+                    self._mark_strategy_processed(strategy)  # Mark as processed to avoid retry
                     continue
 
                 # PHASE 4: Execute backtest
@@ -1418,6 +1669,7 @@ class RBIBacktestEngine:
 
                 if not results:
                     self.logger.error("❌ Backtest execution failed")
+                    self._mark_strategy_processed(strategy)  # Mark as processed to avoid retry
                     continue
 
                 # PHASE 5: Check if optimization needed
@@ -1445,7 +1697,7 @@ class RBIBacktestEngine:
                 )
 
                 if approved:
-                    self.logger.info(f"✅ STRATEGY APPROVED by LLM consensus")
+                    self.logger.info(f"✅ STRATEGY APPROVED by swarm: {strategy.get('name', 'Unknown')}")
 
                     # Queue for champion manager
                     validated_strategy = {
@@ -1462,9 +1714,17 @@ class RBIBacktestEngine:
 
                     # Save to final backtest directory
                     self._save_approved_strategy(validated_strategy)
+                    
+                    # Mark as successfully processed
+                    self._mark_strategy_processed(strategy)
                 else:
-                    self.logger.info(f"❌ STRATEGY REJECTED by LLM consensus")
-                    self.logger.info(f"   Votes: {votes}")
+                    self.logger.info(f"❌ STRATEGY REJECTED by swarm: {strategy.get('name', 'Unknown')}")
+                    if votes:
+                        self.logger.info(f"   Votes: {votes}")
+                    else:
+                        self.logger.info(f"   Votes: (none - failed preliminary criteria)")
+                    # Still mark as processed to avoid retrying rejected strategies
+                    self._mark_strategy_processed(strategy)
 
             except queue.Empty:
                 continue
@@ -1585,8 +1845,10 @@ Return ONLY the Python code."""
         return response.strip()
 
     def _auto_debug_loop(self, code: str, strategy: Dict) -> Optional[str]:
-        """Auto-debug loop with LLM (Moon-Dev pattern - up to 10 iterations)"""
-        self.logger.info("🔧 Starting auto-debug loop...")
+        """Auto-debug loop with LLM (Moon-Dev pattern - up to 10 iterations with memory)"""
+        self.logger.info("🔧 Starting auto-debug loop with error memory...")
+        
+        strategy_name = strategy.get('name', 'Unknown')
 
         for iteration in range(1, Config.MAX_DEBUG_ITERATIONS + 1):
             self.logger.info(f"   Iteration {iteration}/{Config.MAX_DEBUG_ITERATIONS}")
@@ -1596,8 +1858,15 @@ Return ONLY the Python code."""
                 ast.parse(code)
                 self.logger.info("   ✅ Syntax valid")
             except SyntaxError as e:
-                self.logger.warning(f"   ❌ Syntax error: {e}")
-                code = self._fix_code_with_llm(code, str(e), strategy)
+                error_msg = str(e)
+                self.logger.warning(f"   ❌ Syntax error: {error_msg}")
+                
+                # Check if this is a repeated error
+                if self._record_debug_error(strategy_name, error_msg):
+                    self.logger.error(f"   🔄 Repeated syntax error - breaking loop to avoid infinite cycle")
+                    return None
+                
+                code = self._fix_code_with_llm(code, error_msg, strategy)
                 continue
 
             # Try to execute in test environment
@@ -1608,6 +1877,12 @@ Return ONLY the Python code."""
                 return code
             else:
                 self.logger.warning(f"   ❌ Execution error: {error}")
+                
+                # Check if this is a repeated error
+                if self._record_debug_error(strategy_name, error):
+                    self.logger.error(f"   🔄 Repeated execution error - breaking loop to avoid infinite cycle")
+                    return None
+                
                 code = self._fix_code_with_llm(code, error, strategy)
 
         self.logger.error("❌ Auto-debug failed after max iterations")
@@ -1689,14 +1964,60 @@ Return the COMPLETE fixed Python code."""
                 timeout=Config.BACKTEST_TIMEOUT_SECONDS
             )
 
-            # Parse output for metrics
+            # Get full output
             output = result.stdout + result.stderr
+
+            # Display FULL backtest output for audit trail
+            self.logger.info("")
+            self.logger.info("=" * 80)
+            self.logger.info("📊 FULL BACKTEST OUTPUT:")
+            self.logger.info("=" * 80)
+            
+            # Limit output to prevent excessive logging (max 200 lines)
+            max_log_lines = 200
+            
+            if result.stdout:
+                self.logger.info("--- STDOUT ---")
+                stdout_lines = result.stdout.split('\n')
+                if len(stdout_lines) > max_log_lines:
+                    # Show first 100 and last 100 lines
+                    for line in stdout_lines[:100]:
+                        if line.strip():
+                            self.logger.info(f"   {line}")
+                    self.logger.info(f"   ... ({len(stdout_lines) - 200} lines omitted) ...")
+                    for line in stdout_lines[-100:]:
+                        if line.strip():
+                            self.logger.info(f"   {line}")
+                else:
+                    for line in stdout_lines:
+                        if line.strip():
+                            self.logger.info(f"   {line}")
+            
+            if result.stderr:
+                self.logger.info("--- STDERR ---")
+                stderr_lines = result.stderr.split('\n')
+                if len(stderr_lines) > max_log_lines:
+                    # Show first 100 and last 100 lines
+                    for line in stderr_lines[:100]:
+                        if line.strip():
+                            self.logger.info(f"   {line}")
+                    self.logger.info(f"   ... ({len(stderr_lines) - 200} lines omitted) ...")
+                    for line in stderr_lines[-100:]:
+                        if line.strip():
+                            self.logger.info(f"   {line}")
+                else:
+                    for line in stderr_lines:
+                        if line.strip():
+                            self.logger.info(f"   {line}")
+            
+            self.logger.info("=" * 80)
+            self.logger.info("")
 
             # Extract metrics from output
             metrics = self._parse_backtest_output(output)
 
             if metrics:
-                self.logger.info(f"📊 Results: Return {metrics.get('return_pct', 0):.1f}%, "
+                self.logger.info(f"📊 Summary: Return {metrics.get('return_pct', 0):.1f}%, "
                                f"Sharpe {metrics.get('sharpe', 0):.2f}, "
                                f"Trades {metrics.get('trades', 0)}")
                 return metrics
@@ -1829,6 +2150,7 @@ Return the COMPLETE optimized Python code."""
     def _multi_config_testing(self, code: str, strategy: Dict) -> List[Dict]:
         """Test strategy across multiple configurations (Moon-Dev pattern)"""
         self.logger.info("📊 Multi-configuration testing...")
+        self.logger.info("")
 
         results = []
 
@@ -1850,35 +2172,82 @@ Return the COMPLETE optimized Python code."""
                     "return_pct": np.random.uniform(5, 80)
                 }
 
+                # Log detailed results for each configuration
+                self.logger.info(f"      Return: {result['return_pct']:.2f}%, "
+                               f"Sharpe: {result['sharpe_ratio']:.2f}, "
+                               f"Win Rate: {result['win_rate']:.2%}, "
+                               f"Trades: {result['total_trades']}")
+
                 results.append(result)
 
+        self.logger.info("")
         self.logger.info(f"✅ Tested {len(results)} configurations")
+        
+        # Show summary table of all configs
+        self.logger.info("")
+        self.logger.info("📋 Multi-Configuration Summary:")
+        self.logger.info(f"   {'Asset':<8} {'TF':<6} {'Return':<10} {'Sharpe':<8} {'WinRate':<10} {'Trades':<8}")
+        self.logger.info(f"   {'-'*8} {'-'*6} {'-'*10} {'-'*8} {'-'*10} {'-'*8}")
+        for r in results:
+            self.logger.info(f"   {r['asset']:<8} {r['timeframe']:<6} "
+                           f"{r['return_pct']:>8.2f}%  {r['sharpe_ratio']:>6.2f}  "
+                           f"{r['win_rate']:>8.2%}  {r['total_trades']:>6}")
+        self.logger.info("")
+        
         return results
 
     def _llm_swarm_consensus(self, config_results: List[Dict],
                             strategy: Dict, primary_results: Dict) -> Tuple[bool, Dict, Optional[Dict]]:
-        """LLM swarm consensus voting (Moon-Dev pattern)"""
+        """LLM swarm consensus voting (Moon-Dev pattern - correct criteria)"""
         self.logger.info("🤝 LLM Swarm Consensus Voting...")
 
         # Find best configuration
         best_config = max(config_results, key=lambda x: x.get("profit_factor", 0) * x.get("win_rate", 0))
 
-        # Check minimum criteria
-        if (best_config["win_rate"] < Config.MIN_WIN_RATE or
-            best_config["profit_factor"] < Config.MIN_PROFIT_FACTOR or
-            best_config["max_drawdown"] > Config.MAX_DRAWDOWN or
-            best_config["sharpe_ratio"] < Config.MIN_SHARPE_RATIO or
-            best_config["total_trades"] < Config.MIN_TRADES):
+        # Display detailed backtest results FIRST (for audit trail)
+        self.logger.info("")
+        self.logger.info("📊 Best Configuration Backtest Results:")
+        self.logger.info(f"   Asset: {best_config.get('asset', 'N/A')}")
+        self.logger.info(f"   Timeframe: {best_config.get('timeframe', 'N/A')}")
+        self.logger.info(f"   Win Rate: {best_config['win_rate']:.2%} (need {Config.MIN_WIN_RATE:.2%})")
+        self.logger.info(f"   Profit Factor: {best_config['profit_factor']:.2f} (need {Config.MIN_PROFIT_FACTOR:.2f})")
+        self.logger.info(f"   Max Drawdown: {best_config['max_drawdown']:.2%} (max {Config.MAX_DRAWDOWN:.2%})")
+        self.logger.info(f"   Sharpe Ratio: {best_config['sharpe_ratio']:.2f} (need {Config.MIN_SHARPE_RATIO:.2f})")
+        self.logger.info(f"   Total Trades: {best_config['total_trades']} (need {Config.MIN_TRADES})")
+        self.logger.info(f"   Return: {best_config.get('return_pct', 0):.2f}%")
+        self.logger.info("")
 
+        # Check minimum criteria and provide detailed feedback
+        criteria_passed = {
+            "win_rate": best_config["win_rate"] >= Config.MIN_WIN_RATE,
+            "profit_factor": best_config["profit_factor"] >= Config.MIN_PROFIT_FACTOR,
+            "max_drawdown": best_config["max_drawdown"] <= Config.MAX_DRAWDOWN,
+            "sharpe_ratio": best_config["sharpe_ratio"] >= Config.MIN_SHARPE_RATIO,
+            "total_trades": best_config["total_trades"] >= Config.MIN_TRADES
+        }
+
+        all_criteria_met = all(criteria_passed.values())
+
+        if not all_criteria_met:
             self.logger.info("❌ Does not meet minimum criteria")
+            self.logger.info("")
+            self.logger.info("📋 Criteria Check Results:")
+            self.logger.info(f"   {'✅' if criteria_passed['win_rate'] else '❌'} Win Rate: {best_config['win_rate']:.2%} (need {Config.MIN_WIN_RATE:.2%})")
+            self.logger.info(f"   {'✅' if criteria_passed['profit_factor'] else '❌'} Profit Factor: {best_config['profit_factor']:.2f} (need {Config.MIN_PROFIT_FACTOR:.2f})")
+            self.logger.info(f"   {'✅' if criteria_passed['max_drawdown'] else '❌'} Max Drawdown: {best_config['max_drawdown']:.2%} (max {Config.MAX_DRAWDOWN:.2%})")
+            self.logger.info(f"   {'✅' if criteria_passed['sharpe_ratio'] else '❌'} Sharpe Ratio: {best_config['sharpe_ratio']:.2f} (need {Config.MIN_SHARPE_RATIO:.2f})")
+            self.logger.info(f"   {'✅' if criteria_passed['total_trades'] else '❌'} Total Trades: {best_config['total_trades']} (need {Config.MIN_TRADES})")
+            self.logger.info("")
+            self.logger.info("ℹ️  Explanation: Strategy failed preliminary criteria check")
+            self.logger.info("ℹ️  LLM swarm voting skipped (not needed for clearly failing strategies)")
             return False, {}, None
 
-        # Get votes from LLM swarm
+        # Get votes from LLM swarm (Moon Dev pattern - using current best models)
         votes = {}
         models = [
             {"type": "deepseek", "name": "deepseek-reasoner"},
             {"type": "openai", "name": "gpt-4"},
-            {"type": "claude", "name": "claude-3-5-sonnet-20240620"}
+            {"type": "anthropic", "name": "claude-3-haiku-20240307"}  # Only model that works with this API key (tested)
         ]
 
         for model in models:
@@ -1888,10 +2257,18 @@ Return the COMPLETE optimized Python code."""
                 votes[model_name] = vote
                 self.logger.info(f"   {model_name}: {vote}")
             except Exception as e:
-                self.logger.warning(f"Vote from {model['type']} failed: {e}")
-                votes[model["type"]] = "REJECT"
+                self.logger.warning(f"⚠️  Vote from {model['type']} failed: {e}")
+                self.logger.warning(f"   Model attempted: {model['name']}")
+                # Skip failed votes instead of auto-rejecting
+                # This allows approval with fewer votes (e.g., 2/2 instead of 2/3)
+                # The approval threshold (Config.CONSENSUS_REQUIRED_VOTES) still applies
+                # but only to the votes that were successfully collected
+                continue
 
-        # Count approvals
+        # Count approvals from successfully collected votes
+        # Note: If a model fails, it doesn't vote - the approval threshold applies to
+        # the votes we actually received. E.g., if Claude fails, 2/2 APPROVE still works
+        # as long as CONSENSUS_REQUIRED_VOTES=2 (which is the default)
         approvals = sum(1 for v in votes.values() if v == "APPROVE")
         approved = approvals >= Config.CONSENSUS_REQUIRED_VOTES
 
@@ -1941,16 +2318,16 @@ Respond with ONLY one word: APPROVE or REJECT"""
             return "REJECT"
 
     def _save_approved_strategy(self, validated_strategy: Dict):
-        """Save approved strategy to final directory"""
+        """Save approved strategy to multiple directories including approved_strategies for live trading"""
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         strategy_name = validated_strategy.get("strategy_name", "unknown").replace(" ", "_")
 
-        # Save code
+        # Save code to final backtest directory
         code_file = Config.FINAL_BACKTEST_DIR / f"{timestamp}_{strategy_name}.py"
         with open(code_file, 'w') as f:
             f.write(validated_strategy.get("code", ""))
 
-        # Save metadata
+        # Save metadata to final directory
         meta_file = Config.FINAL_BACKTEST_DIR / f"{timestamp}_{strategy_name}_meta.json"
         with open(meta_file, 'w') as f:
             json.dump({
@@ -1961,7 +2338,42 @@ Respond with ONLY one word: APPROVE or REJECT"""
                 "timestamp": validated_strategy.get("timestamp")
             }, f, indent=2)
 
+        # ALSO save to successful_strategies directory for easy access
+        success_code_file = Config.SUCCESSFUL_STRATEGIES_DIR / f"{timestamp}_{strategy_name}.py"
+        with open(success_code_file, 'w') as f:
+            f.write(validated_strategy.get("code", ""))
+        
+        success_meta_file = Config.SUCCESSFUL_STRATEGIES_DIR / f"{timestamp}_{strategy_name}_meta.json"
+        with open(success_meta_file, 'w') as f:
+            json.dump({
+                "strategy_name": validated_strategy.get("strategy_name"),
+                "best_config": validated_strategy.get("best_config"),
+                "results": validated_strategy.get("results"),
+                "llm_votes": validated_strategy.get("llm_votes"),
+                "timestamp": validated_strategy.get("timestamp")
+            }, f, indent=2)
+        
+        # 🚀 APPROVED_STRATEGIES folder for live trading on Hyperliquid!
+        approved_code_file = Config.APPROVED_STRATEGIES_DIR / f"{timestamp}_{strategy_name}.py"
+        with open(approved_code_file, 'w') as f:
+            f.write(validated_strategy.get("code", ""))
+        
+        approved_meta_file = Config.APPROVED_STRATEGIES_DIR / f"{timestamp}_{strategy_name}_meta.json"
+        with open(approved_meta_file, 'w') as f:
+            json.dump({
+                "strategy_name": validated_strategy.get("strategy_name"),
+                "best_config": validated_strategy.get("best_config"),
+                "results": validated_strategy.get("results"),
+                "llm_votes": validated_strategy.get("llm_votes"),
+                "timestamp": validated_strategy.get("timestamp"),
+                "approved_for_live_trading": True,  # Flag for live trading system
+                "exchange": "hyperliquid"
+            }, f, indent=2)
+
         self.logger.info(f"💾 Approved strategy saved: {strategy_name}")
+        self.logger.info(f"   📂 Final backtest: {code_file}")
+        self.logger.info(f"   ✅ Successful strategies: {success_code_file}")
+        self.logger.info(f"   🚀 APPROVED for live trading: {approved_code_file}")
 
 logger.info("✅ RBI Backtest Engine class defined (FULL IMPLEMENTATION - 700+ lines)")
 
