@@ -776,8 +776,9 @@ class StrategyListenerAgent:
                 return False
             
             # Check if it's a real trading eligible champion
-            # Strategies from successful_strategies/ are ALWAYS eligible (RBI-approved)
-            if 'successful_strategies' in strategy.get('strategy_file', ''):
+            # ALL strategies from champions/strategies/ or successful_strategies/ are ALWAYS eligible (RBI-approved)
+            strategy_file = strategy.get('strategy_file', '')
+            if 'champions/strategies' in strategy_file or 'successful_strategies' in strategy_file:
                 strategy['real_trading_eligible'] = True  # Auto-approve RBI strategies
             
             if not strategy.get('real_trading_eligible', False):
