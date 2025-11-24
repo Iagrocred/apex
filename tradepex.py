@@ -1475,7 +1475,7 @@ Reason: Your brief reason (max 50 words)"""
                     client = anthropic.Anthropic(api_key=TradePexConfig.ANTHROPIC_API_KEY)
                     
                     response = client.messages.create(
-                        model="claude-3-5-sonnet-20241022",
+                        model="claude-3-haiku-20240307",
                         max_tokens=200,
                         messages=[{"role": "user", "content": prompt}],
                         timeout=10
@@ -1501,7 +1501,7 @@ Reason: Your brief reason (max 50 words)"""
             decision = 'APPROVE' if approve_count >= 2 else 'REJECT'
             
             # Calculate final recommended size (average of approvals, or reduce by 50% if split)
-            if recommended_sizes:
+            if recommended_sizes and len(recommended_sizes) > 0:
                 avg_size = sum(recommended_sizes) / len(recommended_sizes)
                 final_size = avg_size if approve_count >= 2 else size_usd * 0.5
             else:
@@ -2018,6 +2018,19 @@ class ThreadMonitor:
         except Exception as e:
             self.logger.error(f"❌ Failed to initialize Hyperliquid client: {e}")
             return False
+        
+        # Fetch real account balance from Hyperliquid BEFORE starting agents
+        self.logger.info("🔍 Fetching real account balance from Hyperliquid...")
+        try:
+            real_balance = hyperliquid_client.get_account_value()
+            if real_balance > 0:
+                update_account_value(real_balance)
+                self.logger.info(f"✅ Account Balance: ${real_balance:.2f}")
+            else:
+                self.logger.warning(f"⚠️ Account balance is $0.00 - using default ${TradePexConfig.TOTAL_CAPITAL_USD}")
+        except Exception as e:
+            self.logger.warning(f"⚠️ Could not fetch account balance: {e}")
+            self.logger.warning(f"   Using default: ${TradePexConfig.TOTAL_CAPITAL_USD}")
         
         # Create agent instances
         self.agents["listener"] = StrategyListenerAgent()
