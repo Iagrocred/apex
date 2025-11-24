@@ -2247,7 +2247,7 @@ Return the COMPLETE optimized Python code."""
         models = [
             {"type": "deepseek", "name": "deepseek-reasoner"},
             {"type": "openai", "name": "gpt-4"},
-            {"type": "anthropic", "name": "claude-3-opus-20240229"}  # Using Claude 3 Opus (most reliable)
+            {"type": "anthropic", "name": "claude-3-haiku-20240307"}  # Only model that works with this API key (tested)
         ]
 
         for model in models:
