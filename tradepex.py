@@ -472,15 +472,20 @@ class HyperliquidClient:
         """Get total account value in USD"""
         user_state = self.get_user_state()
         if not user_state:
+            self.logger.warning("⚠️ get_user_state() returned None - cannot fetch balance")
             return 0.0
         
         try:
             # Account value includes margin and unrealized PnL
             margin_summary = user_state.get('marginSummary', {})
+            if not margin_summary:
+                self.logger.warning(f"⚠️ No marginSummary in user_state: {user_state.keys()}")
             account_value = float(margin_summary.get('accountValue', 0))
+            self.logger.info(f"📊 Account value from Hyperliquid: ${account_value:.2f}")
             return account_value
         except Exception as e:
             self.logger.error(f"Error getting account value: {e}")
+            self.logger.error(f"user_state keys: {user_state.keys() if user_state else 'None'}")
             return 0.0
     
     def market_order(self, symbol: str, is_buy: bool, size: float, 
@@ -771,6 +776,10 @@ class StrategyListenerAgent:
                 return False
             
             # Check if it's a real trading eligible champion
+            # Strategies from successful_strategies/ are ALWAYS eligible (RBI-approved)
+            if 'successful_strategies' in strategy.get('strategy_file', ''):
+                strategy['real_trading_eligible'] = True  # Auto-approve RBI strategies
+            
             if not strategy.get('real_trading_eligible', False):
                 self.logger.info(f"Strategy {strategy['strategy_name']} not yet trading eligible")
                 return False
