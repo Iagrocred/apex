@@ -311,11 +311,13 @@ def main():
         print("⚠️  Could not fetch balance (API may need futures permissions)")
         print()
     
-    # Strategy directory
-    strategy_dir = "/root/KEEP_SAFE/v1/APEX/successful_strategies"
+    # Strategy directory (same as TradePex - loads from current working directory)
+    from pathlib import Path
+    strategy_dir = Path.cwd() / "successful_strategies"
     
     # Find strategy files
     print(f"📂 Loading strategies from: {strategy_dir}")
+    print(f"   (Current working directory: {Path.cwd()})")
     
     if not os.path.exists(strategy_dir):
         print(f"❌ Directory not found: {strategy_dir}")
