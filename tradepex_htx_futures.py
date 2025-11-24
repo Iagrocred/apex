@@ -41,7 +41,7 @@ class HTXFuturesClient:
         params['AccessKeyId'] = self.api_key
         params['SignatureMethod'] = 'HmacSHA256'
         params['SignatureVersion'] = '2'
-        params['Timestamp'] = datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%S')
+        params['Timestamp'] = datetime.now(datetime.UTC).strftime('%Y-%m-%dT%H:%M:%S') if hasattr(datetime, 'UTC') else datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%S')
         
         # Sort parameters
         sorted_params = sorted(params.items())
@@ -86,7 +86,7 @@ class HTXFuturesClient:
             print(f"❌ Balance fetch failed: {e}")
             return {}
     
-    def get_klines(self, symbol="BTC-USD", period="15min", size=200):
+    def get_klines(self, symbol="BTC_CQ", period="15min", size=200):
         """Get futures klines/candles (public endpoint, no auth needed)"""
         try:
             url = f"{self.base_url}/market/history/kline"
@@ -120,7 +120,7 @@ class HTXFuturesClient:
             print(f"❌ Klines fetch failed: {e}")
             return []
     
-    def get_market_price(self, symbol="BTC-USD"):
+    def get_market_price(self, symbol="BTC_CQ"):
         """Get current market price"""
         try:
             url = f"{self.base_url}/market/detail/merged"
@@ -153,7 +153,7 @@ class HTXFuturesClient:
             
             # Build order params
             order_params = {
-                'symbol': symbol.split('-')[0],  # BTC-USD -> BTC
+                'symbol': symbol.split('_')[0],  # BTC_CQ -> BTC
                 'contract_type': 'quarter',  # or 'this_week', 'next_week', 'next_quarter'
                 'contract_code': symbol,
                 'client_order_id': int(time.time() * 1000),
@@ -349,7 +349,7 @@ def main():
     print()
     
     # Trading parameters
-    symbol = "BTC-USD"  # HTX Futures symbol
+    symbol = "BTC_CQ"  # HTX Futures symbol (CQ = Current Quarter)
     timeframe = metadata.get('timeframe', '15min') if metadata else '15min'
     
     print("=" * 80)
