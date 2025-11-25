@@ -208,14 +208,14 @@ class PaperTradingConfig:
     # PAPER TRADING CAPITAL (SIMULATION)
     # =========================================================================================
     
-    STARTING_CAPITAL_USD = 10000.0  # $10K simulated capital per strategy
+    STARTING_CAPITAL_USD = 8000.0  # $8K simulated capital per strategy
     DEFAULT_LEVERAGE = 5  # 5x leverage
     MAX_POSITION_PERCENT = 0.30  # 30% max per position
     CASH_RESERVE_PERCENT = 0.20  # 20% reserve
     
     # Calculated values
-    TRADEABLE_CAPITAL = STARTING_CAPITAL_USD * (1 - CASH_RESERVE_PERCENT)
-    MAX_POSITION_SIZE = STARTING_CAPITAL_USD * MAX_POSITION_PERCENT
+    TRADEABLE_CAPITAL = STARTING_CAPITAL_USD * (1 - CASH_RESERVE_PERCENT)  # $6,400
+    MAX_POSITION_SIZE = STARTING_CAPITAL_USD * MAX_POSITION_PERCENT  # $2,400
     
     # =========================================================================================
     # RISK MANAGEMENT (SIMULATION)
@@ -848,8 +848,8 @@ Return ONLY the JSON object."""
             required_indicators=list(set(indicators)),
             entry_conditions=[strategy_data.get('entry_rules', 'Not specified')],
             exit_conditions=[strategy_data.get('exit_rules', 'Not specified')],
-            preferred_timeframe=strategy_data.get('timeframe', '15m'),
-            preferred_coins=strategy_data.get('assets', ['BTC']),
+            preferred_timeframe=strategy_data.get('timeframe', PaperTradingConfig.DEFAULT_TIMEFRAME),
+            preferred_coins=strategy_data.get('assets', [PaperTradingConfig.DEFAULT_COIN]),
             stop_loss_logic=strategy_data.get('stop_loss', '5% stop loss'),
             take_profit_logic=strategy_data.get('take_profit', '15% take profit'),
             position_sizing=strategy_data.get('position_sizing', '30% of capital'),
@@ -1043,7 +1043,7 @@ REASON: Your brief reason (max 30 words)"""
         if size_match:
             try:
                 rec_size = float(size_match.group(1).replace(',', ''))
-            except:
+            except (ValueError, TypeError):
                 rec_size = default_size
         else:
             rec_size = default_size
@@ -1192,10 +1192,18 @@ class DynamicIndicatorEngine:
         upper = sma + (std * std_dev)
         lower = sma - (std * std_dev)
         current_price = float(close.iloc[-1])
+        
+        # Calculate bb_width as (upper - lower) / middle
+        bb_upper_val = float(upper.iloc[-1]) if not pd.isna(upper.iloc[-1]) else current_price * 1.02
+        bb_middle_val = float(sma.iloc[-1]) if not pd.isna(sma.iloc[-1]) else current_price
+        bb_lower_val = float(lower.iloc[-1]) if not pd.isna(lower.iloc[-1]) else current_price * 0.98
+        bb_width = (bb_upper_val - bb_lower_val) / bb_middle_val if bb_middle_val != 0 else 0.04
+        
         return {
-            'bb_upper': float(upper.iloc[-1]) if not pd.isna(upper.iloc[-1]) else current_price * 1.02,
-            'bb_middle': float(sma.iloc[-1]) if not pd.isna(sma.iloc[-1]) else current_price,
-            'bb_lower': float(lower.iloc[-1]) if not pd.isna(lower.iloc[-1]) else current_price * 0.98,
+            'bb_upper': bb_upper_val,
+            'bb_middle': bb_middle_val,
+            'bb_lower': bb_lower_val,
+            'bb_width': bb_width,
         }
     
     def _calculate_atr(self, df: pd.DataFrame, period: int = 14) -> Dict:
@@ -2344,9 +2352,12 @@ class TradePexTestEngine:
         
         current_price = current_prices[preferred_coin]
         
-        # Fetch market data for the coin
+        # Fetch market data for the coin using strategy's preferred timeframe
         symbol = f"{preferred_coin.lower()}usdt"
-        market_data = market_data_fetcher.fetch_candles(symbol, '15min', 500)
+        # Map timeframe to HTX period format
+        timeframe_map = {'1m': '1min', '5m': '5min', '15m': '15min', '1H': '60min', '4H': '4hour', '1D': '1day'}
+        htx_period = timeframe_map.get(intelligence.preferred_timeframe, '15min')
+        market_data = market_data_fetcher.fetch_candles(symbol, htx_period, 500)
         
         if market_data is None or len(market_data) < 50:
             return
