@@ -514,7 +514,7 @@ class ModelFactory:
         if PaperTradingConfig.DEEPSEEK_API_KEY:
             return {"type": "deepseek", "name": "deepseek-chat"}
         elif PaperTradingConfig.ANTHROPIC_API_KEY:
-            return {"type": "anthropic", "name": "claude-3-5-sonnet-20241022"}
+            return {"type": "anthropic", "name": "claude-3-haiku-20240307"}
         elif PaperTradingConfig.OPENAI_API_KEY:
             return {"type": "openai", "name": "gpt-4o-mini"}
         elif PaperTradingConfig.XAI_API_KEY:
@@ -890,7 +890,7 @@ class SwarmDecisionMaker:
             models.append({"type": "deepseek", "name": "deepseek-chat", "label": "DeepSeek"})
         
         if PaperTradingConfig.ANTHROPIC_API_KEY:
-            models.append({"type": "anthropic", "name": "claude-3-5-sonnet-20241022", "label": "Claude"})
+            models.append({"type": "anthropic", "name": "claude-3-haiku-20240307", "label": "Claude"})
         
         if PaperTradingConfig.OPENAI_API_KEY:
             models.append({"type": "openai", "name": "gpt-4o-mini", "label": "GPT-4"})
@@ -2526,7 +2526,7 @@ def main():
     cprint("=" * 80, "green")
     cprint("✅ ALL 3 SWARM LLMs CONNECTED SUCCESSFULLY!", "green", attrs=['bold'])
     cprint("   DeepSeek: deepseek-chat", "white")
-    cprint("   Claude: claude-3-5-sonnet-20241022", "white")
+    cprint("   Claude: claude-3-haiku-20240307", "white")
     cprint("   GPT-4: gpt-4o-mini", "white")
     cprint("=" * 80, "green")
     cprint("", "cyan")
