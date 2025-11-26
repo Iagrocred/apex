@@ -218,23 +218,36 @@ class PaperTradingConfig:
     MAX_POSITION_SIZE = STARTING_CAPITAL_USD * MAX_POSITION_PERCENT  # $2,400
     
     # =========================================================================================
-    # RISK MANAGEMENT (SIMULATION)
+    # RISK MANAGEMENT (SIMULATION) - SCALPING FOCUSED!
+    # With 5x leverage, small moves = big profits!
     # =========================================================================================
     
-    DEFAULT_STOP_LOSS_PERCENT = 0.05  # 5% stop loss
-    DEFAULT_TAKE_PROFIT_PERCENT = 0.15  # 15% take profit
-    MAX_CONCURRENT_POSITIONS = 3
+    DEFAULT_STOP_LOSS_PERCENT = 0.01  # 1% stop loss (5% with 5x leverage)
+    DEFAULT_TAKE_PROFIT_PERCENT = 0.02  # 2% take profit (10% with 5x leverage)
+    MAX_CONCURRENT_POSITIONS = 10  # More positions = more opportunities
     RISK_PER_TRADE_PERCENT = 0.02  # 2% risk per trade
     
+    # Status display interval
+    STATUS_DISPLAY_INTERVAL_SECONDS = 60  # Show status every 1 minute
+    
     # =========================================================================================
-    # TRADING CONFIGURATION
+    # TRADING CONFIGURATION - SCAN ALL MAJOR COINS!
     # =========================================================================================
     
-    # Coins to trade
+    # Coins to trade - EXPANDED LIST for more opportunities!
     TRADEABLE_COINS = [
-        'BTC', 'ETH', 'SOL', 'ARB', 'MATIC', 
-        'AVAX', 'OP', 'LINK', 'UNI', 'AAVE',
-        'DOGE', 'XRP', 'ADA', 'DOT', 'ATOM'
+        # Top Market Cap
+        'BTC', 'ETH', 'BNB', 'SOL', 'XRP', 'ADA', 'AVAX', 'DOGE', 'DOT', 'MATIC',
+        # DeFi & Layer 2
+        'LINK', 'UNI', 'AAVE', 'ARB', 'OP', 'LDO', 'MKR', 'SNX', 'CRV', 'COMP',
+        # Layer 1s
+        'ATOM', 'NEAR', 'FTM', 'ALGO', 'ICP', 'APT', 'SUI', 'SEI', 'INJ', 'TIA',
+        # Meme & Trending
+        'SHIB', 'PEPE', 'WIF', 'BONK', 'FLOKI',
+        # Gaming & Metaverse
+        'IMX', 'SAND', 'MANA', 'AXS', 'GALA',
+        # Other Popular
+        'LTC', 'BCH', 'ETC', 'FIL', 'RENDER', 'GRT', 'STX', 'RUNE', 'ENS', 'WLD'
     ]
     
     # Default coin if strategy doesn't specify
@@ -2318,13 +2331,17 @@ class TradePexTestEngine:
                 # Check SL/TP for all open positions
                 self.paper_trader.check_stop_loss_take_profit(current_prices)
                 
-                # Process each strategy
+                # Process each strategy - SCAN ALL COINS for each strategy!
                 for strategy_id, intelligence in all_intelligence.items():
                     try:
-                        self._process_strategy(strategy_id, intelligence, current_prices)
+                        # Scan multiple coins for opportunities
+                        self._process_strategy_all_coins(strategy_id, intelligence, current_prices)
                     except Exception as e:
                         self.logger.error(f"Error processing {strategy_id}: {e}")
                         continue
+                
+                # Show live status every cycle
+                self._display_live_status(current_prices)
                 
                 # Log performance periodically
                 if time.time() - last_performance_log > PaperTradingConfig.PERFORMANCE_LOG_INTERVAL_SECONDS:
@@ -2405,6 +2422,137 @@ class TradePexTestEngine:
         # Process signal
         if signal.action != 'HOLD':
             self.paper_trader.process_signal(signal, current_price)
+    
+    def _process_strategy_all_coins(self, strategy_id: str, intelligence: StrategyIntelligence,
+                                     current_prices: Dict[str, float]):
+        """Process a strategy across ALL tradeable coins for more opportunities!"""
+        
+        # Get top 15 high-volume coins to scan
+        high_volume_coins = ['BTC', 'ETH', 'SOL', 'XRP', 'DOGE', 'ADA', 'AVAX', 'LINK', 
+                            'DOT', 'MATIC', 'SHIB', 'UNI', 'ATOM', 'LTC', 'BCH']
+        
+        for coin in high_volume_coins:
+            if coin not in current_prices:
+                continue
+            
+            current_price = current_prices[coin]
+            
+            # Skip if we already have max positions
+            all_open = sum(1 for positions in self.paper_trader.strategy_positions.values() 
+                          for p in positions if p.status == 'OPEN')
+            if all_open >= PaperTradingConfig.MAX_CONCURRENT_POSITIONS:
+                break
+            
+            # Fetch market data for this coin
+            symbol = f"{coin.lower()}usdt"
+            timeframe_map = {'1m': '1min', '5m': '5min', '15m': '15min', '1H': '60min', '4H': '4hour', '1D': '1day'}
+            htx_period = timeframe_map.get(intelligence.preferred_timeframe, '15min')
+            
+            try:
+                market_data = market_data_fetcher.fetch_candles(symbol, htx_period, 500)
+                
+                if market_data is None or len(market_data) < 50:
+                    continue
+                
+                # Calculate indicators
+                indicators = indicator_engine.calculate_all_indicators(
+                    market_data, 
+                    intelligence.required_indicators
+                )
+                
+                if not indicators:
+                    continue
+                
+                # Check if we have position on this coin for this strategy
+                positions = self.paper_trader.strategy_positions.get(strategy_id, [])
+                open_positions = [p for p in positions if p.status == 'OPEN' and p.symbol == coin]
+                has_position = len(open_positions) > 0
+                current_direction = open_positions[0].direction if has_position else None
+                
+                # Generate trading signal
+                signal = signal_generator.generate_signal(
+                    intelligence,
+                    indicators,
+                    has_position,
+                    current_direction
+                )
+                
+                # Override symbol to current coin
+                signal.symbol = coin
+                
+                # Process signal
+                if signal.action != 'HOLD':
+                    self.paper_trader.process_signal(signal, current_price)
+                    
+            except Exception as e:
+                self.logger.debug(f"Error scanning {coin}: {e}")
+                continue
+    
+    def _display_live_status(self, current_prices: Dict[str, float]):
+        """Display live status of all positions and bankroll"""
+        
+        # Collect all open positions
+        all_open_positions = []
+        total_unrealized_pnl = 0.0
+        
+        for strategy_id, positions in self.paper_trader.strategy_positions.items():
+            for pos in positions:
+                if pos.status == 'OPEN':
+                    current_price = current_prices.get(pos.symbol, pos.entry_price)
+                    
+                    # Calculate unrealized PnL
+                    if pos.direction == 'LONG':
+                        pnl_percent = (current_price - pos.entry_price) / pos.entry_price * 100
+                    else:
+                        pnl_percent = (pos.entry_price - current_price) / pos.entry_price * 100
+                    
+                    pnl_usd = pos.size_usd * (pnl_percent / 100)
+                    total_unrealized_pnl += pnl_usd
+                    
+                    all_open_positions.append({
+                        'strategy': strategy_id[:20],
+                        'symbol': pos.symbol,
+                        'direction': pos.direction,
+                        'entry': pos.entry_price,
+                        'current': current_price,
+                        'pnl_pct': pnl_percent,
+                        'pnl_usd': pnl_usd,
+                        'sl': pos.stop_loss_price,
+                        'tp': pos.take_profit_price
+                    })
+        
+        # Calculate totals
+        total_capital = sum(acc.get('capital', 0) for acc in self.paper_trader.strategy_accounts.values())
+        total_starting = sum(acc.get('starting_capital', 0) for acc in self.paper_trader.strategy_accounts.values())
+        total_realized_pnl = sum(acc.get('total_pnl', 0) for acc in self.paper_trader.strategy_accounts.values())
+        total_trades = sum(acc.get('total_trades', 0) for acc in self.paper_trader.strategy_accounts.values())
+        total_wins = sum(acc.get('winning_trades', 0) for acc in self.paper_trader.strategy_accounts.values())
+        
+        # Display status
+        self.logger.info("")
+        self.logger.info("=" * 100)
+        self.logger.info("📊 LIVE TRADING STATUS")
+        self.logger.info("=" * 100)
+        self.logger.info(f"💰 BANKROLL: ${total_capital:,.2f} (Started: ${total_starting:,.2f})")
+        self.logger.info(f"📈 Realized PnL: ${total_realized_pnl:+,.2f} | Unrealized: ${total_unrealized_pnl:+,.2f}")
+        self.logger.info(f"📊 Total Trades: {total_trades} | Wins: {total_wins} | Win Rate: {(total_wins/total_trades*100) if total_trades > 0 else 0:.1f}%")
+        self.logger.info(f"🔓 Open Positions: {len(all_open_positions)}/{PaperTradingConfig.MAX_CONCURRENT_POSITIONS}")
+        
+        if all_open_positions:
+            self.logger.info("-" * 100)
+            self.logger.info(f"{'Strategy':<22} {'Coin':<6} {'Dir':<5} {'Entry':>12} {'Current':>12} {'PnL%':>8} {'PnL$':>10} {'SL':>10} {'TP':>10}")
+            self.logger.info("-" * 100)
+            for pos in all_open_positions:
+                pnl_emoji = "🟢" if pos['pnl_pct'] >= 0 else "🔴"
+                self.logger.info(
+                    f"{pos['strategy']:<22} {pos['symbol']:<6} {pos['direction']:<5} "
+                    f"${pos['entry']:>10,.2f} ${pos['current']:>10,.2f} "
+                    f"{pnl_emoji}{pos['pnl_pct']:>6.2f}% ${pos['pnl_usd']:>8,.2f} "
+                    f"${pos['sl']:>8,.2f} ${pos['tp']:>8,.2f}"
+                )
+        
+        self.logger.info("=" * 100)
+        self.logger.info("")
     
     def _shutdown(self):
         """Graceful shutdown"""
