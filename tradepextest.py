@@ -510,14 +510,15 @@ class ModelFactory:
     @staticmethod
     def get_available_model() -> Dict:
         """Get first available model based on configured API keys"""
-        if PaperTradingConfig.XAI_API_KEY:
-            return {"type": "xai", "name": "grok-3-mini-fast"}
-        elif PaperTradingConfig.DEEPSEEK_API_KEY:
+        # Prioritize DeepSeek for strategy parsing (fast and good)
+        if PaperTradingConfig.DEEPSEEK_API_KEY:
             return {"type": "deepseek", "name": "deepseek-chat"}
+        elif PaperTradingConfig.ANTHROPIC_API_KEY:
+            return {"type": "anthropic", "name": "claude-3-5-sonnet-20241022"}
         elif PaperTradingConfig.OPENAI_API_KEY:
             return {"type": "openai", "name": "gpt-4o-mini"}
-        elif PaperTradingConfig.ANTHROPIC_API_KEY:
-            return {"type": "anthropic", "name": "claude-3-haiku-20240307"}
+        elif PaperTradingConfig.XAI_API_KEY:
+            return {"type": "xai", "name": "grok-3-mini-fast"}
         else:
             return None
 
@@ -859,42 +860,69 @@ Return ONLY the JSON object."""
 logger.info("✅ Strategy Intelligence Agent defined (AI-powered strategy understanding)")
 
 # =========================================================================================
-# AI SWARM DECISION MAKER (MULTIPLE LLMs VOTE!)
+# AI SWARM DECISION MAKER (3 LLMs VOTE FOR FAIR CONSENSUS!)
 # =========================================================================================
 
 class SwarmDecisionMaker:
     """
-    AI SWARM - Multiple LLMs vote on trading decisions!
-    Just like original tradepex.py but for paper trading
+    AI SWARM - 3 LLMs vote on trading decisions!
+    Uses DeepSeek, Claude, and OpenAI for FAIR consensus
     
     Consensus mechanism:
-    - Query 2-3 different LLMs
+    - Query ALL 3 LLMs (DeepSeek, Claude, OpenAI)
     - Each votes: APPROVE or REJECT
-    - Majority wins
+    - Majority wins (2 out of 3)
     """
     
     def __init__(self):
         self.logger = logging.getLogger("TRADEPEXTEST.AI-SWARM")
         self.available_models = self._detect_available_models()
-        self.logger.info(f"�� AI Swarm initialized with {len(self.available_models)} models")
+        self.logger.info(f"🤖 AI Swarm initialized with {len(self.available_models)} models")
+        for model in self.available_models:
+            self.logger.info(f"   ✅ {model['label']}: {model['name']}")
         
     def _detect_available_models(self) -> List[Dict]:
-        """Detect which LLM models are available based on API keys"""
+        """Detect which LLM models are available - MUST have 3 for fair swarm"""
         models = []
         
-        if PaperTradingConfig.XAI_API_KEY:
-            models.append({"type": "xai", "name": "grok-3-mini-fast", "label": "Grok"})
-        
+        # Priority order: DeepSeek, Claude, OpenAI (these 3 are the SWARM)
         if PaperTradingConfig.DEEPSEEK_API_KEY:
             models.append({"type": "deepseek", "name": "deepseek-chat", "label": "DeepSeek"})
+        
+        if PaperTradingConfig.ANTHROPIC_API_KEY:
+            models.append({"type": "anthropic", "name": "claude-3-5-sonnet-20241022", "label": "Claude"})
         
         if PaperTradingConfig.OPENAI_API_KEY:
             models.append({"type": "openai", "name": "gpt-4o-mini", "label": "GPT-4"})
         
-        if PaperTradingConfig.ANTHROPIC_API_KEY:
-            models.append({"type": "anthropic", "name": "claude-3-haiku-20240307", "label": "Claude"})
+        # Fallback to Grok if one of the above is missing
+        if len(models) < 3 and PaperTradingConfig.XAI_API_KEY:
+            models.append({"type": "xai", "name": "grok-3-mini-fast", "label": "Grok"})
         
-        return models[:3]  # Max 3 models for swarm
+        return models[:3]  # Exactly 3 models for fair swarm voting
+    
+    def verify_all_connections(self) -> Dict[str, bool]:
+        """Verify connection to all LLMs on startup"""
+        results = {}
+        test_prompt = "Reply with only the word 'OK' to confirm connection."
+        
+        for model in self.available_models:
+            try:
+                response = ModelFactory.call_llm(
+                    model, test_prompt, 
+                    system_prompt="You are a connection test. Reply with OK.",
+                    temperature=0.1, max_tokens=10
+                )
+                results[model['label']] = 'OK' in response.upper()
+                if results[model['label']]:
+                    self.logger.info(f"   ✅ {model['label']}: Connected!")
+                else:
+                    self.logger.warning(f"   ⚠️ {model['label']}: Unexpected response")
+            except Exception as e:
+                results[model['label']] = False
+                self.logger.error(f"   ❌ {model['label']}: Connection FAILED - {e}")
+        
+        return results
     
     def get_swarm_consensus(self, strategy_name: str, symbol: str, 
                             direction: str, size_usd: float, 
@@ -1586,37 +1614,26 @@ class StrategyLoaderAgent:
         self.intelligence_agent = StrategyIntelligenceAgent()
         
     def load_all_strategies(self) -> Dict[str, Dict]:
-        """Load all strategies from all sources"""
-        self.logger.info("📂 Loading all strategies...")
+        """Load ONLY successful strategies from successful_strategies folder"""
+        self.logger.info("📂 Loading strategies from successful_strategies/ folder ONLY...")
         
         strategies = {}
         
-        # Load from strategy library
-        if PaperTradingConfig.STRATEGY_LIBRARY_DIR.exists():
-            lib_strategies = self._load_from_directory(
-                PaperTradingConfig.STRATEGY_LIBRARY_DIR, 
-                "strategy_library"
-            )
-            strategies.update(lib_strategies)
-        
-        # Load from champions
-        if PaperTradingConfig.APEX_CHAMPIONS_DIR.exists():
-            champ_strategies = self._load_from_directory(
-                PaperTradingConfig.APEX_CHAMPIONS_DIR,
-                "champions"
-            )
-            strategies.update(champ_strategies)
-        
-        # Load from successful strategies
+        # ONLY load from successful_strategies folder
+        # These are the strategies that passed RBI backtest and LLM approval
         if PaperTradingConfig.SUCCESSFUL_STRATEGIES_DIR.exists():
             success_strategies = self._load_from_directory(
                 PaperTradingConfig.SUCCESSFUL_STRATEGIES_DIR,
                 "successful"
             )
             strategies.update(success_strategies)
+            self.logger.info(f"   Found {len(success_strategies)} successful strategies")
+        else:
+            self.logger.warning(f"⚠️ successful_strategies folder not found at: {PaperTradingConfig.SUCCESSFUL_STRATEGIES_DIR}")
+            self.logger.warning("   Please ensure successful strategies are placed in the successful_strategies/ folder")
         
         self.loaded_strategies = strategies
-        self.logger.info(f"✅ Loaded {len(strategies)} strategies total")
+        self.logger.info(f"✅ Loaded {len(strategies)} successful strategies for paper trading")
         
         # Parse each strategy with AI
         self._parse_all_strategies()
@@ -2460,13 +2477,58 @@ def main():
     
     print_startup_banner()
     
-    # Verify API keys
-    available_model = ModelFactory.get_available_model()
-    if available_model:
-        cprint(f"✅ LLM Available: {available_model['type']}/{available_model['name']}", "green")
-    else:
-        cprint("⚠️ No LLM API key found - using rule-based fallback", "yellow")
+    # ==========================================================================
+    # VERIFY ALL 3 LLMs ARE CONNECTED (REQUIRED FOR FAIR SWARM!)
+    # ==========================================================================
+    cprint("=" * 80, "yellow")
+    cprint("🔌 VERIFYING CONNECTION TO ALL 3 SWARM LLMs...", "yellow", attrs=['bold'])
+    cprint("=" * 80, "yellow")
     
+    # Check API keys first
+    llm_status = {
+        'DeepSeek': bool(PaperTradingConfig.DEEPSEEK_API_KEY),
+        'Claude': bool(PaperTradingConfig.ANTHROPIC_API_KEY),
+        'GPT-4': bool(PaperTradingConfig.OPENAI_API_KEY),
+    }
+    
+    missing_keys = [name for name, has_key in llm_status.items() if not has_key]
+    
+    if missing_keys:
+        cprint(f"❌ MISSING API KEYS: {', '.join(missing_keys)}", "red", attrs=['bold'])
+        cprint("   The SWARM requires ALL 3 LLMs for fair voting!", "red")
+        cprint("   Please set these in your .env file:", "yellow")
+        if 'DeepSeek' in missing_keys:
+            cprint("      DEEPSEEK_API_KEY=your_key", "yellow")
+        if 'Claude' in missing_keys:
+            cprint("      ANTHROPIC_API_KEY=your_key", "yellow")
+        if 'GPT-4' in missing_keys:
+            cprint("      OPENAI_API_KEY=your_key", "yellow")
+        cprint("", "red")
+        sys.exit(1)
+    
+    # All keys present - verify actual connections
+    cprint("✅ All 3 API keys present. Testing connections...", "green")
+    cprint("", "cyan")
+    
+    # Initialize swarm and verify connections
+    swarm = SwarmDecisionMaker()
+    connection_results = swarm.verify_all_connections()
+    
+    # Check results
+    failed_connections = [name for name, success in connection_results.items() if not success]
+    
+    if failed_connections:
+        cprint(f"❌ CONNECTION FAILED: {', '.join(failed_connections)}", "red", attrs=['bold'])
+        cprint("   Please check your API keys and try again.", "red")
+        sys.exit(1)
+    
+    cprint("", "cyan")
+    cprint("=" * 80, "green")
+    cprint("✅ ALL 3 SWARM LLMs CONNECTED SUCCESSFULLY!", "green", attrs=['bold'])
+    cprint("   DeepSeek: deepseek-chat", "white")
+    cprint("   Claude: claude-3-5-sonnet-20241022", "white")
+    cprint("   GPT-4: gpt-4o-mini", "white")
+    cprint("=" * 80, "green")
     cprint("", "cyan")
     
     # Create and run engine
