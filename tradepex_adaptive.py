@@ -903,13 +903,33 @@ class AdaptiveTradingEngine:
                 # Check exits first
                 self.paper_engine.check_exits(current_prices)
                 
-                # Look for new opportunities
+                # Look for new opportunities - iterate TOKEN first, then strategies
+                # This ensures we spread positions across different tokens
                 open_positions = [p for p in self.paper_engine.positions.values() if p.status == "OPEN"]
-                if len(open_positions) < Config.MAX_TOTAL_POSITIONS:
-                    for strategy_id in self.strategies:
-                        for token in Config.TRADEABLE_TOKENS:
+                position_limit_reached = len(open_positions) >= Config.MAX_TOTAL_POSITIONS
+                
+                if not position_limit_reached:
+                    for token in Config.TRADEABLE_TOKENS:
+                        if position_limit_reached:
+                            break  # Exit token loop if max positions reached
+                        
+                        # Skip token if it already has max positions
+                        token_positions = [p for p in open_positions if p.symbol == token]
+                        if len(token_positions) >= Config.MAX_POSITIONS_PER_TOKEN:
+                            continue  # Skip to next token silently
+                        
+                        for strategy_id in self.strategies:
+                            # Check position count before each trade attempt
+                            current_open_count = len([p for p in self.paper_engine.positions.values() if p.status == "OPEN"])
+                            if current_open_count >= Config.MAX_TOTAL_POSITIONS:
+                                position_limit_reached = True
+                                break  # Exit strategy loop
+                            
                             self.execute_strategy_for_token(strategy_id, token)
                             time.sleep(0.3)
+                        
+                        # Refresh open_positions after processing each token
+                        open_positions = [p for p in self.paper_engine.positions.values() if p.status == "OPEN"]
                 else:
                     print(f"⏸️  Position limit reached ({len(open_positions)}/{Config.MAX_TOTAL_POSITIONS})")
                 
