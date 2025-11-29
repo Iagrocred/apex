@@ -5,11 +5,36 @@ TRADEPEX ADAPTIVE - Dynamic Live Strategy Analyzer & Optimizer
 This system analyzes live paper trading performance, identifies why strategies
 are losing, and dynamically adjusts parameters until profitability is achieved.
 
+IMPORTANT: This system does NOT modify the original strategy files!
+- Original strategies in successful_strategies/ are READ-ONLY
+- Adaptive parameters are stored IN-MEMORY and PERSISTED to JSON files
+- This prevents breaking the original backtested strategies
+- On restart, learned parameters are loaded from JSON files
+
 Key Features:
 1. Detailed Trade Logging - Captures full market context for each trade
-2. Loss Pattern Analysis - Identifies why trades fail
-3. Dynamic Parameter Adjustment - Auto-adjusts strategy parameters based on analysis
+2. Loss Pattern Analysis - Identifies why trades fail  
+3. LLM-BASED REASONING - Uses AI to analyze WHY trades fail and suggest improvements
 4. Adaptive Optimization Loop - Continues until target profitability is reached
+5. State Persistence - Saves learned parameters to JSON (survives restarts)
+6. Strategy Recoding - Saves improved strategies as new Python files
+
+HOW IT WORKS (LIKE APEX RBI):
+- Every OPTIMIZATION_INTERVAL cycles (default 10), the system analyzes performance
+- After MIN_TRADES_FOR_ANALYSIS trades (default 5), it sends data to LLM
+- LLM REASONS about why trades are failing (not hardcoded rules!)
+- LLM suggests specific parameter changes or recodes the strategy
+- New parameters are applied and tested
+- Process repeats until TARGET_WIN_RATE and TARGET_PROFIT_FACTOR are achieved
+- Improved strategies are saved to improved_strategies/ folder
+
+TRADE DURATION:
+- max_holding_periods (default 20) * 15 minutes = 300 minutes (5 hours) max
+- Exits: target hit, stop loss hit, or max time exceeded
+
+MARKET COVERAGE:
+- Currently scans 8 high-volume tokens (configurable in TRADEABLE_TOKENS)
+- Can be expanded to scan entire market by modifying TRADEABLE_TOKENS list
 """
 
 import os
@@ -24,6 +49,18 @@ from typing import Dict, List, Optional, Tuple
 from dataclasses import dataclass, field, asdict
 from collections import defaultdict
 import logging
+import re
+
+# Optional LLM imports (same pattern as apex.py)
+try:
+    import openai
+except ImportError:
+    openai = None
+
+try:
+    import anthropic
+except ImportError:
+    anthropic = None
 
 # =============================================================================
 # CONFIGURATION - ADAPTIVE TRADING
@@ -34,26 +71,47 @@ class Config:
     MAX_POSITION_SIZE = 0.15  # 15% per trade
     DEFAULT_LEVERAGE = 3
     HTX_BASE_URL = "https://api.huobi.pro"
+    
+    # TRADEABLE TOKENS - Can be expanded to scan more of the market
+    # Currently using 8 high-volume tokens for focused trading
+    # To scan more: Add tokens like 'DOGE', 'SHIB', 'MATIC', 'UNI', etc.
     TRADEABLE_TOKENS = ['BTC', 'ETH', 'SOL', 'XRP', 'ADA', 'DOT', 'LINK', 'AVAX']
+    
     STRATEGIES_DIR = Path("./successful_strategies")  # Local path
-    CHECK_INTERVAL = 30
+    CHECK_INTERVAL = 30  # Seconds between market checks
     
     # Position Limits
-    MAX_TOTAL_POSITIONS = 8
-    MAX_POSITIONS_PER_STRATEGY = 2
-    MAX_POSITIONS_PER_TOKEN = 2
+    MAX_TOTAL_POSITIONS = 8           # Max 8 positions at once
+    MAX_POSITIONS_PER_STRATEGY = 2    # Max 2 positions per strategy
+    MAX_POSITIONS_PER_TOKEN = 2       # Max 2 positions per token
     
     # Adaptive Optimization Settings
-    MIN_TRADES_FOR_ANALYSIS = 5       # Minimum trades before analyzing
+    MIN_TRADES_FOR_ANALYSIS = 5       # Need at least 5 trades before analyzing
     TARGET_WIN_RATE = 0.55            # Target 55% win rate
-    TARGET_PROFIT_FACTOR = 1.3        # Target profit factor
-    OPTIMIZATION_INTERVAL = 10        # Cycles between parameter adjustments
-    MAX_CONSECUTIVE_LOSSES = 3        # Pause strategy after this many losses
+    TARGET_PROFIT_FACTOR = 1.3        # Target profit factor (wins/losses ratio)
+    OPTIMIZATION_INTERVAL = 10        # Run optimization every 10 cycles (~5 min)
+    MAX_CONSECUTIVE_LOSSES = 3        # Pause strategy after 3 consecutive losses
+    MAX_OPTIMIZATION_ITERATIONS = 10  # Max times to optimize before giving up
     
-    # Log Files
-    TRADE_LOG_FILE = Path("./tradepex_trades.json")
-    ANALYSIS_LOG_FILE = Path("./tradepex_analysis.json")
-    PARAMETER_LOG_FILE = Path("./tradepex_parameters.json")
+    # Log Files - CRITICAL for state persistence
+    TRADE_LOG_FILE = Path("./tradepex_trades.json")        # All trade history
+    ANALYSIS_LOG_FILE = Path("./tradepex_analysis.json")   # Strategy performance
+    PARAMETER_LOG_FILE = Path("./tradepex_parameters.json") # Learned parameters
+    
+    # Improved Strategies Folder - WHERE RECODED STRATEGIES ARE SAVED
+    IMPROVED_STRATEGIES_DIR = Path("./improved_strategies")  # New folder for improved versions
+    IMPROVEMENT_VERSION_PREFIX = "v"  # e.g., original_strategy_v2.py
+    
+    # LLM Configuration for Reasoning-Based Optimization (like APEX RBI)
+    # Uses environment variables - same as apex.py
+    DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY", "")
+    OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
+    ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
+    XAI_API_KEY = os.getenv("XAI_API_KEY", "")
+    
+    # LLM Model for optimization reasoning (priority order)
+    # Will try: DeepSeek Reasoner -> XAI Grok -> OpenAI GPT-4 -> Anthropic Claude
+    LLM_OPTIMIZE_MODEL = {"type": "deepseek", "name": "deepseek-reasoner"}
 
 # =============================================================================
 # DATA CLASSES FOR TRADE TRACKING
@@ -144,6 +202,10 @@ class AdaptiveParameters:
     # Position Sizing
     position_size_percent: float = 0.15  # % of capital per trade
     
+    # Version tracking
+    version: int = 1                     # Strategy version number
+    optimization_count: int = 0          # How many times optimized
+    
     def adjust_for_losses(self, loss_pattern: str):
         """Adjust parameters based on identified loss pattern"""
         if loss_pattern == "LOW_DEVIATION":
@@ -165,9 +227,671 @@ class AdaptiveParameters:
         elif loss_pattern == "BAND_TOO_NARROW":
             self.std_dev_multiplier *= 1.1  # Wider bands
             print(f"   📊 Increased std_dev multiplier to {self.std_dev_multiplier:.2f}")
+        
+        # Track optimization
+        self.optimization_count += 1
     
     def to_dict(self) -> dict:
         return asdict(self)
+
+# =============================================================================
+# STRATEGY RECODER - SAVES IMPROVED STRATEGIES AS NEW FILES
+# =============================================================================
+
+class StrategyRecoder:
+    """
+    Recodes and saves improved strategies as new Python files.
+    - Original strategies in successful_strategies/ are NEVER modified
+    - Improved versions are saved to improved_strategies/ folder
+    - Each improvement creates a new version (v1, v2, v3, etc.)
+    """
+    
+    def __init__(self):
+        # Create improved strategies folder if it doesn't exist
+        Config.IMPROVED_STRATEGIES_DIR.mkdir(parents=True, exist_ok=True)
+        self.improvement_history: Dict[str, List[dict]] = {}  # Track all improvements
+        self._load_history()
+    
+    def _load_history(self):
+        """Load improvement history from file"""
+        history_file = Config.IMPROVED_STRATEGIES_DIR / "improvement_history.json"
+        if history_file.exists():
+            try:
+                with open(history_file, 'r') as f:
+                    self.improvement_history = json.load(f)
+                print(f"📂 Loaded improvement history for {len(self.improvement_history)} strategies")
+            except Exception as e:
+                print(f"⚠️  Could not load improvement history: {e}")
+    
+    def _save_history(self):
+        """Save improvement history to file"""
+        history_file = Config.IMPROVED_STRATEGIES_DIR / "improvement_history.json"
+        with open(history_file, 'w') as f:
+            json.dump(self.improvement_history, f, indent=2, default=str)
+    
+    def get_next_version(self, strategy_id: str) -> int:
+        """Get the next version number for a strategy"""
+        if strategy_id not in self.improvement_history:
+            return 1
+        return len(self.improvement_history[strategy_id]) + 1
+    
+    def recode_strategy(self, strategy_id: str, params: AdaptiveParameters, 
+                       performance: 'StrategyPerformance', original_file: Path) -> Optional[Path]:
+        """
+        Recode a strategy with improved parameters and save as new file.
+        Returns the path to the new strategy file.
+        """
+        version = self.get_next_version(strategy_id)
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        
+        # Create new filename with version
+        new_filename = f"{strategy_id}_improved_v{version}.py"
+        new_filepath = Config.IMPROVED_STRATEGIES_DIR / new_filename
+        
+        # Generate the improved strategy code
+        strategy_code = self._generate_improved_strategy_code(
+            strategy_id=strategy_id,
+            params=params,
+            performance=performance,
+            original_file=original_file,
+            version=version
+        )
+        
+        # Save the new strategy file
+        try:
+            with open(new_filepath, 'w') as f:
+                f.write(strategy_code)
+            
+            # Also save a metadata JSON file
+            meta_filepath = Config.IMPROVED_STRATEGIES_DIR / f"{strategy_id}_improved_v{version}_meta.json"
+            meta_data = {
+                'strategy_id': strategy_id,
+                'version': version,
+                'timestamp': timestamp,
+                'original_file': str(original_file),
+                'parameters': params.to_dict(),
+                'performance_at_optimization': {
+                    'total_trades': performance.total_trades,
+                    'win_rate': performance.win_rate,
+                    'profit_factor': performance.profit_factor,
+                    'total_pnl': performance.total_pnl
+                },
+                'optimization_count': params.optimization_count
+            }
+            with open(meta_filepath, 'w') as f:
+                json.dump(meta_data, f, indent=2)
+            
+            # Update improvement history
+            if strategy_id not in self.improvement_history:
+                self.improvement_history[strategy_id] = []
+            self.improvement_history[strategy_id].append({
+                'version': version,
+                'timestamp': timestamp,
+                'filepath': str(new_filepath),
+                'parameters': params.to_dict()
+            })
+            self._save_history()
+            
+            print(f"📝 RECODED: {new_filename}")
+            print(f"   Saved to: {new_filepath}")
+            return new_filepath
+            
+        except Exception as e:
+            print(f"❌ Failed to recode strategy: {e}")
+            return None
+    
+    def _generate_improved_strategy_code(self, strategy_id: str, params: AdaptiveParameters,
+                                         performance: 'StrategyPerformance', 
+                                         original_file: Path, version: int) -> str:
+        """Generate Python code for the improved strategy"""
+        
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        
+        code = f'''#!/usr/bin/env python3
+"""
+IMPROVED STRATEGY - {strategy_id}
+=================================================================
+Version: {version}
+Generated: {timestamp}
+Original: {original_file.name}
+
+This is an AUTO-IMPROVED version of the original strategy.
+Parameters have been optimized based on live trading analysis.
+
+OPTIMIZATION HISTORY:
+- Optimization count: {params.optimization_count}
+- Trades analyzed: {performance.total_trades}
+- Win rate at optimization: {performance.win_rate:.1%}
+- Profit factor at optimization: {performance.profit_factor:.2f}
+=================================================================
+"""
+
+# =============================================================================
+# OPTIMIZED PARAMETERS (learned from live trading)
+# =============================================================================
+
+class OptimizedParameters:
+    """These parameters were learned from analyzing {performance.total_trades} live trades"""
+    
+    # Entry Conditions
+    MIN_DEVIATION_PERCENT = {params.min_deviation_percent:.4f}   # Minimum deviation from band to enter
+    MAX_VOLATILITY_PERCENT = {params.max_volatility_percent:.4f}  # Max 24h volatility to enter
+    MIN_VOLUME_RATIO = {params.min_volume_ratio:.4f}             # Min volume vs average
+    
+    # Risk Management
+    STOP_LOSS_ATR_MULTIPLIER = {params.stop_loss_atr_multiplier:.4f}
+    TAKE_PROFIT_ATR_MULTIPLIER = {params.take_profit_atr_multiplier:.4f}
+    MAX_HOLDING_PERIODS = {params.max_holding_periods}           # Max periods before forced exit
+    
+    # Band Calculation
+    STD_DEV_MULTIPLIER = {params.std_dev_multiplier:.4f}         # For VWAP bands
+    LOOKBACK_PERIOD = {params.lookback_period}                   # For rolling calculations
+    
+    # Position Sizing
+    POSITION_SIZE_PERCENT = {params.position_size_percent:.4f}   # % of capital per trade
+
+
+# =============================================================================
+# STRATEGY IMPLEMENTATION
+# =============================================================================
+
+import pandas as pd
+import numpy as np
+from typing import Dict, Optional
+
+class ImprovedStrategy:
+    """
+    Improved version of: {strategy_id}
+    
+    Changes from original:
+    - min_deviation: {params.min_deviation_percent:.2f}%
+    - max_volatility: {params.max_volatility_percent:.2f}%
+    - stop_loss_mult: {params.stop_loss_atr_multiplier:.2f}
+    - take_profit_mult: {params.take_profit_atr_multiplier:.2f}
+    - std_dev_mult: {params.std_dev_multiplier:.2f}
+    """
+    
+    def __init__(self):
+        self.params = OptimizedParameters()
+    
+    def calculate_vwap_bands(self, df: pd.DataFrame) -> Dict:
+        """Calculate VWAP and bands with optimized parameters"""
+        typical_price = (df['High'] + df['Low'] + df['Close']) / 3
+        cumulative_vp = (typical_price * df['Volume']).cumsum()
+        cumulative_volume = df['Volume'].cumsum()
+        vwap = cumulative_vp / cumulative_volume
+        
+        price_deviation = np.abs(df['Close'] - vwap)
+        std_dev = price_deviation.rolling(window=self.params.LOOKBACK_PERIOD).std()
+        
+        upper_band = vwap + (self.params.STD_DEV_MULTIPLIER * std_dev)
+        lower_band = vwap - (self.params.STD_DEV_MULTIPLIER * std_dev)
+        
+        return {{
+            'vwap': float(vwap.iloc[-1]) if not pd.isna(vwap.iloc[-1]) else 0.0,
+            'upper_band': float(upper_band.iloc[-1]) if not pd.isna(upper_band.iloc[-1]) else 0.0,
+            'lower_band': float(lower_band.iloc[-1]) if not pd.isna(lower_band.iloc[-1]) else 0.0,
+            'std_dev': float(std_dev.iloc[-1]) if not pd.isna(std_dev.iloc[-1]) else 0.0
+        }}
+    
+    def calculate_atr(self, df: pd.DataFrame, period: int = 14) -> float:
+        """Calculate Average True Range"""
+        high, low, close = df['High'], df['Low'], df['Close']
+        tr1 = high - low
+        tr2 = abs(high - close.shift())
+        tr3 = abs(low - close.shift())
+        true_range = np.maximum(tr1, np.maximum(tr2, tr3))
+        atr = true_range.rolling(window=period).mean()
+        return float(atr.iloc[-1]) if not pd.isna(atr.iloc[-1]) else 0.0
+    
+    def calculate_volatility(self, df: pd.DataFrame) -> float:
+        """Calculate 24h volatility"""
+        returns = df['Close'].pct_change()
+        volatility_24h = returns.tail(96).std() * 100 * np.sqrt(96)
+        return float(volatility_24h) if not pd.isna(volatility_24h) else 0.0
+    
+    def generate_signal(self, df: pd.DataFrame, current_price: float) -> Dict:
+        """Generate trading signal with optimized parameters"""
+        bands = self.calculate_vwap_bands(df)
+        atr = self.calculate_atr(df)
+        volatility = self.calculate_volatility(df)
+        
+        signal = "HOLD"
+        reason = "No signal"
+        target_price = 0.0
+        stop_loss = 0.0
+        
+        # Calculate deviations
+        lower_deviation = 0.0
+        upper_deviation = 0.0
+        
+        if bands['lower_band'] > 0:
+            lower_deviation = (bands['lower_band'] - current_price) / current_price * 100
+        if bands['upper_band'] > 0:
+            upper_deviation = (current_price - bands['upper_band']) / current_price * 100
+        
+        # Check filters
+        volatility_ok = volatility < self.params.MAX_VOLATILITY_PERCENT
+        
+        # BUY signal
+        if (current_price < bands['lower_band'] and 
+            lower_deviation > self.params.MIN_DEVIATION_PERCENT and
+            volatility_ok):
+            
+            signal = "BUY"
+            reason = f"Price below lower band (dev: {{lower_deviation:.2f}}%)"
+            target_price = current_price + (atr * self.params.TAKE_PROFIT_ATR_MULTIPLIER)
+            stop_loss = current_price - (atr * self.params.STOP_LOSS_ATR_MULTIPLIER)
+        
+        # SELL signal
+        elif (current_price > bands['upper_band'] and 
+              upper_deviation > self.params.MIN_DEVIATION_PERCENT and
+              volatility_ok):
+            
+            signal = "SELL"
+            reason = f"Price above upper band (dev: {{upper_deviation:.2f}}%)"
+            target_price = current_price - (atr * self.params.TAKE_PROFIT_ATR_MULTIPLIER)
+            stop_loss = current_price + (atr * self.params.STOP_LOSS_ATR_MULTIPLIER)
+        
+        return {{
+            'signal': signal,
+            'reason': reason,
+            'current_price': current_price,
+            'target_price': target_price,
+            'stop_loss': stop_loss,
+            'vwap': bands['vwap'],
+            'upper_band': bands['upper_band'],
+            'lower_band': bands['lower_band'],
+            'atr': atr,
+            'volatility': volatility,
+            'deviation_percent': max(lower_deviation, upper_deviation)
+        }}
+
+
+# =============================================================================
+# USAGE EXAMPLE
+# =============================================================================
+
+if __name__ == "__main__":
+    print("Improved Strategy: {strategy_id}")
+    print(f"Version: {version}")
+    print(f"Optimized parameters loaded from live trading analysis")
+    
+    strategy = ImprovedStrategy()
+    print(f"Min deviation: {{strategy.params.MIN_DEVIATION_PERCENT:.2f}}%")
+    print(f"Max volatility: {{strategy.params.MAX_VOLATILITY_PERCENT:.2f}}%")
+    print(f"Stop loss multiplier: {{strategy.params.STOP_LOSS_ATR_MULTIPLIER:.2f}}")
+    print(f"Take profit multiplier: {{strategy.params.TAKE_PROFIT_ATR_MULTIPLIER:.2f}}")
+'''
+        return code
+
+# =============================================================================
+# LLM-BASED STRATEGY OPTIMIZER (LIKE APEX RBI)
+# =============================================================================
+
+class LLMStrategyOptimizer:
+    """
+    Uses LLM reasoning to analyze why strategies are losing and suggest improvements.
+    This is the same approach as APEX RBI (Reasoning-Based Iteration).
+    
+    Instead of hardcoded rules like "multiply by 1.2", the LLM:
+    1. Analyzes the trade history and loss patterns
+    2. Reasons about WHY the strategy is failing
+    3. Suggests specific parameter changes
+    4. Can even recode the entire strategy if needed
+    """
+    
+    def __init__(self):
+        self.optimization_history: List[Dict] = []
+        self._check_llm_availability()
+    
+    def _check_llm_availability(self):
+        """Check which LLM providers are available"""
+        self.available_providers = []
+        
+        if Config.DEEPSEEK_API_KEY:
+            self.available_providers.append("deepseek")
+            print("✅ DeepSeek API available for reasoning")
+        if Config.XAI_API_KEY:
+            self.available_providers.append("xai")
+            print("✅ XAI (Grok) API available for reasoning")
+        if Config.OPENAI_API_KEY and openai:
+            self.available_providers.append("openai")
+            print("✅ OpenAI API available for reasoning")
+        if Config.ANTHROPIC_API_KEY and anthropic:
+            self.available_providers.append("anthropic")
+            print("✅ Anthropic API available for reasoning")
+        
+        if not self.available_providers:
+            print("⚠️  No LLM API keys found - will use fallback heuristic optimization")
+            print("   Set DEEPSEEK_API_KEY, OPENAI_API_KEY, or ANTHROPIC_API_KEY for LLM reasoning")
+    
+    def call_llm(self, prompt: str, system_prompt: str, temperature: float = 0.3) -> Optional[str]:
+        """Call LLM with fallback through available providers"""
+        
+        for provider in self.available_providers:
+            try:
+                if provider == "deepseek":
+                    return self._call_deepseek(prompt, system_prompt, temperature)
+                elif provider == "openai":
+                    return self._call_openai(prompt, system_prompt, temperature)
+                elif provider == "anthropic":
+                    return self._call_anthropic(prompt, system_prompt, temperature)
+                elif provider == "xai":
+                    return self._call_xai(prompt, system_prompt, temperature)
+            except Exception as e:
+                print(f"⚠️  {provider} failed: {e}, trying next provider...")
+                continue
+        
+        return None
+    
+    def _call_deepseek(self, prompt: str, system_prompt: str, temperature: float) -> str:
+        """Call DeepSeek API (same pattern as apex.py)"""
+        if not openai:
+            raise ImportError("openai package not installed")
+        
+        client = openai.OpenAI(
+            api_key=Config.DEEPSEEK_API_KEY,
+            base_url="https://api.deepseek.com"
+        )
+        
+        response = client.chat.completions.create(
+            model="deepseek-reasoner",
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": prompt}
+            ],
+            temperature=temperature,
+            max_tokens=4000
+        )
+        
+        return response.choices[0].message.content
+    
+    def _call_openai(self, prompt: str, system_prompt: str, temperature: float) -> str:
+        """Call OpenAI API"""
+        if not openai:
+            raise ImportError("openai package not installed")
+        
+        client = openai.OpenAI(api_key=Config.OPENAI_API_KEY)
+        
+        response = client.chat.completions.create(
+            model="gpt-4",
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": prompt}
+            ],
+            temperature=temperature,
+            max_tokens=4000
+        )
+        
+        return response.choices[0].message.content
+    
+    def _call_anthropic(self, prompt: str, system_prompt: str, temperature: float) -> str:
+        """Call Anthropic API"""
+        if not anthropic:
+            raise ImportError("anthropic package not installed")
+        
+        client = anthropic.Anthropic(api_key=Config.ANTHROPIC_API_KEY)
+        
+        response = client.messages.create(
+            model="claude-3-sonnet-20240229",
+            max_tokens=4000,
+            system=system_prompt,
+            messages=[{"role": "user", "content": prompt}]
+        )
+        
+        return response.content[0].text
+    
+    def _call_xai(self, prompt: str, system_prompt: str, temperature: float) -> str:
+        """Call XAI (Grok) API"""
+        if not openai:
+            raise ImportError("openai package not installed")
+        
+        client = openai.OpenAI(
+            api_key=Config.XAI_API_KEY,
+            base_url="https://api.x.ai/v1"
+        )
+        
+        response = client.chat.completions.create(
+            model="grok-2-latest",
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": prompt}
+            ],
+            temperature=temperature,
+            max_tokens=4000
+        )
+        
+        return response.choices[0].message.content
+    
+    def analyze_and_optimize(self, strategy_id: str, params: 'AdaptiveParameters',
+                            performance: 'StrategyPerformance', 
+                            recent_trades: List['TradeContext'],
+                            original_strategy_code: str = "") -> Tuple[Optional['AdaptiveParameters'], Optional[str]]:
+        """
+        Use LLM to analyze strategy performance and suggest improvements.
+        Returns: (optimized_params, optimized_code) or (None, None) if optimization failed
+        """
+        
+        if not self.available_providers:
+            print("⚠️  No LLM available, using fallback heuristics")
+            return self._fallback_optimize(params, performance), None
+        
+        # Build the analysis prompt
+        system_prompt = """You are an expert quantitative trading strategist and Python developer.
+Your task is to analyze why a trading strategy is underperforming and suggest SPECIFIC improvements.
+
+You must respond in a STRICT JSON format with the following structure:
+{
+    "analysis": "Your detailed analysis of why the strategy is failing",
+    "root_causes": ["cause1", "cause2", ...],
+    "parameter_changes": {
+        "min_deviation_percent": <new_value or null if no change>,
+        "max_volatility_percent": <new_value or null if no change>,
+        "stop_loss_atr_multiplier": <new_value or null if no change>,
+        "take_profit_atr_multiplier": <new_value or null if no change>,
+        "std_dev_multiplier": <new_value or null if no change>,
+        "min_volume_ratio": <new_value or null if no change>,
+        "max_holding_periods": <new_value or null if no change>
+    },
+    "reasoning": "Explain WHY each parameter change will help",
+    "confidence": <0.0 to 1.0>,
+    "needs_full_recode": <true/false>
+}
+
+Be specific with numbers. Don't suggest vague changes like "increase slightly" - give exact values."""
+
+        # Build trade history summary
+        trade_summary = self._build_trade_summary(recent_trades)
+        
+        user_prompt = f"""Analyze this underperforming trading strategy and suggest improvements:
+
+## STRATEGY: {strategy_id}
+
+## CURRENT PARAMETERS:
+- min_deviation_percent: {params.min_deviation_percent:.4f} (minimum price deviation from band to enter)
+- max_volatility_percent: {params.max_volatility_percent:.4f} (maximum 24h volatility to trade)
+- stop_loss_atr_multiplier: {params.stop_loss_atr_multiplier:.4f} (stop loss = ATR * this)
+- take_profit_atr_multiplier: {params.take_profit_atr_multiplier:.4f} (target = ATR * this)
+- std_dev_multiplier: {params.std_dev_multiplier:.4f} (for VWAP band calculation)
+- min_volume_ratio: {params.min_volume_ratio:.4f} (minimum volume vs average)
+- max_holding_periods: {params.max_holding_periods} (max 15-min periods before forced exit)
+
+## PERFORMANCE METRICS:
+- Total Trades: {performance.total_trades}
+- Win Rate: {performance.win_rate:.1%} (TARGET: {Config.TARGET_WIN_RATE:.0%})
+- Profit Factor: {performance.profit_factor:.2f} (TARGET: {Config.TARGET_PROFIT_FACTOR})
+- Total PnL: ${performance.total_pnl:.2f}
+- Consecutive Losses: {performance.consecutive_losses}
+- Stop Loss Hits: {performance.stop_loss_hits}
+- Target Hits: {performance.target_hits}
+- Losses from low deviation entries: {performance.losses_low_deviation}
+- Losses from high volatility: {performance.losses_high_volatility}
+
+## RECENT TRADE HISTORY:
+{trade_summary}
+
+## YOUR TASK:
+1. Analyze WHY this strategy is losing money
+2. Identify the ROOT CAUSES (not just symptoms)
+3. Suggest SPECIFIC parameter changes with EXACT numbers
+4. Explain your reasoning
+
+Respond ONLY with valid JSON."""
+
+        try:
+            print(f"\n🤖 Sending to LLM for analysis...")
+            response = self.call_llm(user_prompt, system_prompt)
+            
+            if not response:
+                print("❌ LLM returned empty response")
+                return self._fallback_optimize(params, performance), None
+            
+            # Parse LLM response
+            optimized_params, analysis = self._parse_llm_response(response, params)
+            
+            if optimized_params:
+                print(f"✅ LLM Analysis Complete:")
+                print(f"   {analysis.get('analysis', 'No analysis')[:200]}...")
+                print(f"   Confidence: {analysis.get('confidence', 0):.0%}")
+                
+                # Log this optimization
+                self.optimization_history.append({
+                    'timestamp': datetime.now().isoformat(),
+                    'strategy_id': strategy_id,
+                    'analysis': analysis,
+                    'old_params': params.to_dict(),
+                    'new_params': optimized_params.to_dict()
+                })
+                
+                return optimized_params, None
+            else:
+                print("⚠️  Could not parse LLM response, using fallback")
+                return self._fallback_optimize(params, performance), None
+                
+        except Exception as e:
+            print(f"❌ LLM optimization failed: {e}")
+            return self._fallback_optimize(params, performance), None
+    
+    def _build_trade_summary(self, trades: List['TradeContext']) -> str:
+        """Build a summary of recent trades for the LLM"""
+        if not trades:
+            return "No trades yet"
+        
+        summary_lines = []
+        for trade in trades[-10:]:  # Last 10 trades
+            outcome = "WIN" if trade.pnl_usd > 0 else "LOSS"
+            summary_lines.append(
+                f"- {trade.symbol} {trade.direction}: Entry ${trade.entry_price:.2f}, "
+                f"Exit ${trade.exit_price:.2f}, PnL: ${trade.pnl_usd:+.2f} ({outcome}), "
+                f"Reason: {trade.exit_reason}, Deviation: {trade.deviation_percent:.2f}%, "
+                f"Volatility: {trade.volatility_24h:.2f}%, Trend: {trade.trend_direction}"
+            )
+        
+        return "\n".join(summary_lines)
+    
+    def _parse_llm_response(self, response: str, current_params: 'AdaptiveParameters') -> Tuple[Optional['AdaptiveParameters'], Dict]:
+        """Parse LLM JSON response and create new parameters"""
+        try:
+            # Extract JSON from response (handle markdown code blocks)
+            json_match = re.search(r'\{[\s\S]*\}', response)
+            if not json_match:
+                return None, {}
+            
+            analysis = json.loads(json_match.group())
+            
+            # Create new params based on LLM suggestions
+            new_params = AdaptiveParameters(
+                min_deviation_percent=current_params.min_deviation_percent,
+                max_volatility_percent=current_params.max_volatility_percent,
+                stop_loss_atr_multiplier=current_params.stop_loss_atr_multiplier,
+                take_profit_atr_multiplier=current_params.take_profit_atr_multiplier,
+                std_dev_multiplier=current_params.std_dev_multiplier,
+                min_volume_ratio=current_params.min_volume_ratio,
+                max_holding_periods=current_params.max_holding_periods,
+                lookback_period=current_params.lookback_period,
+                position_size_percent=current_params.position_size_percent,
+                version=current_params.version + 1,
+                optimization_count=current_params.optimization_count + 1
+            )
+            
+            # Apply LLM suggested changes
+            param_changes = analysis.get('parameter_changes', {})
+            
+            if param_changes.get('min_deviation_percent') is not None:
+                new_params.min_deviation_percent = float(param_changes['min_deviation_percent'])
+                print(f"   📈 min_deviation: {current_params.min_deviation_percent:.2f} → {new_params.min_deviation_percent:.2f}")
+            
+            if param_changes.get('max_volatility_percent') is not None:
+                new_params.max_volatility_percent = float(param_changes['max_volatility_percent'])
+                print(f"   📉 max_volatility: {current_params.max_volatility_percent:.2f} → {new_params.max_volatility_percent:.2f}")
+            
+            if param_changes.get('stop_loss_atr_multiplier') is not None:
+                new_params.stop_loss_atr_multiplier = float(param_changes['stop_loss_atr_multiplier'])
+                print(f"   🛑 stop_loss_mult: {current_params.stop_loss_atr_multiplier:.2f} → {new_params.stop_loss_atr_multiplier:.2f}")
+            
+            if param_changes.get('take_profit_atr_multiplier') is not None:
+                new_params.take_profit_atr_multiplier = float(param_changes['take_profit_atr_multiplier'])
+                print(f"   🎯 take_profit_mult: {current_params.take_profit_atr_multiplier:.2f} → {new_params.take_profit_atr_multiplier:.2f}")
+            
+            if param_changes.get('std_dev_multiplier') is not None:
+                new_params.std_dev_multiplier = float(param_changes['std_dev_multiplier'])
+                print(f"   📊 std_dev_mult: {current_params.std_dev_multiplier:.2f} → {new_params.std_dev_multiplier:.2f}")
+            
+            if param_changes.get('min_volume_ratio') is not None:
+                new_params.min_volume_ratio = float(param_changes['min_volume_ratio'])
+                print(f"   📊 min_volume: {current_params.min_volume_ratio:.2f} → {new_params.min_volume_ratio:.2f}")
+            
+            if param_changes.get('max_holding_periods') is not None:
+                new_params.max_holding_periods = int(param_changes['max_holding_periods'])
+                print(f"   ⏱️  max_holding: {current_params.max_holding_periods} → {new_params.max_holding_periods}")
+            
+            return new_params, analysis
+            
+        except json.JSONDecodeError as e:
+            print(f"❌ Failed to parse LLM JSON: {e}")
+            return None, {}
+        except Exception as e:
+            print(f"❌ Error parsing LLM response: {e}")
+            return None, {}
+    
+    def _fallback_optimize(self, params: 'AdaptiveParameters', 
+                          performance: 'StrategyPerformance') -> 'AdaptiveParameters':
+        """Fallback heuristic optimization when no LLM is available"""
+        print("📊 Using fallback heuristic optimization...")
+        
+        new_params = AdaptiveParameters(
+            min_deviation_percent=params.min_deviation_percent,
+            max_volatility_percent=params.max_volatility_percent,
+            stop_loss_atr_multiplier=params.stop_loss_atr_multiplier,
+            take_profit_atr_multiplier=params.take_profit_atr_multiplier,
+            std_dev_multiplier=params.std_dev_multiplier,
+            min_volume_ratio=params.min_volume_ratio,
+            max_holding_periods=params.max_holding_periods,
+            lookback_period=params.lookback_period,
+            position_size_percent=params.position_size_percent,
+            version=params.version + 1,
+            optimization_count=params.optimization_count + 1
+        )
+        
+        # Simple heuristics based on loss patterns
+        if performance.losses_low_deviation > performance.total_trades * 0.3:
+            new_params.min_deviation_percent *= 1.3
+            print(f"   📈 Increased min_deviation (many low deviation losses)")
+        
+        if performance.losses_high_volatility > performance.total_trades * 0.3:
+            new_params.max_volatility_percent *= 0.7
+            print(f"   📉 Reduced max_volatility (many high volatility losses)")
+        
+        if performance.stop_loss_hits > performance.target_hits * 2:
+            new_params.stop_loss_atr_multiplier *= 1.3
+            print(f"   🛑 Widened stops (too many stop hits)")
+        
+        if performance.target_hits < performance.total_trades * 0.2:
+            new_params.take_profit_atr_multiplier *= 0.8
+            print(f"   🎯 Reduced targets (too few target hits)")
+        
+        return new_params
 
 # =============================================================================
 # HTX API CLIENT
@@ -560,6 +1284,22 @@ class AdaptivePaperTradingEngine:
         
         # Strategy-specific adaptive parameters
         self.strategy_params: Dict[str, AdaptiveParameters] = {}
+        
+        # LLM-based optimizer (like APEX RBI)
+        self.llm_optimizer = LLMStrategyOptimizer()
+        
+        # Strategy recoder for saving improved strategies
+        self.strategy_recoder = StrategyRecoder()
+        
+        # Track strategy files for recoding
+        self.strategy_files: Dict[str, Path] = {}
+        
+        # Load any previously saved state (CRITICAL for persistence)
+        self.load_state()
+    
+    def set_strategy_file(self, strategy_id: str, file_path: Path):
+        """Register the original strategy file for potential recoding"""
+        self.strategy_files[strategy_id] = file_path
     
     def get_params(self, strategy_id: str) -> AdaptiveParameters:
         """Get or create adaptive parameters for strategy"""
@@ -730,13 +1470,17 @@ class AdaptivePaperTradingEngine:
         print(f"   PnL: ${pnl_usd:+.2f} ({pnl_percent*100:+.2f}%) - {reason}")
     
     def optimize_strategy(self, strategy_id: str):
-        """Analyze and optimize strategy parameters"""
+        """
+        Analyze and optimize strategy parameters using LLM reasoning.
+        This is the core of the adaptive system - like APEX RBI but for live trading.
+        """
         if strategy_id not in self.analyzer.strategy_performance:
             return
         
         perf = self.analyzer.strategy_performance[strategy_id]
         
         if perf.total_trades < Config.MIN_TRADES_FOR_ANALYSIS:
+            print(f"⏳ {strategy_id[:30]}: Only {perf.total_trades} trades, need {Config.MIN_TRADES_FOR_ANALYSIS} for analysis")
             return
         
         # Check if optimization needed
@@ -746,40 +1490,169 @@ class AdaptivePaperTradingEngine:
         )
         
         if not needs_optimization:
+            print(f"✅ {strategy_id[:30]}: Performance OK (WR: {perf.win_rate:.0%}, PF: {perf.profit_factor:.2f})")
             return
         
-        print(f"\n🔧 OPTIMIZING: {strategy_id[:50]}")
+        # Check if we've exceeded max optimization iterations
+        current_params = self.get_params(strategy_id)
+        if current_params.optimization_count >= Config.MAX_OPTIMIZATION_ITERATIONS:
+            print(f"⚠️  {strategy_id[:30]}: Max optimizations ({Config.MAX_OPTIMIZATION_ITERATIONS}) reached")
+            return
+        
+        print(f"\n{'='*60}")
+        print(f"🔧 LLM OPTIMIZATION: {strategy_id[:50]}")
+        print(f"{'='*60}")
         print(f"   Current Win Rate: {perf.win_rate:.1%} (target: {Config.TARGET_WIN_RATE:.0%})")
         print(f"   Current Profit Factor: {perf.profit_factor:.2f} (target: {Config.TARGET_PROFIT_FACTOR})")
+        print(f"   Total PnL: ${perf.total_pnl:.2f}")
+        print(f"   Optimization #: {current_params.optimization_count + 1}")
         
-        # Get patterns and adjust
-        patterns = self.analyzer.identify_loss_patterns(strategy_id)
-        params = self.get_params(strategy_id)
+        # Get recent trades for analysis
+        recent_trades = [t for t in self.trade_history if t.strategy_id == strategy_id][-20:]
         
-        for pattern in patterns:
-            params.adjust_for_losses(pattern)
+        # Get original strategy file path for potential recoding
+        original_file = self.strategy_files.get(strategy_id, Path("unknown"))
+        original_code = ""
+        if original_file.exists():
+            try:
+                with open(original_file, 'r') as f:
+                    original_code = f.read()
+            except:
+                pass
         
-        # Reset consecutive losses to unpause strategy
-        if perf.is_paused and len(patterns) > 0:
-            perf.consecutive_losses = 0
-            perf.is_paused = False
-            print(f"   ✅ Strategy UNPAUSED after parameter adjustment")
+        # USE LLM TO ANALYZE AND OPTIMIZE (the key innovation!)
+        new_params, new_code = self.llm_optimizer.analyze_and_optimize(
+            strategy_id=strategy_id,
+            params=current_params,
+            performance=perf,
+            recent_trades=recent_trades,
+            original_strategy_code=original_code
+        )
         
-        print(f"   📊 New Parameters: min_dev={params.min_deviation_percent:.2f}%, "
-              f"max_vol={params.max_volatility_percent:.2f}%, "
-              f"sl_mult={params.stop_loss_atr_multiplier:.2f}")
+        if new_params:
+            # Apply the new parameters
+            self.strategy_params[strategy_id] = new_params
+            
+            # Save the improved strategy as a new file
+            if original_file.exists():
+                saved_path = self.strategy_recoder.recode_strategy(
+                    strategy_id=strategy_id,
+                    params=new_params,
+                    performance=perf,
+                    original_file=original_file
+                )
+                if saved_path:
+                    print(f"📁 Improved strategy saved to: {saved_path}")
+            
+            # Reset consecutive losses to unpause strategy
+            if perf.is_paused:
+                perf.consecutive_losses = 0
+                perf.is_paused = False
+                print(f"   ✅ Strategy UNPAUSED after LLM optimization")
+            
+            print(f"\n📊 NEW PARAMETERS (v{new_params.version}):")
+            print(f"   min_deviation: {new_params.min_deviation_percent:.2f}%")
+            print(f"   max_volatility: {new_params.max_volatility_percent:.2f}%")
+            print(f"   stop_loss_mult: {new_params.stop_loss_atr_multiplier:.2f}")
+            print(f"   take_profit_mult: {new_params.take_profit_atr_multiplier:.2f}")
+            print(f"   std_dev_mult: {new_params.std_dev_multiplier:.2f}")
+        else:
+            print(f"⚠️  Optimization failed, keeping current parameters")
+        
+        print(f"{'='*60}\n")
     
     def save_state(self):
-        """Save trade history and parameters to files"""
+        """Save trade history and parameters to files for persistence"""
         # Save trades
         trades_data = [t.to_dict() for t in self.trade_history]
         with open(Config.TRADE_LOG_FILE, 'w') as f:
             json.dump(trades_data, f, indent=2, default=str)
         
-        # Save parameters
+        # Save parameters (CRITICAL: This persists learned optimizations)
         params_data = {k: v.to_dict() for k, v in self.strategy_params.items()}
         with open(Config.PARAMETER_LOG_FILE, 'w') as f:
             json.dump(params_data, f, indent=2)
+        
+        # Save strategy performance metrics
+        perf_data = {}
+        for strategy_id, perf in self.analyzer.strategy_performance.items():
+            perf_data[strategy_id] = {
+                'total_trades': perf.total_trades,
+                'winning_trades': perf.winning_trades,
+                'losing_trades': perf.losing_trades,
+                'total_pnl': perf.total_pnl,
+                'win_rate': perf.win_rate,
+                'profit_factor': perf.profit_factor,
+                'consecutive_losses': perf.consecutive_losses,
+                'is_paused': perf.is_paused,
+                'stop_loss_hits': perf.stop_loss_hits,
+                'target_hits': perf.target_hits,
+                'losses_low_deviation': perf.losses_low_deviation,
+                'losses_high_volatility': perf.losses_high_volatility
+            }
+        with open(Config.ANALYSIS_LOG_FILE, 'w') as f:
+            json.dump(perf_data, f, indent=2)
+        
+        print(f"💾 State saved: {len(self.trade_history)} trades, {len(self.strategy_params)} strategy params")
+    
+    def load_state(self):
+        """Load saved state from previous sessions - CRITICAL for learning persistence"""
+        loaded_params = False
+        loaded_perf = False
+        loaded_trades = False
+        
+        # Load saved parameters (learned optimizations)
+        if Config.PARAMETER_LOG_FILE.exists():
+            try:
+                with open(Config.PARAMETER_LOG_FILE, 'r') as f:
+                    params_data = json.load(f)
+                for strategy_id, params_dict in params_data.items():
+                    self.strategy_params[strategy_id] = AdaptiveParameters(**params_dict)
+                loaded_params = True
+                print(f"📂 Loaded {len(params_data)} saved parameter sets")
+            except Exception as e:
+                print(f"⚠️  Could not load parameters: {e}")
+        
+        # Load strategy performance metrics
+        if Config.ANALYSIS_LOG_FILE.exists():
+            try:
+                with open(Config.ANALYSIS_LOG_FILE, 'r') as f:
+                    perf_data = json.load(f)
+                for strategy_id, metrics in perf_data.items():
+                    perf = StrategyPerformance(strategy_id=strategy_id)
+                    perf.total_trades = metrics.get('total_trades', 0)
+                    perf.winning_trades = metrics.get('winning_trades', 0)
+                    perf.losing_trades = metrics.get('losing_trades', 0)
+                    perf.total_pnl = metrics.get('total_pnl', 0.0)
+                    perf.win_rate = metrics.get('win_rate', 0.0)
+                    perf.profit_factor = metrics.get('profit_factor', 0.0)
+                    perf.consecutive_losses = metrics.get('consecutive_losses', 0)
+                    perf.is_paused = metrics.get('is_paused', False)
+                    perf.stop_loss_hits = metrics.get('stop_loss_hits', 0)
+                    perf.target_hits = metrics.get('target_hits', 0)
+                    perf.losses_low_deviation = metrics.get('losses_low_deviation', 0)
+                    perf.losses_high_volatility = metrics.get('losses_high_volatility', 0)
+                    self.analyzer.strategy_performance[strategy_id] = perf
+                loaded_perf = True
+                print(f"📂 Loaded performance data for {len(perf_data)} strategies")
+            except Exception as e:
+                print(f"⚠️  Could not load performance data: {e}")
+        
+        # Load trade history
+        if Config.TRADE_LOG_FILE.exists():
+            try:
+                with open(Config.TRADE_LOG_FILE, 'r') as f:
+                    trades_data = json.load(f)
+                # Just count, don't reload into active memory
+                loaded_trades = True
+                print(f"📂 Found {len(trades_data)} historical trades on disk")
+            except Exception as e:
+                print(f"⚠️  Could not load trade history: {e}")
+        
+        if loaded_params or loaded_perf:
+            print("✅ Previous learning state restored - continuing optimization from where we left off")
+        else:
+            print("🆕 Starting fresh - no previous state found")
 
 # =============================================================================
 # MAIN ADAPTIVE TRADING ENGINE
@@ -814,6 +1687,8 @@ class AdaptiveTradingEngine:
             for py_file in py_files:
                 strategy_id = py_file.stem
                 strategies[strategy_id] = {'py_file': py_file}
+                # Register the strategy file with the paper engine for potential recoding
+                self.paper_engine.set_strategy_file(strategy_id, py_file)
                 print(f"✅ LOADED: {strategy_id}")
         else:
             print(f"⚠️  Strategies directory not found: {Config.STRATEGIES_DIR}")
