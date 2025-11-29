@@ -35,7 +35,7 @@ class Config:
     DEFAULT_LEVERAGE = 3
     HTX_BASE_URL = "https://api.huobi.pro"
     TRADEABLE_TOKENS = ['BTC', 'ETH', 'SOL', 'XRP', 'ADA', 'DOT', 'LINK', 'AVAX']
-    STRATEGIES_DIR = Path("./successfule_strategies")  # Local path
+    STRATEGIES_DIR = Path("./successful_strategies")  # Local path
     CHECK_INTERVAL = 30
     
     # Position Limits
