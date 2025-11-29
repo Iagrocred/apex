@@ -92,6 +92,7 @@ class Config:
     OPTIMIZATION_INTERVAL = 10        # Run optimization every 10 cycles (~5 min)
     MAX_CONSECUTIVE_LOSSES = 3        # Pause strategy after 3 consecutive losses
     MAX_OPTIMIZATION_ITERATIONS = 10  # Max times to optimize before giving up
+    USE_IMPROVED_STRATEGIES = True    # Automatically use improved strategies (v1, v2, v3...)
     
     # Log Files - CRITICAL for state persistence
     TRADE_LOG_FILE = Path("./tradepex_trades.json")        # All trade history
@@ -185,15 +186,15 @@ class StrategyPerformance:
 @dataclass
 class AdaptiveParameters:
     """Dynamically adjustable strategy parameters"""
-    # Entry Conditions
-    min_deviation_percent: float = 0.3   # Minimum deviation from band to enter
-    max_volatility_percent: float = 5.0  # Max 24h volatility to enter
-    min_volume_ratio: float = 0.5        # Min volume vs average
+    # Entry Conditions - LOWERED defaults to catch more trades
+    min_deviation_percent: float = 0.15  # Minimum deviation from band to enter (lowered from 0.3)
+    max_volatility_percent: float = 8.0  # Max 24h volatility to enter (increased from 5.0)
+    min_volume_ratio: float = 0.3        # Min volume vs average (lowered from 0.5)
     
     # Risk Management
     stop_loss_atr_multiplier: float = 1.5
-    take_profit_atr_multiplier: float = 2.0
-    max_holding_periods: int = 20        # Max periods before forced exit
+    take_profit_atr_multiplier: float = 1.5  # Closer targets for faster closes (was 2.0)
+    max_holding_periods: int = 12        # Max periods before forced exit (was 20 = 5hrs, now 3hrs)
     
     # Band Calculation
     std_dev_multiplier: float = 2.0      # For VWAP bands
@@ -1675,26 +1676,124 @@ class AdaptiveTradingEngine:
             self.executors[strategy_id] = AdaptiveStrategyExecutor(params)
     
     def load_strategies(self) -> Dict:
-        """Load strategies from directory"""
+        """
+        Load strategies from directory.
+        If USE_IMPROVED_STRATEGIES is True, will also check improved_strategies/ folder
+        and use the LATEST version (v1, v2, v3...) of each strategy automatically.
+        """
         strategies = {}
         
         print(f"🔍 Looking for strategies in: {Config.STRATEGIES_DIR}")
         
+        # First, load original strategies
+        original_strategies = {}
         if Config.STRATEGIES_DIR.exists():
             py_files = [f for f in Config.STRATEGIES_DIR.glob("*.py") if '_meta' not in str(f)]
-            print(f"📁 Found {len(py_files)} strategy files")
+            print(f"📁 Found {len(py_files)} original strategy files")
             
             for py_file in py_files:
                 strategy_id = py_file.stem
-                strategies[strategy_id] = {'py_file': py_file}
-                # Register the strategy file with the paper engine for potential recoding
+                original_strategies[strategy_id] = py_file
+        
+        # Check for improved strategies if enabled
+        improved_versions = {}  # Maps original_strategy_id -> (version, filepath)
+        
+        if Config.USE_IMPROVED_STRATEGIES and Config.IMPROVED_STRATEGIES_DIR.exists():
+            improved_files = list(Config.IMPROVED_STRATEGIES_DIR.glob("*_improved_v*.py"))
+            if improved_files:
+                print(f"📁 Found {len(improved_files)} improved strategy files")
+                
+                for improved_file in improved_files:
+                    # Parse filename: original_strategy_id_improved_v1.py
+                    filename = improved_file.stem
+                    if "_improved_v" in filename:
+                        parts = filename.rsplit("_improved_v", 1)
+                        if len(parts) == 2:
+                            original_id = parts[0]
+                            try:
+                                version = int(parts[1])
+                                # Keep track of highest version for each original strategy
+                                if original_id not in improved_versions or version > improved_versions[original_id][0]:
+                                    improved_versions[original_id] = (version, improved_file)
+                            except ValueError:
+                                continue
+        
+        # Build final strategy list, using improved versions where available
+        for strategy_id, py_file in original_strategies.items():
+            if strategy_id in improved_versions and Config.USE_IMPROVED_STRATEGIES:
+                version, improved_file = improved_versions[strategy_id]
+                strategies[strategy_id] = {
+                    'py_file': improved_file,
+                    'original_file': py_file,
+                    'version': version,
+                    'is_improved': True
+                }
+                # Register the ORIGINAL file for future recoding
+                self.paper_engine.set_strategy_file(strategy_id, py_file)
+                print(f"✅ LOADED: {strategy_id} (USING IMPROVED v{version})")
+            else:
+                strategies[strategy_id] = {
+                    'py_file': py_file,
+                    'original_file': py_file,
+                    'version': 0,
+                    'is_improved': False
+                }
                 self.paper_engine.set_strategy_file(strategy_id, py_file)
                 print(f"✅ LOADED: {strategy_id}")
-        else:
-            print(f"⚠️  Strategies directory not found: {Config.STRATEGIES_DIR}")
         
-        print(f"🎯 Total strategies: {len(strategies)}")
+        # Summary
+        improved_count = sum(1 for s in strategies.values() if s.get('is_improved', False))
+        print(f"🎯 Total strategies: {len(strategies)} ({improved_count} using improved versions)")
+        
         return strategies
+    
+    def refresh_executor(self, strategy_id: str):
+        """
+        Refresh a strategy's executor after optimization.
+        This ensures the new parameters are used for signal generation.
+        Called automatically after LLM optimization creates a new version.
+        """
+        if strategy_id in self.strategies:
+            # Get the updated parameters
+            params = self.paper_engine.get_params(strategy_id)
+            # Create a new executor with the updated parameters
+            self.executors[strategy_id] = AdaptiveStrategyExecutor(params)
+            
+            # Check if there's a new improved version available
+            self._check_for_improved_version(strategy_id)
+            
+            print(f"🔄 Executor refreshed for: {strategy_id[:40]} (v{params.version})")
+    
+    def _check_for_improved_version(self, strategy_id: str):
+        """Check if a new improved version exists and update strategy info"""
+        if not Config.USE_IMPROVED_STRATEGIES or not Config.IMPROVED_STRATEGIES_DIR.exists():
+            return
+        
+        # Look for improved versions
+        pattern = f"{strategy_id}_improved_v*.py"
+        improved_files = list(Config.IMPROVED_STRATEGIES_DIR.glob(pattern))
+        
+        if improved_files:
+            # Find the highest version
+            best_version = 0
+            best_file = None
+            
+            for f in improved_files:
+                try:
+                    version = int(f.stem.rsplit("_v", 1)[1])
+                    if version > best_version:
+                        best_version = version
+                        best_file = f
+                except (ValueError, IndexError):
+                    continue
+            
+            if best_file and strategy_id in self.strategies:
+                current_version = self.strategies[strategy_id].get('version', 0)
+                if best_version > current_version:
+                    self.strategies[strategy_id]['py_file'] = best_file
+                    self.strategies[strategy_id]['version'] = best_version
+                    self.strategies[strategy_id]['is_improved'] = True
+                    print(f"🆕 Now using improved v{best_version} for: {strategy_id[:40]}")
     
     def execute_strategy_for_token(self, strategy_id: str, token: str):
         """Execute strategy with adaptive parameters"""
@@ -1724,31 +1823,45 @@ class AdaptiveTradingEngine:
         open_positions = [p for p in self.paper_engine.positions.values() if p.status == "OPEN"]
         closed_positions = [p for p in self.paper_engine.positions.values() if p.status == "CLOSED"]
         total_pnl = sum(p.pnl for p in closed_positions)
+        total_closed_trades = len(self.paper_engine.trade_history)
         
         print(f"\n{'='*80}")
         print(f"🔄 TRADEPEX ADAPTIVE - Dynamic Strategy Optimizer")
         print(f"{'='*80}")
         print(f"⏰ Cycle: {self.cycle_count} | Runtime: {datetime.now() - self.start_time}")
         print(f"💰 Capital: ${self.paper_engine.capital:.2f} | Total PnL: ${total_pnl:+.2f}")
-        print(f"📊 Open: {len(open_positions)}/{Config.MAX_TOTAL_POSITIONS} | Closed: {len(closed_positions)}")
+        print(f"📊 Open: {len(open_positions)}/{Config.MAX_TOTAL_POSITIONS} | Closed: {total_closed_trades}")
+        
+        # Show optimization status
+        if total_closed_trades < Config.MIN_TRADES_FOR_ANALYSIS:
+            print(f"🔄 Optimization: WAITING ({total_closed_trades}/{Config.MIN_TRADES_FOR_ANALYSIS} closed trades needed)")
+        else:
+            print(f"🔄 Optimization: ACTIVE (analyzing {total_closed_trades} trades)")
         
         # Performance summary
-        if closed_positions:
-            wins = len([p for p in closed_positions if p.pnl > 0])
-            win_rate = wins / len(closed_positions) * 100
-            print(f"📈 Win Rate: {win_rate:.1f}% ({wins}/{len(closed_positions)})")
+        if total_closed_trades > 0:
+            wins = len([t for t in self.paper_engine.trade_history if t.pnl_usd > 0])
+            win_rate = wins / total_closed_trades * 100
+            print(f"📈 Win Rate: {win_rate:.1f}% ({wins}/{total_closed_trades})")
         
         if open_positions:
-            print(f"\n📊 OPEN POSITIONS:")
+            print(f"\n📊 OPEN POSITIONS (waiting to close for analysis):")
             for position in open_positions:
                 current_price = self.htx_client.get_current_price(position.symbol) or position.entry_price
                 if position.direction == "BUY":
                     pnl_percent = (current_price - position.entry_price) / position.entry_price * 100
+                    dist_to_target = (position.target_price - current_price) / current_price * 100
+                    dist_to_stop = (current_price - position.stop_loss) / current_price * 100
                 else:
                     pnl_percent = (position.entry_price - current_price) / position.entry_price * 100
+                    dist_to_target = (current_price - position.target_price) / current_price * 100
+                    dist_to_stop = (position.stop_loss - current_price) / current_price * 100
+                
+                # Calculate time in trade
+                time_in_trade = (datetime.now() - position.entry_time).total_seconds() / 60
                 
                 print(f"   {position.strategy_id[:25]:<25} {position.symbol:<5} {position.direction:<4} "
-                      f"Entry: ${position.entry_price:<9.2f} PnL: {pnl_percent:+.2f}%")
+                      f"PnL: {pnl_percent:+.2f}% | Target: {dist_to_target:+.2f}% away | Stop: {dist_to_stop:.2f}% away | {time_in_trade:.0f}min")
         
         print(f"{'='*80}\n")
     
@@ -1811,8 +1924,27 @@ class AdaptiveTradingEngine:
                 # Periodic optimization
                 if self.cycle_count % Config.OPTIMIZATION_INTERVAL == 0:
                     print("\n🔧 RUNNING OPTIMIZATION CYCLE...")
-                    for strategy_id in self.strategies:
-                        self.paper_engine.optimize_strategy(strategy_id)
+                    
+                    # Show current status
+                    open_pos = [p for p in self.paper_engine.positions.values() if p.status == "OPEN"]
+                    closed_pos = [p for p in self.paper_engine.positions.values() if p.status == "CLOSED"]
+                    total_closed_trades = len(self.paper_engine.trade_history)
+                    
+                    print(f"   📊 Status: {len(open_pos)} open positions, {total_closed_trades} closed trades")
+                    print(f"   📋 Need {Config.MIN_TRADES_FOR_ANALYSIS} closed trades per strategy for LLM analysis")
+                    
+                    if total_closed_trades == 0:
+                        print(f"   ⏳ WAITING: No trades closed yet - need trades to complete (hit target/stop/timeout)")
+                        print(f"   💡 Trades will close when: target hit, stop loss hit, or ~3hr max hold timeout")
+                    else:
+                        # Run optimization for each strategy
+                        for strategy_id in self.strategies:
+                            self.paper_engine.optimize_strategy(strategy_id)
+                            # Refresh executor if optimization happened
+                            if strategy_id in self.paper_engine.strategy_params:
+                                params = self.paper_engine.get_params(strategy_id)
+                                if params.optimization_count > 0:
+                                    self.refresh_executor(strategy_id)
                     
                     # Print analysis
                     self.paper_engine.analyzer.print_analysis()
