@@ -1162,7 +1162,9 @@ class AdaptiveStrategyExecutor:
         """
         Get parameter adjustments based on current market regime.
         
-        This implements strategy-specific adaptation rules for different market conditions.
+        IMPORTANT: These are SMALL adjustments - NOT meant to prevent trading!
+        The regime info is primarily for logging and LLM optimization context.
+        Multipliers close to 1.0 to keep trading active.
         """
         adjustments = {
             'min_deviation_mult': 1.0,
@@ -1174,29 +1176,29 @@ class AdaptiveStrategyExecutor:
         }
         
         if regime == "CHOPPY_HIGH_VOL":
-            # High volatility choppy market - widen stops, require larger deviation
-            adjustments['min_deviation_mult'] = 1.5  # Require bigger moves to enter
-            adjustments['stop_loss_mult'] = 1.5      # Wider stops to avoid whipsaws
-            adjustments['take_profit_mult'] = 1.3    # Slightly further targets
-            adjustments['volatility_filter_mult'] = 1.3  # Allow higher volatility
-            adjustments['regime_note'] = "⚡ CHOPPY: Wider stops, larger entries"
+            # High volatility - slightly wider stops, keep trading!
+            adjustments['min_deviation_mult'] = 1.0   # NO CHANGE - don't block trades!
+            adjustments['stop_loss_mult'] = 1.2       # Slightly wider stops
+            adjustments['take_profit_mult'] = 1.1     # Slightly further targets
+            adjustments['volatility_filter_mult'] = 1.5  # Allow higher volatility
+            adjustments['regime_note'] = "⚡ CHOPPY: Wider stops"
             
         elif regime == "STRONG_TREND":
-            # Strong trending market - tighter stops, follow the trend
-            adjustments['min_deviation_mult'] = 0.8   # Enter on smaller pullbacks
-            adjustments['stop_loss_mult'] = 0.8       # Tighter stops (trend protects)
-            adjustments['take_profit_mult'] = 1.2     # Let winners run
-            adjustments['regime_note'] = "📈 TRENDING: Tighter stops, trail profits"
+            # Strong trending - use normal params
+            adjustments['min_deviation_mult'] = 1.0   # NO CHANGE
+            adjustments['stop_loss_mult'] = 1.0       # Normal stops
+            adjustments['take_profit_mult'] = 1.1     # Slightly further targets
+            adjustments['regime_note'] = "📈 TRENDING"
             
         elif regime == "RANGING_LOW_VOL":
             # Low volatility ranging - perfect for mean reversion
-            adjustments['min_deviation_mult'] = 0.7   # Enter on smaller deviations
+            adjustments['min_deviation_mult'] = 0.9   # Slightly easier entry
             adjustments['stop_loss_mult'] = 1.0       # Normal stops
-            adjustments['take_profit_mult'] = 0.8     # Closer targets (quick scalps)
-            adjustments['regime_note'] = "📊 RANGING: Quick scalps, tight targets"
+            adjustments['take_profit_mult'] = 0.9     # Closer targets (quick scalps)
+            adjustments['regime_note'] = "📊 RANGING: Quick scalps"
             
         else:  # MIXED
-            adjustments['regime_note'] = "⚖️  MIXED: Standard parameters"
+            adjustments['regime_note'] = "⚖️ MIXED"
         
         return adjustments
     
