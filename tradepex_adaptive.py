@@ -43,6 +43,7 @@ import time
 import pandas as pd
 import numpy as np
 import requests
+import importlib.util
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
@@ -775,21 +776,107 @@ Respond ONLY with valid JSON."""
             return self._fallback_optimize(params, performance), None
     
     def _build_trade_summary(self, trades: List['TradeContext']) -> str:
-        """Build a summary of recent trades for the LLM"""
+        """Build a detailed summary of recent trades for the LLM"""
         if not trades:
             return "No trades yet"
         
         summary_lines = []
-        for trade in trades[-10:]:  # Last 10 trades
-            outcome = "WIN" if trade.pnl_usd > 0 else "LOSS"
+        
+        # Overall statistics
+        total_trades = len(trades)
+        wins = len([t for t in trades if t.pnl_usd > 0])
+        losses = len([t for t in trades if t.pnl_usd <= 0])
+        total_pnl = sum(t.pnl_usd for t in trades)
+        avg_win = sum(t.pnl_usd for t in trades if t.pnl_usd > 0) / wins if wins > 0 else 0
+        avg_loss = sum(t.pnl_usd for t in trades if t.pnl_usd <= 0) / losses if losses > 0 else 0
+        
+        summary_lines.append(f"### TRADE STATISTICS ({total_trades} trades)")
+        summary_lines.append(f"- Wins: {wins}, Losses: {losses}")
+        summary_lines.append(f"- Total PnL: ${total_pnl:+.2f}")
+        summary_lines.append(f"- Average Win: ${avg_win:+.2f}, Average Loss: ${avg_loss:.2f}")
+        summary_lines.append("")
+        
+        # Market conditions analysis
+        market_analysis = self._analyze_market_conditions(trades)
+        summary_lines.append("### MARKET CONDITIONS ANALYSIS")
+        for key, value in market_analysis.items():
+            summary_lines.append(f"- {key}: {value}")
+        summary_lines.append("")
+        
+        # Individual trade details (last 10)
+        summary_lines.append("### RECENT TRADES (last 10)")
+        for i, trade in enumerate(trades[-10:], 1):
+            outcome = "WIN ✅" if trade.pnl_usd > 0 else "LOSS ❌"
+            holding_time = getattr(trade, 'holding_periods', 'N/A')
             summary_lines.append(
-                f"- {trade.symbol} {trade.direction}: Entry ${trade.entry_price:.2f}, "
-                f"Exit ${trade.exit_price:.2f}, PnL: ${trade.pnl_usd:+.2f} ({outcome}), "
-                f"Reason: {trade.exit_reason}, Deviation: {trade.deviation_percent:.2f}%, "
-                f"Volatility: {trade.volatility_24h:.2f}%, Trend: {trade.trend_direction}"
+                f"{i}. {trade.symbol} {trade.direction}: "
+                f"Entry ${trade.entry_price:.2f} → Exit ${trade.exit_price:.2f}, "
+                f"PnL: ${trade.pnl_usd:+.2f} ({outcome})"
+            )
+            summary_lines.append(
+                f"   Exit Reason: {trade.exit_reason}, "
+                f"Deviation: {trade.deviation_percent:.2f}%, "
+                f"Volatility: {trade.volatility_24h:.2f}%, "
+                f"Trend: {trade.trend_direction}, "
+                f"Holding: {holding_time} periods"
             )
         
         return "\n".join(summary_lines)
+    
+    def _analyze_market_conditions(self, trades: List['TradeContext']) -> Dict[str, str]:
+        """Analyze market conditions from recent trades for better LLM context"""
+        if not trades:
+            return {}
+        
+        analysis = {}
+        
+        # Trend analysis
+        up_trends = sum(1 for t in trades if t.trend_direction == "UP")
+        down_trends = sum(1 for t in trades if t.trend_direction == "DOWN")
+        sideways = sum(1 for t in trades if t.trend_direction == "SIDEWAYS")
+        total = len(trades)
+        analysis["Dominant Trend"] = f"UP: {up_trends}/{total}, DOWN: {down_trends}/{total}, SIDEWAYS: {sideways}/{total}"
+        
+        # Pre-compute losing trades to avoid duplicate list comprehension
+        losing_trades = [t for t in trades if t.pnl_usd <= 0]
+        num_losses = len(losing_trades)
+        
+        # Volatility analysis
+        avg_volatility = sum(t.volatility_24h for t in trades) / total
+        high_vol_losses = sum(1 for t in losing_trades if t.volatility_24h > avg_volatility)
+        analysis["Avg Volatility"] = f"{avg_volatility:.2f}%"
+        analysis["High Vol Losses"] = f"{high_vol_losses}/{num_losses} losses in high volatility"
+        
+        # Deviation analysis
+        avg_deviation = sum(t.deviation_percent for t in trades) / total
+        low_dev_losses = sum(1 for t in losing_trades if t.deviation_percent < avg_deviation)
+        analysis["Avg Entry Deviation"] = f"{avg_deviation:.2f}%"
+        analysis["Low Dev Losses"] = f"{low_dev_losses}/{num_losses} losses from low deviation entries"
+        
+        # Exit reason analysis
+        exit_reasons = {}
+        for trade in trades:
+            reason = trade.exit_reason
+            if reason not in exit_reasons:
+                exit_reasons[reason] = {'wins': 0, 'losses': 0}
+            if trade.pnl_usd > 0:
+                exit_reasons[reason]['wins'] += 1
+            else:
+                exit_reasons[reason]['losses'] += 1
+        
+        exit_summary = []
+        for reason, counts in exit_reasons.items():
+            exit_summary.append(f"{reason}: {counts['wins']}W/{counts['losses']}L")
+        analysis["Exit Reasons"] = ", ".join(exit_summary)
+        
+        # Win rate by direction
+        buy_trades = [t for t in trades if t.direction == "BUY"]
+        sell_trades = [t for t in trades if t.direction == "SELL"]
+        buy_wins = sum(1 for t in buy_trades if t.pnl_usd > 0) if buy_trades else 0
+        sell_wins = sum(1 for t in sell_trades if t.pnl_usd > 0) if sell_trades else 0
+        analysis["Direction Performance"] = f"BUY: {buy_wins}/{len(buy_trades)} wins, SELL: {sell_wins}/{len(sell_trades)} wins"
+        
+        return analysis
     
     def _parse_llm_response(self, response: str, current_params: 'AdaptiveParameters') -> Tuple[Optional['AdaptiveParameters'], Dict]:
         """Parse LLM JSON response and create new parameters"""
@@ -1072,6 +1159,86 @@ class AdaptiveStrategyExecutor:
             **context,
             'deviation_percent': max(lower_deviation, upper_deviation)
         }
+    
+    def load_and_execute_strategy(self, strategy_file: Path, df: pd.DataFrame, current_price: float) -> Dict:
+        """
+        Dynamically load and execute a strategy from a Python file.
+        
+        This allows running the actual strategy code (including improved versions)
+        instead of just using adaptive parameters.
+        
+        Args:
+            strategy_file: Path to the strategy Python file
+            df: DataFrame with OHLCV data
+            current_price: Current price of the asset
+            
+        Returns:
+            Signal dictionary with trade details
+        """
+        try:
+            # Import strategy module dynamically
+            spec = importlib.util.spec_from_file_location("strategy_module", strategy_file)
+            if spec is None or spec.loader is None:
+                print(f"⚠️  Could not load spec for {strategy_file}")
+                return self.generate_signal(df, current_price)
+            
+            strategy_module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(strategy_module)
+            
+            # Try to find and instantiate the strategy class
+            strategy_instance = None
+            
+            # Look for common strategy class names
+            strategy_class_names = [
+                'ImprovedStrategy',
+                'VWAPStrategy', 
+                'TradingStrategy',
+                'Strategy',
+                'MeanReversionStrategy',
+                'MarketMakerStrategy'
+            ]
+            
+            for class_name in strategy_class_names:
+                if hasattr(strategy_module, class_name):
+                    strategy_class = getattr(strategy_module, class_name)
+                    try:
+                        strategy_instance = strategy_class()
+                        break
+                    except Exception:
+                        continue
+            
+            # If no known class found, look for any class with generate_signal method
+            if strategy_instance is None:
+                for name in dir(strategy_module):
+                    obj = getattr(strategy_module, name)
+                    if isinstance(obj, type) and hasattr(obj, 'generate_signal'):
+                        try:
+                            strategy_instance = obj()
+                            break
+                        except Exception:
+                            continue
+            
+            # If we found a strategy, use it
+            if strategy_instance is not None and hasattr(strategy_instance, 'generate_signal'):
+                try:
+                    signal = strategy_instance.generate_signal(df, current_price)
+                    # Ensure signal has required fields
+                    if isinstance(signal, dict) and 'signal' in signal:
+                        # Add context if missing
+                        if 'vwap' not in signal:
+                            context = self.calculate_market_context(df)
+                            signal.update(context)
+                        return signal
+                except Exception as e:
+                    print(f"⚠️  Strategy {strategy_file.stem} generate_signal failed: {e}")
+            
+            # Fallback to adaptive parameters
+            return self.generate_signal(df, current_price)
+            
+        except Exception as e:
+            print(f"❌ Failed to load strategy {strategy_file}: {e}")
+            # Fallback to adaptive parameters
+            return self.generate_signal(df, current_price)
 
 # =============================================================================
 # TRADE ANALYZER - Identifies Loss Patterns
