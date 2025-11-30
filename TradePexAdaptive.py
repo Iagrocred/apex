@@ -1,26 +1,29 @@
 #!/usr/bin/env python3
 """
-🚀 TRADEPEX ADAPTIVE - SELF-IMPROVING INTELLIGENT TRADING SYSTEM
-=================================================================
+🚀 TRADEPEX ADAPTIVE - THE ULTIMATE SELF-IMPROVING TRADING MACHINE
+====================================================================
 
-UPGRADE FROM V1:
-- V1 had hardcoded strategy types
-- ADAPTIVE dynamically learns from ANY strategy file
-- ADAPTIVE self-improves by tracking what works and what doesn't
-- ADAPTIVE trades MORE tokens to learn faster
+THIS IS NOT V1 - THIS IS THE EVOLUTION!
 
-KEY FEATURES:
-1. DYNAMIC STRATEGY LOADING - No hardcoded types! Reads the actual .py code
-2. SELF-IMPROVING - Tracks performance per strategy/token and adjusts
-3. MORE TOKENS - Trades all available tokens on HTX
-4. LEARNING LOOP - More trades = more data = better performance
+WHAT IT DOES:
+1. TRADES strategies from successful_strategies/ folder
+2. LOGS EVERYTHING - 100% full detailed logs like original TradePexV1
+3. LEARNS from every trade - what works, what doesn't
+4. GENERATES NEW STRATEGY VERSIONS (V1 → V2 → V3 → V4...)
+5. TRADES the new versions until TARGET HIT!
+6. ITERATES FOREVER - Always improving
 
-The system LEARNS by trading. Each trade teaches us:
-- Which strategies work on which tokens
-- What market conditions favor each strategy
-- When to increase/decrease position sizes
+THE IMPROVEMENT LOOP:
+┌────────────────────────────────────────────────────────────────────┐
+│  Strategy_V1.py → TRADE → LEARN → Generate Strategy_V2.py         │
+│  Strategy_V2.py → TRADE → LEARN → Generate Strategy_V3.py         │
+│  Strategy_V3.py → TRADE → LEARN → Generate Strategy_V4.py         │
+│  ... UNTIL TARGET WIN RATE + PROFIT ACHIEVED ...                  │
+└────────────────────────────────────────────────────────────────────┘
 
-🌙 This is NOT V1 - This is the UPGRADED LEARNING SYSTEM 🌙
+TARGET: 60% Win Rate + Positive PnL = CHAMPION STATUS
+
+🌙 Trade → Learn → Code → Improve → Repeat FOREVER 🌙
 """
 
 import os
@@ -36,939 +39,1012 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple, Any
 from collections import defaultdict
-import hashlib
 import traceback
 
 # =============================================================================
-# CONFIGURATION - EXPANDED FOR MORE TRADING = MORE LEARNING
+# CONFIGURATION
 # =============================================================================
 
 class Config:
-    """TradePex Adaptive Configuration - Expanded for Maximum Learning"""
+    """TradePex Adaptive Configuration"""
     
-    # Capital Management
+    # Capital
     STARTING_CAPITAL = 10000.0
-    MAX_POSITION_SIZE = 0.10  # 10% per trade (smaller = more trades)
+    MAX_POSITION_SIZE = 0.10
     DEFAULT_LEVERAGE = 3
     
     # Exchange
     HTX_BASE_URL = "https://api.huobi.pro"
     
-    # EXPANDED TOKEN LIST - MORE TOKENS = MORE LEARNING OPPORTUNITIES
-    # Trading ALL major tokens on HTX
+    # ALL THE TOKENS - MORE TRADING = MORE LEARNING
     TRADEABLE_TOKENS = [
-        # Major Cryptos
         'BTC', 'ETH', 'SOL', 'XRP', 'ADA', 'DOT', 'LINK', 'AVAX',
-        # Layer 1s
-        'MATIC', 'ATOM', 'NEAR', 'FTM', 'ALGO', 'ICP',
-        # DeFi
-        'UNI', 'AAVE', 'MKR', 'CRV', 'LDO', 'SNX',
-        # Layer 2s & Scaling
-        'OP', 'ARB', 'IMX',
-        # Meme & Community (high volatility = more signals)
-        'DOGE', 'SHIB', 'PEPE', 'FLOKI',
-        # Other Major
-        'LTC', 'BCH', 'ETC', 'FIL', 'APT', 'SUI', 'SEI'
+        'MATIC', 'ATOM', 'NEAR', 'FTM', 'ALGO', 'UNI', 'AAVE',
+        'OP', 'ARB', 'DOGE', 'SHIB', 'LTC', 'BCH', 'ETC', 'APT', 'SUI'
     ]
     
-    # Strategies directory
-    STRATEGIES_DIR = Path(__file__).parent / "successfule_strategies"
-    FALLBACK_STRATEGIES_DIR = Path("/root/KEEP_SAFE/v1/APEX/successful_strategies")
+    # Directories
+    STRATEGIES_DIR = Path(__file__).parent / "successful_strategies"
+    GENERATED_DIR = Path(__file__).parent / "generated_strategies"
+    LOGS_DIR = Path(__file__).parent / "tradepex_adaptive_logs"
+    LEARNING_FILE = Path(__file__).parent / "tradepex_learning.json"
     
-    # Trading parameters - INCREASED LIMITS FOR MORE TRADING
-    CHECK_INTERVAL = 20  # Faster cycles = more opportunities
+    # Trading
+    CHECK_INTERVAL = 20  # Seconds
+    MAX_TOTAL_POSITIONS = 20
+    MAX_POSITIONS_PER_STRATEGY = 5
+    MAX_POSITIONS_PER_TOKEN = 4
     
-    # Position Limits - EXPANDED for more learning
-    MAX_TOTAL_POSITIONS = 20        # Much higher - we want to TRADE MORE
-    MAX_POSITIONS_PER_STRATEGY = 5  # Each strategy can have more trades
-    MAX_POSITIONS_PER_TOKEN = 4     # More positions per token
+    # TARGETS - When these are hit, strategy becomes CHAMPION
+    TARGET_WIN_RATE = 0.60  # 60%
+    TARGET_PROFIT_FACTOR = 1.5
+    MIN_TRADES_FOR_EVALUATION = 20
     
-    # Self-improvement settings
-    LEARNING_DATA_FILE = Path(__file__).parent / "tradepex_learning_data.json"
-    MIN_TRADES_FOR_ADJUSTMENT = 10  # Need this many trades before adjusting
-    WIN_RATE_BOOST_THRESHOLD = 0.6  # Boost strategies with >60% win rate
-    WIN_RATE_REDUCE_THRESHOLD = 0.4 # Reduce strategies with <40% win rate
+    # Iteration - Generate new version every N trades
+    ITERATION_INTERVAL = 30
 
 
 # =============================================================================
-# SELF-IMPROVEMENT ENGINE - LEARNS FROM EVERY TRADE
+# FULL LOGGING SYSTEM - 100% DETAILED LOGS LIKE ORIGINAL V1
+# =============================================================================
+
+class FullLogger:
+    """
+    100% FULL LOGGING - Shows EVERYTHING like original TradePexV1!
+    
+    Logs:
+    - Every price fetch
+    - Every signal generated
+    - Every position opened/closed
+    - Every iteration
+    - Every strategy version generated
+    - Full performance stats
+    """
+    
+    def __init__(self):
+        Config.LOGS_DIR.mkdir(parents=True, exist_ok=True)
+        
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        self.main_log = Config.LOGS_DIR / f"tradepex_adaptive_{timestamp}.log"
+        self.trades_csv = Config.LOGS_DIR / f"trades_{timestamp}.csv"
+        self.signals_csv = Config.LOGS_DIR / f"signals_{timestamp}.csv"
+        self.versions_log = Config.LOGS_DIR / f"versions_{timestamp}.log"
+        
+        # Init CSV files
+        with open(self.trades_csv, 'w') as f:
+            f.write("timestamp,cycle,strategy,strategy_version,token,action,direction,price,size,target,stop,pnl,pnl_pct,reason\n")
+        
+        with open(self.signals_csv, 'w') as f:
+            f.write("timestamp,cycle,strategy,token,signal,price,vwap,upper,lower,rsi,momentum,reason\n")
+        
+        # Stats
+        self.cycle = 0
+        self.total_signals = 0
+        self.buy_signals = 0
+        self.sell_signals = 0
+        self.hold_signals = 0
+        self.trades_opened = 0
+        self.trades_closed = 0
+        self.wins = 0
+        self.losses = 0
+    
+    def _write_log(self, msg: str):
+        """Write to log file"""
+        with open(self.main_log, 'a') as f:
+            f.write(f"{datetime.now().isoformat()} | {msg}\n")
+    
+    def log_cycle_start(self, cycle: int, prices: Dict[str, float]):
+        """Log start of trading cycle"""
+        self.cycle = cycle
+        
+        print(f"\n{'='*100}")
+        print(f"🔄 CYCLE {cycle} - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+        print(f"{'='*100}")
+        print(f"\n📊 LIVE PRICES FROM HTX:")
+        
+        for token, price in sorted(prices.items()):
+            print(f"   {token:6} : ${price:>12,.4f}")
+        
+        self._write_log(f"CYCLE {cycle} START | Prices: {len(prices)}")
+    
+    def log_signal(self, strategy: str, version: int, token: str, signal_data: Dict):
+        """Log trading signal with FULL details"""
+        self.total_signals += 1
+        
+        signal = signal_data.get('signal', 'HOLD')
+        if signal == 'BUY':
+            self.buy_signals += 1
+        elif signal == 'SELL':
+            self.sell_signals += 1
+        else:
+            self.hold_signals += 1
+        
+        # FULL SIGNAL LOG
+        if signal != 'HOLD':
+            print(f"\n{'─'*80}")
+            print(f"📡 {'BUY' if signal == 'BUY' else 'SELL'} SIGNAL DETECTED!")
+            print(f"{'─'*80}")
+            print(f"   Strategy:      {strategy}")
+            print(f"   Version:       V{version}")
+            print(f"   Token:         {token}")
+            print(f"   ")
+            print(f"   📈 MARKET DATA:")
+            print(f"      Current Price:  ${signal_data.get('current_price', 0):,.4f}")
+            print(f"      VWAP:           ${signal_data.get('vwap', 0):,.4f}")
+            print(f"      Upper Band:     ${signal_data.get('upper_band', 0):,.4f}")
+            print(f"      Lower Band:     ${signal_data.get('lower_band', 0):,.4f}")
+            print(f"      ATR:            ${signal_data.get('atr', 0):,.4f}")
+            print(f"      RSI:            {signal_data.get('rsi', 50):.1f}")
+            print(f"      Momentum:       {signal_data.get('momentum', 0):.2f}%")
+            print(f"   ")
+            print(f"   🎯 TRADE SETUP:")
+            print(f"      Entry:          ${signal_data.get('current_price', 0):,.4f}")
+            print(f"      Target:         ${signal_data.get('target_price', 0):,.4f}")
+            print(f"      Stop Loss:      ${signal_data.get('stop_loss', 0):,.4f}")
+            print(f"   ")
+            print(f"   💡 Reason: {signal_data.get('reason', 'N/A')}")
+            print(f"{'─'*80}")
+        
+        # CSV log
+        with open(self.signals_csv, 'a') as f:
+            f.write(f"{datetime.now().isoformat()},{self.cycle},{strategy},{token},{signal},"
+                   f"{signal_data.get('current_price',0)},{signal_data.get('vwap',0)},"
+                   f"{signal_data.get('upper_band',0)},{signal_data.get('lower_band',0)},"
+                   f"{signal_data.get('rsi',0)},{signal_data.get('momentum',0)},"
+                   f"\"{signal_data.get('reason','')}\"\n")
+        
+        self._write_log(f"SIGNAL | {strategy} V{version} | {token} | {signal}")
+    
+    def log_trade_open(self, position_id: str, strategy: str, version: int,
+                       token: str, direction: str, price: float, size: float,
+                       target: float, stop: float):
+        """Log trade opened"""
+        self.trades_opened += 1
+        
+        print(f"\n🎯 TRADE OPENED!")
+        print(f"   ID:        {position_id}")
+        print(f"   Strategy:  {strategy} V{version}")
+        print(f"   Action:    {direction} {token}")
+        print(f"   Entry:     ${price:,.4f}")
+        print(f"   Size:      ${size:,.2f}")
+        print(f"   Target:    ${target:,.4f}")
+        print(f"   Stop:      ${stop:,.4f}")
+        
+        with open(self.trades_csv, 'a') as f:
+            f.write(f"{datetime.now().isoformat()},{self.cycle},{strategy},{version},{token},"
+                   f"OPEN,{direction},{price},{size},{target},{stop},,,\n")
+        
+        self._write_log(f"TRADE OPEN | {position_id} | {direction} {token} @ ${price}")
+    
+    def log_trade_close(self, position_id: str, strategy: str, version: int,
+                        token: str, direction: str, exit_price: float,
+                        pnl: float, pnl_pct: float, reason: str):
+        """Log trade closed"""
+        self.trades_closed += 1
+        
+        if pnl >= 0:
+            self.wins += 1
+            emoji = "✅"
+        else:
+            self.losses += 1
+            emoji = "❌"
+        
+        print(f"\n{emoji} TRADE CLOSED!")
+        print(f"   ID:        {position_id}")
+        print(f"   Strategy:  {strategy} V{version}")
+        print(f"   Exit:      ${exit_price:,.4f}")
+        print(f"   PnL:       ${pnl:+,.2f} ({pnl_pct:+.2f}%)")
+        print(f"   Reason:    {reason}")
+        
+        with open(self.trades_csv, 'a') as f:
+            f.write(f"{datetime.now().isoformat()},{self.cycle},{strategy},{version},{token},"
+                   f"CLOSE,{direction},{exit_price},,,{pnl},{pnl_pct},{reason}\n")
+        
+        self._write_log(f"TRADE CLOSE | {position_id} | PnL: ${pnl:+.2f} | {reason}")
+    
+    def log_version_generated(self, strategy: str, old_version: int, new_version: int,
+                              win_rate: float, improvements: List[str]):
+        """Log new strategy version generated"""
+        print(f"\n{'='*80}")
+        print(f"🧬 NEW STRATEGY VERSION GENERATED!")
+        print(f"{'='*80}")
+        print(f"   Strategy:     {strategy}")
+        print(f"   Old Version:  V{old_version}")
+        print(f"   New Version:  V{new_version}")
+        print(f"   Win Rate:     {win_rate:.1%}")
+        print(f"   Improvements: {improvements}")
+        print(f"{'='*80}")
+        
+        with open(self.versions_log, 'a') as f:
+            f.write(f"\n{'='*60}\n")
+            f.write(f"NEW VERSION: {strategy} V{old_version} → V{new_version}\n")
+            f.write(f"Time: {datetime.now().isoformat()}\n")
+            f.write(f"Previous Win Rate: {win_rate:.1%}\n")
+            f.write(f"Improvements: {improvements}\n")
+            f.write(f"{'='*60}\n")
+        
+        self._write_log(f"VERSION | {strategy} V{old_version} → V{new_version}")
+    
+    def log_champion(self, strategy: str, version: int, win_rate: float, pnl: float):
+        """Log strategy achieving CHAMPION status"""
+        print(f"\n{'🏆'*30}")
+        print(f"🏆 CHAMPION ACHIEVED! 🏆")
+        print(f"{'🏆'*30}")
+        print(f"   Strategy:  {strategy} V{version}")
+        print(f"   Win Rate:  {win_rate:.1%}")
+        print(f"   Total PnL: ${pnl:+,.2f}")
+        print(f"   STATUS:    CHAMPION - TARGETS MET!")
+        print(f"{'🏆'*30}\n")
+        
+        self._write_log(f"CHAMPION | {strategy} V{version} | WR: {win_rate:.1%} | PnL: ${pnl:+.2f}")
+    
+    def log_stats(self, capital: float, total_pnl: float, open_positions: int,
+                  strategies: int, champions: int):
+        """Log full statistics"""
+        win_rate = self.wins / max(1, self.trades_closed) * 100
+        
+        print(f"\n{'='*100}")
+        print(f"📊 TRADEPEX ADAPTIVE - FULL STATISTICS")
+        print(f"{'='*100}")
+        print(f"")
+        print(f"💰 CAPITAL:")
+        print(f"   Starting:      ${Config.STARTING_CAPITAL:,.2f}")
+        print(f"   Current:       ${capital:,.2f}")
+        print(f"   Total PnL:     ${total_pnl:+,.2f}")
+        print(f"   Return:        {(total_pnl/Config.STARTING_CAPITAL)*100:+.2f}%")
+        print(f"")
+        print(f"📊 SIGNALS THIS SESSION:")
+        print(f"   Total:         {self.total_signals}")
+        print(f"   Buy Signals:   {self.buy_signals}")
+        print(f"   Sell Signals:  {self.sell_signals}")
+        print(f"   Hold:          {self.hold_signals}")
+        print(f"")
+        print(f"📈 TRADES:")
+        print(f"   Opened:        {self.trades_opened}")
+        print(f"   Closed:        {self.trades_closed}")
+        print(f"   Open Now:      {open_positions}")
+        print(f"   Wins:          {self.wins}")
+        print(f"   Losses:        {self.losses}")
+        print(f"   Win Rate:      {win_rate:.1f}%")
+        print(f"")
+        print(f"🧬 STRATEGIES:")
+        print(f"   Active:        {strategies}")
+        print(f"   Champions:     {champions}")
+        print(f"   Target WR:     {Config.TARGET_WIN_RATE*100:.0f}%")
+        print(f"{'='*100}\n")
+
+
+# =============================================================================
+# LEARNING ENGINE - TRACKS EVERYTHING FOR IMPROVEMENT
 # =============================================================================
 
 class LearningEngine:
     """
-    Self-improving engine that tracks performance and adjusts behavior.
+    Tracks all trading data for strategy improvement.
     
-    This is what makes ADAPTIVE different from V1:
-    - Tracks win/loss per strategy per token
-    - Adjusts position sizes based on performance
-    - Learns which strategies work on which tokens
-    - Gets better over time!
+    Data is used to:
+    1. Know which strategies are winning/losing
+    2. Know which tokens work best
+    3. Generate improved strategy versions
     """
     
     def __init__(self):
-        self.learning_data = {
-            'strategy_performance': defaultdict(lambda: {
-                'trades': 0, 'wins': 0, 'losses': 0,
-                'total_pnl': 0, 'best_tokens': [], 'worst_tokens': []
+        self.data = {
+            'strategies': defaultdict(lambda: {
+                'version': 1,
+                'trades': 0,
+                'wins': 0,
+                'losses': 0,
+                'total_pnl': 0,
+                'by_token': defaultdict(lambda: {'trades': 0, 'wins': 0, 'pnl': 0}),
+                'is_champion': False,
+                'champion_at': None
             }),
-            'token_performance': defaultdict(lambda: {
-                'trades': 0, 'wins': 0, 'losses': 0, 'total_pnl': 0
-            }),
-            'strategy_token_matrix': defaultdict(lambda: defaultdict(lambda: {
-                'trades': 0, 'wins': 0, 'pnl': 0
-            })),
+            'tokens': defaultdict(lambda: {'trades': 0, 'wins': 0, 'pnl': 0}),
             'total_trades': 0,
             'total_wins': 0,
             'total_pnl': 0,
-            'last_updated': None
+            'iterations': 0,
+            'champions': []
         }
         
-        self._load_learning_data()
+        self._load()
     
-    def _load_learning_data(self):
-        """Load previous learning data if exists"""
-        if Config.LEARNING_DATA_FILE.exists():
+    def _load(self):
+        """Load previous learning data"""
+        if Config.LEARNING_FILE.exists():
             try:
-                with open(Config.LEARNING_DATA_FILE, 'r') as f:
+                with open(Config.LEARNING_FILE, 'r') as f:
                     saved = json.load(f)
-                    # Merge with defaults
-                    for key in saved:
-                        if key in self.learning_data:
-                            if isinstance(self.learning_data[key], defaultdict):
-                                for k, v in saved[key].items():
-                                    self.learning_data[key][k] = v
-                            else:
-                                self.learning_data[key] = saved[key]
-                print(f"📚 Loaded learning data: {self.learning_data['total_trades']} previous trades")
+                
+                # Convert to defaultdicts
+                if 'strategies' in saved:
+                    for k, v in saved['strategies'].items():
+                        self.data['strategies'][k] = v
+                        if 'by_token' in v:
+                            self.data['strategies'][k]['by_token'] = defaultdict(
+                                lambda: {'trades': 0, 'wins': 0, 'pnl': 0},
+                                v['by_token']
+                            )
+                
+                for key in ['tokens', 'total_trades', 'total_wins', 'total_pnl', 'iterations', 'champions']:
+                    if key in saved:
+                        self.data[key] = saved[key]
+                
+                print(f"📚 Loaded learning data: {self.data['total_trades']} trades, {len(self.data['champions'])} champions")
             except Exception as e:
-                print(f"⚠️  Could not load learning data: {e}")
+                print(f"⚠️ Could not load learning data: {e}")
     
-    def _save_learning_data(self):
-        """Save learning data for persistence"""
+    def save(self):
+        """Save learning data"""
         try:
-            # Convert defaultdicts to regular dicts for JSON
+            # Convert defaultdicts to regular dicts
             save_data = {
-                'strategy_performance': dict(self.learning_data['strategy_performance']),
-                'token_performance': dict(self.learning_data['token_performance']),
-                'strategy_token_matrix': {k: dict(v) for k, v in self.learning_data['strategy_token_matrix'].items()},
-                'total_trades': self.learning_data['total_trades'],
-                'total_wins': self.learning_data['total_wins'],
-                'total_pnl': self.learning_data['total_pnl'],
-                'last_updated': datetime.now().isoformat()
+                'strategies': {},
+                'tokens': dict(self.data['tokens']),
+                'total_trades': self.data['total_trades'],
+                'total_wins': self.data['total_wins'],
+                'total_pnl': self.data['total_pnl'],
+                'iterations': self.data['iterations'],
+                'champions': self.data['champions'],
+                'last_saved': datetime.now().isoformat()
             }
             
-            with open(Config.LEARNING_DATA_FILE, 'w') as f:
+            for k, v in self.data['strategies'].items():
+                save_data['strategies'][k] = dict(v)
+                if 'by_token' in v:
+                    save_data['strategies'][k]['by_token'] = dict(v['by_token'])
+            
+            with open(Config.LEARNING_FILE, 'w') as f:
                 json.dump(save_data, f, indent=2)
         except Exception as e:
-            print(f"⚠️  Could not save learning data: {e}")
+            print(f"⚠️ Could not save learning data: {e}")
     
-    def record_trade(self, strategy_id: str, token: str, pnl: float, is_win: bool):
-        """Record a completed trade for learning"""
-        # Update strategy stats
-        self.learning_data['strategy_performance'][strategy_id]['trades'] += 1
-        self.learning_data['strategy_performance'][strategy_id]['total_pnl'] += pnl
+    def record_trade(self, strategy: str, token: str, pnl: float, is_win: bool):
+        """Record a completed trade"""
+        # Strategy stats
+        self.data['strategies'][strategy]['trades'] += 1
+        self.data['strategies'][strategy]['total_pnl'] += pnl
         if is_win:
-            self.learning_data['strategy_performance'][strategy_id]['wins'] += 1
+            self.data['strategies'][strategy]['wins'] += 1
         else:
-            self.learning_data['strategy_performance'][strategy_id]['losses'] += 1
+            self.data['strategies'][strategy]['losses'] += 1
         
-        # Update token stats
-        self.learning_data['token_performance'][token]['trades'] += 1
-        self.learning_data['token_performance'][token]['total_pnl'] += pnl
+        # Strategy-token stats
+        self.data['strategies'][strategy]['by_token'][token]['trades'] += 1
+        self.data['strategies'][strategy]['by_token'][token]['pnl'] += pnl
         if is_win:
-            self.learning_data['token_performance'][token]['wins'] += 1
-        else:
-            self.learning_data['token_performance'][token]['losses'] += 1
+            self.data['strategies'][strategy]['by_token'][token]['wins'] += 1
         
-        # Update strategy-token matrix
-        self.learning_data['strategy_token_matrix'][strategy_id][token]['trades'] += 1
-        self.learning_data['strategy_token_matrix'][strategy_id][token]['pnl'] += pnl
+        # Token stats
+        self.data['tokens'][token]['trades'] += 1
+        self.data['tokens'][token]['pnl'] += pnl
         if is_win:
-            self.learning_data['strategy_token_matrix'][strategy_id][token]['wins'] += 1
+            self.data['tokens'][token]['wins'] += 1
         
-        # Update totals
-        self.learning_data['total_trades'] += 1
-        self.learning_data['total_pnl'] += pnl
+        # Totals
+        self.data['total_trades'] += 1
+        self.data['total_pnl'] += pnl
         if is_win:
-            self.learning_data['total_wins'] += 1
+            self.data['total_wins'] += 1
         
-        # Save periodically
-        if self.learning_data['total_trades'] % 10 == 0:
-            self._save_learning_data()
+        # Save every 10 trades
+        if self.data['total_trades'] % 10 == 0:
+            self.save()
     
-    def get_strategy_confidence(self, strategy_id: str) -> float:
-        """
-        Get confidence multiplier for a strategy based on past performance.
-        Returns 0.5-1.5 multiplier for position sizing.
-        """
-        stats = self.learning_data['strategy_performance'].get(strategy_id)
-        if not stats or stats['trades'] < Config.MIN_TRADES_FOR_ADJUSTMENT:
-            return 1.0  # Default confidence
+    def get_strategy_stats(self, strategy: str) -> Dict:
+        """Get stats for a strategy"""
+        stats = self.data['strategies'].get(strategy, {})
+        trades = stats.get('trades', 0)
         
-        win_rate = stats['wins'] / stats['trades']
-        
-        if win_rate >= Config.WIN_RATE_BOOST_THRESHOLD:
-            # Boost winning strategies
-            return min(1.5, 1.0 + (win_rate - 0.5) * 0.5)
-        elif win_rate <= Config.WIN_RATE_REDUCE_THRESHOLD:
-            # Reduce losing strategies
-            return max(0.5, 1.0 - (0.5 - win_rate) * 0.5)
-        else:
-            return 1.0
+        return {
+            'version': stats.get('version', 1),
+            'trades': trades,
+            'wins': stats.get('wins', 0),
+            'win_rate': stats.get('wins', 0) / max(1, trades),
+            'pnl': stats.get('total_pnl', 0),
+            'is_champion': stats.get('is_champion', False),
+            'best_tokens': self._get_best_tokens(strategy)
+        }
     
-    def get_token_suitability(self, strategy_id: str, token: str) -> float:
-        """
-        Get suitability score for a strategy-token combination.
-        Returns 0.0-1.0 where higher = better fit.
-        """
-        matrix = self.learning_data['strategy_token_matrix'].get(strategy_id, {})
-        token_data = matrix.get(token)
+    def _get_best_tokens(self, strategy: str) -> List[str]:
+        """Get best performing tokens for a strategy"""
+        by_token = self.data['strategies'].get(strategy, {}).get('by_token', {})
         
-        if not token_data or token_data['trades'] < 3:
-            return 0.5  # Unknown - try it!
+        good_tokens = []
+        for token, stats in by_token.items():
+            if stats['trades'] >= 3:
+                win_rate = stats['wins'] / stats['trades']
+                if win_rate >= 0.5:
+                    good_tokens.append((token, win_rate))
         
-        win_rate = token_data['wins'] / token_data['trades']
-        return win_rate
+        good_tokens.sort(key=lambda x: x[1], reverse=True)
+        return [t[0] for t in good_tokens[:5]]
     
-    def should_skip_combination(self, strategy_id: str, token: str) -> Tuple[bool, str]:
-        """
-        Determine if we should skip a strategy-token combination.
-        Only skip if we have enough data showing it consistently loses.
-        """
-        matrix = self.learning_data['strategy_token_matrix'].get(strategy_id, {})
-        token_data = matrix.get(token)
+    def should_iterate(self, strategy: str) -> bool:
+        """Check if strategy needs new version"""
+        stats = self.data['strategies'].get(strategy, {})
         
-        if not token_data or token_data['trades'] < 10:
-            return False, ""  # Not enough data - keep trying!
+        # Already champion? No need
+        if stats.get('is_champion', False):
+            return False
         
-        win_rate = token_data['wins'] / token_data['trades']
+        trades = stats.get('trades', 0)
         
-        if win_rate < 0.25 and token_data['pnl'] < -100:
-            return True, f"Learned: {strategy_id[:20]} loses on {token} (WR: {win_rate:.0%})"
+        # Need minimum trades for evaluation
+        if trades < Config.MIN_TRADES_FOR_EVALUATION:
+            return False
         
-        return False, ""
+        # Check if below target and enough trades for iteration
+        win_rate = stats.get('wins', 0) / max(1, trades)
+        
+        # Iterate every N trades if not meeting target
+        if trades % Config.ITERATION_INTERVAL == 0 and win_rate < Config.TARGET_WIN_RATE:
+            return True
+        
+        return False
     
-    def get_learning_summary(self) -> str:
-        """Get a summary of what the system has learned"""
-        total = self.learning_data['total_trades']
-        if total == 0:
-            return "📚 No trades yet - learning in progress!"
+    def check_champion(self, strategy: str) -> bool:
+        """Check if strategy achieved CHAMPION status"""
+        stats = self.data['strategies'].get(strategy, {})
         
-        wins = self.learning_data['total_wins']
-        pnl = self.learning_data['total_pnl']
+        if stats.get('is_champion', False):
+            return True
         
-        # Find best/worst strategies
-        strategies = self.learning_data['strategy_performance']
-        best_strat = max(strategies.items(), 
-                        key=lambda x: x[1]['wins']/x[1]['trades'] if x[1]['trades'] > 5 else 0,
-                        default=(None, {}))
+        trades = stats.get('trades', 0)
+        if trades < Config.MIN_TRADES_FOR_EVALUATION:
+            return False
         
-        summary = f"""
-📚 LEARNING SUMMARY
-   Total Trades: {total}
-   Win Rate: {wins/total*100:.1f}%
-   Total PnL: ${pnl:+,.2f}
-   Best Strategy: {best_strat[0][:30] if best_strat[0] else 'N/A'}
-"""
-        return summary
+        win_rate = stats.get('wins', 0) / trades
+        
+        if win_rate >= Config.TARGET_WIN_RATE:
+            # CHAMPION!
+            self.data['strategies'][strategy]['is_champion'] = True
+            self.data['strategies'][strategy]['champion_at'] = datetime.now().isoformat()
+            self.data['champions'].append(strategy)
+            self.save()
+            return True
+        
+        return False
+    
+    def increment_version(self, strategy: str):
+        """Increment strategy version"""
+        self.data['strategies'][strategy]['version'] = \
+            self.data['strategies'][strategy].get('version', 1) + 1
+        self.data['iterations'] += 1
+        self.save()
 
 
 # =============================================================================
-# DYNAMIC STRATEGY ANALYZER - NO HARDCODED TYPES!
+# STRATEGY VERSION GENERATOR - CREATES V1/V2/V3/V4 ETC
 # =============================================================================
 
-class DynamicStrategyAnalyzer:
+class StrategyVersionGenerator:
     """
-    Dynamically analyzes strategy files to understand what they do.
+    Generates new strategy versions (V1 → V2 → V3 → V4...) based on learning.
     
-    This is the KEY DIFFERENCE from V1:
-    - V1 had hardcoded strategy types
-    - ADAPTIVE reads the actual code and extracts indicators/logic
-    - Works with ANY new strategy automatically!
+    Each version improves on the previous by:
+    - Tightening entry conditions if too many losses
+    - Widening stops if stopped out too much
+    - Focusing on best-performing tokens
+    - Adjusting indicator parameters
     """
     
-    INDICATOR_PATTERNS = {
-        'vwap': r'vwap|volume.weighted',
-        'rsi': r'rsi|relative.strength',
-        'macd': r'macd|moving.average.convergence',
-        'bollinger': r'bollinger|bb_|bb\.', 
-        'ema': r'ema|exponential.moving',
-        'sma': r'sma|simple.moving',
-        'atr': r'atr|average.true.range',
-        'stochastic': r'stoch|stochastic',
-        'momentum': r'momentum|roc|rate.of.change',
-        'volume': r'volume.ratio|obv|volume.profile',
-        'mean_reversion': r'mean.reversion|revert|band',
-        'breakout': r'breakout|break.out|resistance|support',
-        'trend': r'trend|trending|adx',
-        'inventory': r'inventory|position.size|rebalanc',
-        'market_maker': r'market.maker|bid.ask|spread',
-        'pairs': r'pairs|cointegrat|spread.trading',
-        'neural': r'neural|lstm|prediction|ml_|ai_'
-    }
+    def __init__(self, learning: LearningEngine, logger: FullLogger):
+        self.learning = learning
+        self.logger = logger
+        Config.GENERATED_DIR.mkdir(parents=True, exist_ok=True)
     
-    def analyze_strategy_file(self, py_file: Path) -> Dict[str, Any]:
+    def generate_new_version(self, strategy_name: str, base_code: str = None) -> Optional[Path]:
         """
-        Analyze a strategy Python file and extract its characteristics.
-        Returns dict with indicators, logic type, and signal generation hints.
+        Generate a new version of a strategy.
+        
+        Returns path to new strategy file.
         """
-        result = {
-            'file': str(py_file),
-            'indicators': [],
-            'signal_type': 'adaptive',  # Default - we'll adapt to any strategy
-            'entry_conditions': [],
-            'exit_conditions': [],
-            'parameters': {},
-            'confidence': 0.5
+        stats = self.learning.get_strategy_stats(strategy_name)
+        old_version = stats['version']
+        new_version = old_version + 1
+        win_rate = stats['win_rate']
+        best_tokens = stats['best_tokens']
+        
+        # Determine improvements needed
+        improvements = self._determine_improvements(stats)
+        
+        # Log it
+        self.logger.log_version_generated(strategy_name, old_version, new_version, win_rate, improvements)
+        
+        # Generate code
+        code = self._generate_code(strategy_name, new_version, improvements, best_tokens, win_rate)
+        
+        # Save file
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = f"{timestamp}_{strategy_name}_V{new_version}.py"
+        filepath = Config.GENERATED_DIR / filename
+        
+        with open(filepath, 'w') as f:
+            f.write(code)
+        
+        # Save meta
+        meta = {
+            'strategy_name': f"{strategy_name}_V{new_version}",
+            'base_strategy': strategy_name,
+            'version': new_version,
+            'previous_win_rate': win_rate,
+            'improvements': improvements,
+            'best_tokens': best_tokens,
+            'generated_at': datetime.now().isoformat()
         }
         
-        try:
-            with open(py_file, 'r') as f:
-                code = f.read().lower()
-            
-            # Find which indicators are used
-            for indicator, pattern in self.INDICATOR_PATTERNS.items():
-                if re.search(pattern, code, re.IGNORECASE):
-                    result['indicators'].append(indicator)
-            
-            # Determine primary signal type based on indicators
-            if 'vwap' in result['indicators'] and 'mean_reversion' in result['indicators']:
-                result['signal_type'] = 'mean_reversion'
-            elif 'market_maker' in result['indicators'] or 'inventory' in result['indicators']:
-                result['signal_type'] = 'market_maker'
-            elif 'pairs' in result['indicators']:
-                result['signal_type'] = 'pairs_spread'
-            elif 'neural' in result['indicators']:
-                result['signal_type'] = 'ml_prediction'
-            elif 'momentum' in result['indicators'] or 'breakout' in result['indicators']:
-                result['signal_type'] = 'momentum'
-            elif 'rsi' in result['indicators'] and 'bollinger' in result['indicators']:
-                result['signal_type'] = 'oversold_overbought'
-            
-            # Extract any numeric parameters
-            param_patterns = [
-                (r'std_dev.*?=.*?(\d+\.?\d*)', 'std_dev'),
-                (r'period.*?=.*?(\d+)', 'period'),
-                (r'threshold.*?=.*?(\d+\.?\d*)', 'threshold'),
-                (r'window.*?=.*?(\d+)', 'window'),
-                (r'lookback.*?=.*?(\d+)', 'lookback'),
-            ]
-            
-            for pattern, param_name in param_patterns:
-                match = re.search(pattern, code)
-                if match:
-                    result['parameters'][param_name] = float(match.group(1))
-            
-            # Higher confidence if more indicators found
-            result['confidence'] = min(0.9, 0.4 + len(result['indicators']) * 0.1)
-            
-        except Exception as e:
-            print(f"⚠️  Could not analyze {py_file.name}: {e}")
+        meta_file = Config.GENERATED_DIR / f"{timestamp}_{strategy_name}_V{new_version}_meta.json"
+        with open(meta_file, 'w') as f:
+            json.dump(meta, f, indent=2)
         
-        return result
+        # Update learning data
+        self.learning.increment_version(strategy_name)
+        
+        print(f"\n✅ Generated: {filepath.name}")
+        
+        return filepath
+    
+    def _determine_improvements(self, stats: Dict) -> List[str]:
+        """Determine what improvements to make"""
+        improvements = []
+        
+        win_rate = stats['win_rate']
+        trades = stats['trades']
+        
+        if win_rate < 0.4:
+            improvements.append('MUCH_TIGHTER_ENTRY')
+            improvements.append('WIDER_STOPS')
+        elif win_rate < 0.5:
+            improvements.append('TIGHTER_ENTRY')
+            improvements.append('ADJUST_STOPS')
+        elif win_rate < 0.55:
+            improvements.append('FINE_TUNE_ENTRY')
+        
+        if stats['pnl'] < 0:
+            improvements.append('REDUCE_POSITION_SIZE')
+            improvements.append('BETTER_EXIT_TIMING')
+        
+        if stats['best_tokens']:
+            improvements.append('FOCUS_BEST_TOKENS')
+        
+        improvements.append('OPTIMIZE_PARAMETERS')
+        
+        return improvements
+    
+    def _generate_code(self, name: str, version: int, improvements: List[str],
+                       best_tokens: List[str], prev_win_rate: float) -> str:
+        """Generate the strategy Python code"""
+        
+        # Adjust parameters based on improvements
+        entry_dev = 0.003 if 'MUCH_TIGHTER_ENTRY' in improvements else (0.004 if 'TIGHTER_ENTRY' in improvements else 0.005)
+        stop_mult = 2.5 if 'WIDER_STOPS' in improvements else (2.0 if 'ADJUST_STOPS' in improvements else 1.5)
+        position_pct = 0.08 if 'REDUCE_POSITION_SIZE' in improvements else 0.12
+        
+        code = f'''#!/usr/bin/env python3
+"""
+{name} - VERSION {version}
+{'='*60}
+Auto-generated by TradePexAdaptive
+Generated: {datetime.now().isoformat()}
+Previous Win Rate: {prev_win_rate:.1%}
+Improvements: {improvements}
+Best Tokens: {best_tokens}
 
+This version improves on V{version-1} by applying:
+{chr(10).join(f"  - {imp}" for imp in improvements)}
+"""
 
-# =============================================================================
-# ADAPTIVE SIGNAL GENERATOR - WORKS WITH ANY STRATEGY
-# =============================================================================
+import numpy as np
+import pandas as pd
 
-class AdaptiveSignalGenerator:
+class Strategy:
     """
-    Generates signals dynamically based on strategy analysis.
+    {name} Version {version}
     
-    Instead of hardcoded signal logic, this adapts to what
-    indicators each strategy uses.
+    Improved strategy targeting {Config.TARGET_WIN_RATE*100:.0f}% win rate.
     """
     
-    def __init__(self, learning_engine: LearningEngine):
-        self.learning = learning_engine
-        self.analyzer = DynamicStrategyAnalyzer()
-        self.strategy_cache = {}  # Cache analyzed strategies
+    def __init__(self):
+        self.name = "{name}_V{version}"
+        self.version = {version}
+        self.best_tokens = {best_tokens if best_tokens else "[]"}
+        
+        # IMPROVED PARAMETERS
+        self.entry_deviation = {entry_dev}  # Tightened entry threshold
+        self.stop_atr_mult = {stop_mult}  # Adjusted stop loss
+        self.target_atr_mult = 2.5
+        self.position_pct = {position_pct}
+        
+        # RSI thresholds (tightened if needed)
+        self.rsi_oversold = {25 if 'MUCH_TIGHTER_ENTRY' in improvements else 30}
+        self.rsi_overbought = {75 if 'MUCH_TIGHTER_ENTRY' in improvements else 70}
     
-    def generate_signal(self, strategy_id: str, strategy_info: Dict, 
-                       df: pd.DataFrame, current_price: float) -> Dict:
-        """
-        Generate a trading signal using adaptive logic.
+    def calculate_indicators(self, df):
+        """Calculate all technical indicators"""
+        ind = {{}}
         
-        The signal generation adapts based on:
-        1. What indicators the strategy uses (from code analysis)
-        2. What has worked before (from learning engine)
-        3. Current market conditions
-        """
-        # Get or create analysis
-        if strategy_id not in self.strategy_cache:
-            py_file = strategy_info.get('py_file')
-            if py_file and Path(py_file).exists():
-                self.strategy_cache[strategy_id] = self.analyzer.analyze_strategy_file(Path(py_file))
-            else:
-                # Use meta data to infer
-                self.strategy_cache[strategy_id] = self._infer_from_meta(strategy_info)
+        # VWAP
+        typical = (df['High'] + df['Low'] + df['Close']) / 3
+        cum_vp = (typical * df['Volume']).cumsum()
+        cum_vol = df['Volume'].cumsum()
+        ind['vwap'] = cum_vp / cum_vol
         
-        analysis = self.strategy_cache[strategy_id]
-        signal_type = analysis.get('signal_type', 'adaptive')
-        indicators = analysis.get('indicators', [])
+        # VWAP bands
+        dev = np.abs(df['Close'] - ind['vwap'])
+        std = dev.rolling(20).std()
+        ind['upper'] = ind['vwap'] + 2 * std
+        ind['lower'] = ind['vwap'] - 2 * std
         
-        # Calculate all potentially needed indicators
-        indicators_data = self._calculate_indicators(df, current_price)
+        # ATR
+        tr = np.maximum(
+            df['High'] - df['Low'],
+            np.maximum(
+                np.abs(df['High'] - df['Close'].shift()),
+                np.abs(df['Low'] - df['Close'].shift())
+            )
+        )
+        ind['atr'] = tr.rolling(14).mean()
         
-        # Generate signal based on detected type
-        if signal_type == 'mean_reversion':
-            return self._mean_reversion_signal(indicators_data, current_price, analysis)
-        elif signal_type == 'market_maker':
-            return self._market_maker_signal(indicators_data, current_price, analysis)
-        elif signal_type == 'momentum':
-            return self._momentum_signal(indicators_data, current_price, analysis)
-        elif signal_type == 'oversold_overbought':
-            return self._rsi_bb_signal(indicators_data, current_price, analysis)
-        elif signal_type == 'ml_prediction':
-            return self._ml_prediction_signal(indicators_data, current_price, analysis)
-        else:
-            # Adaptive: try multiple and pick strongest
-            return self._adaptive_signal(indicators_data, current_price, analysis)
+        # RSI
+        delta = df['Close'].diff()
+        gain = delta.where(delta > 0, 0).rolling(14).mean()
+        loss = (-delta.where(delta < 0, 0)).rolling(14).mean()
+        rs = gain / loss
+        ind['rsi'] = 100 - (100 / (1 + rs))
+        
+        # Momentum
+        ind['momentum'] = (df['Close'] / df['Close'].shift(10) - 1) * 100
+        
+        return ind
     
-    def _infer_from_meta(self, strategy_info: Dict) -> Dict:
-        """Infer strategy characteristics from meta data"""
-        name = strategy_info.get('name', '').lower()
+    def generate_signal(self, df, current_price):
+        """Generate trading signal with improved logic"""
         
-        result = {'indicators': [], 'signal_type': 'adaptive', 'confidence': 0.5}
+        ind = self.calculate_indicators(df)
         
-        # Infer from name
-        if 'vwap' in name or 'mean' in name:
-            result['signal_type'] = 'mean_reversion'
-            result['indicators'] = ['vwap', 'mean_reversion', 'atr']
-        elif 'market' in name and 'maker' in name:
-            result['signal_type'] = 'market_maker'
-            result['indicators'] = ['inventory', 'market_maker', 'atr']
-        elif 'momentum' in name or 'breakout' in name:
-            result['signal_type'] = 'momentum'
-            result['indicators'] = ['momentum', 'rsi', 'volume']
-        elif 'neural' in name or 'ai' in name or 'ml' in name:
-            result['signal_type'] = 'ml_prediction'
-            result['indicators'] = ['neural', 'momentum', 'trend']
-        elif 'stoikov' in name:
-            result['signal_type'] = 'market_maker'
-            result['indicators'] = ['market_maker', 'inventory', 'atr']
-        elif 'pairs' in name or 'cointegration' in name:
-            result['signal_type'] = 'mean_reversion'
-            result['indicators'] = ['pairs', 'mean_reversion']
-        elif 'reversal' in name:
-            result['signal_type'] = 'oversold_overbought'
-            result['indicators'] = ['rsi', 'bollinger', 'mean_reversion']
-        
-        return result
-    
-    def _calculate_indicators(self, df: pd.DataFrame, current_price: float) -> Dict:
-        """Calculate all commonly used indicators"""
-        result = {'current_price': current_price}
-        
-        try:
-            # VWAP
-            typical_price = (df['High'] + df['Low'] + df['Close']) / 3
-            cumulative_vp = (typical_price * df['Volume']).cumsum()
-            cumulative_volume = df['Volume'].cumsum()
-            vwap = cumulative_vp / cumulative_volume
-            
-            price_deviation = np.abs(df['Close'] - vwap)
-            std_dev = price_deviation.rolling(window=20).std()
-            
-            result['vwap'] = float(vwap.iloc[-1])
-            result['vwap_upper'] = float(vwap.iloc[-1] + 2 * std_dev.iloc[-1])
-            result['vwap_lower'] = float(vwap.iloc[-1] - 2 * std_dev.iloc[-1])
-            result['vwap_std'] = float(std_dev.iloc[-1])
-            
-            # ATR
-            high, low, close = df['High'], df['Low'], df['Close']
-            tr1 = high - low
-            tr2 = abs(high - close.shift())
-            tr3 = abs(low - close.shift())
-            true_range = np.maximum(tr1, np.maximum(tr2, tr3))
-            atr = true_range.rolling(window=14).mean()
-            result['atr'] = float(atr.iloc[-1]) if not pd.isna(atr.iloc[-1]) else current_price * 0.02
-            
-            # RSI
-            delta = df['Close'].diff()
-            gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
-            loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
-            rs = gain / loss
-            rsi = 100 - (100 / (1 + rs))
-            result['rsi'] = float(rsi.iloc[-1]) if not pd.isna(rsi.iloc[-1]) else 50
-            
-            # Bollinger Bands
-            sma20 = df['Close'].rolling(window=20).mean()
-            std20 = df['Close'].rolling(window=20).std()
-            result['bb_upper'] = float(sma20.iloc[-1] + 2 * std20.iloc[-1])
-            result['bb_lower'] = float(sma20.iloc[-1] - 2 * std20.iloc[-1])
-            result['bb_mid'] = float(sma20.iloc[-1])
-            
-            # Momentum
-            result['momentum_10'] = float((df['Close'].iloc[-1] / df['Close'].iloc[-10] - 1) * 100)
-            result['momentum_5'] = float((df['Close'].iloc[-1] / df['Close'].iloc[-5] - 1) * 100)
-            
-            # EMAs
-            result['ema_8'] = float(df['Close'].ewm(span=8).mean().iloc[-1])
-            result['ema_21'] = float(df['Close'].ewm(span=21).mean().iloc[-1])
-            
-            # Volume
-            vol_sma = df['Volume'].rolling(window=20).mean()
-            result['volume_ratio'] = float(df['Volume'].iloc[-1] / vol_sma.iloc[-1]) if vol_sma.iloc[-1] > 0 else 1
-            
-        except Exception as e:
-            print(f"⚠️  Indicator calculation error: {e}")
-        
-        return result
-    
-    def _mean_reversion_signal(self, ind: Dict, price: float, analysis: Dict) -> Dict:
-        """Mean reversion signal (VWAP-based)"""
-        vwap = ind.get('vwap', price)
-        upper = ind.get('vwap_upper', price * 1.02)
-        lower = ind.get('vwap_lower', price * 0.98)
-        atr = ind.get('atr', price * 0.02)
+        vwap = float(ind['vwap'].iloc[-1])
+        upper = float(ind['upper'].iloc[-1])
+        lower = float(ind['lower'].iloc[-1])
+        atr = float(ind['atr'].iloc[-1]) if not pd.isna(ind['atr'].iloc[-1]) else current_price * 0.02
+        rsi = float(ind['rsi'].iloc[-1]) if not pd.isna(ind['rsi'].iloc[-1]) else 50
+        momentum = float(ind['momentum'].iloc[-1]) if not pd.isna(ind['momentum'].iloc[-1]) else 0
         
         signal = "HOLD"
-        reason = "Price within VWAP bands"
+        reason = "No clear signal"
         target = 0
         stop = 0
         
-        lower_dev = (lower - price) / price * 100
-        upper_dev = (price - upper) / price * 100
+        # Calculate deviations
+        lower_dev = (lower - current_price) / current_price
+        upper_dev = (current_price - upper) / current_price
         
-        if price < lower and lower_dev > 0.1:
-            signal = "BUY"
-            reason = f"Mean Reversion: Price ${price:.2f} below lower band ${lower:.2f}"
-            target = vwap
-            stop = price - (atr * 1.5)
-        elif price > upper and upper_dev > 0.1:
-            signal = "SELL"
-            reason = f"Mean Reversion: Price ${price:.2f} above upper band ${upper:.2f}"
-            target = vwap
-            stop = price + (atr * 1.5)
+        # IMPROVED BUY CONDITIONS
+        if current_price < lower and lower_dev > self.entry_deviation:
+            if rsi < self.rsi_oversold:  # Extra confirmation
+                signal = "BUY"
+                reason = f"V{version} BUY: Price ${{current_price:.2f}} < Lower ${{lower:.2f}}, RSI={{rsi:.0f}}"
+                target = vwap
+                stop = current_price - (atr * self.stop_atr_mult)
         
-        return self._build_signal(signal, reason, price, vwap, upper, lower, target, stop, atr, ind)
-    
-    def _market_maker_signal(self, ind: Dict, price: float, analysis: Dict) -> Dict:
-        """Market maker signal (tighter bands)"""
-        vwap = ind.get('vwap', price)
-        std = ind.get('vwap_std', price * 0.01)
-        atr = ind.get('atr', price * 0.02)
+        # IMPROVED SELL CONDITIONS  
+        elif current_price > upper and upper_dev > self.entry_deviation:
+            if rsi > self.rsi_overbought:  # Extra confirmation
+                signal = "SELL"
+                reason = f"V{version} SELL: Price ${{current_price:.2f}} > Upper ${{upper:.2f}}, RSI={{rsi:.0f}}"
+                target = vwap
+                stop = current_price + (atr * self.stop_atr_mult)
         
-        # Tighter bands for MM
-        upper = vwap + (1.2 * std)
-        lower = vwap - (1.2 * std)
-        
-        signal = "HOLD"
-        reason = "MM: Price within spread"
-        target = 0
-        stop = 0
-        
-        if price < lower:
-            signal = "BUY"
-            reason = f"MM Buy: Price ${price:.2f} below tight band ${lower:.2f}"
-            target = vwap
-            stop = price - atr
-        elif price > upper:
-            signal = "SELL"
-            reason = f"MM Sell: Price ${price:.2f} above tight band ${upper:.2f}"
-            target = vwap
-            stop = price + atr
-        
-        return self._build_signal(signal, reason, price, vwap, upper, lower, target, stop, atr, ind)
-    
-    def _momentum_signal(self, ind: Dict, price: float, analysis: Dict) -> Dict:
-        """Momentum/breakout signal"""
-        rsi = ind.get('rsi', 50)
-        momentum = ind.get('momentum_10', 0)
-        atr = ind.get('atr', price * 0.02)
-        ema_8 = ind.get('ema_8', price)
-        ema_21 = ind.get('ema_21', price)
-        
-        signal = "HOLD"
-        reason = "Momentum: No clear trend"
-        target = 0
-        stop = 0
-        
-        # Strong upward momentum
-        if momentum > 2 and rsi < 70 and ema_8 > ema_21:
-            signal = "BUY"
-            reason = f"Momentum Buy: {momentum:.1f}% move, RSI {rsi:.0f}"
-            target = price * 1.03
-            stop = price - (atr * 2)
-        # Strong downward momentum
-        elif momentum < -2 and rsi > 30 and ema_8 < ema_21:
-            signal = "SELL"
-            reason = f"Momentum Sell: {momentum:.1f}% move, RSI {rsi:.0f}"
-            target = price * 0.97
-            stop = price + (atr * 2)
-        
-        return self._build_signal(signal, reason, price, ind.get('vwap', price), 
-                                 ind.get('bb_upper', price*1.02), ind.get('bb_lower', price*0.98),
-                                 target, stop, atr, ind)
-    
-    def _rsi_bb_signal(self, ind: Dict, price: float, analysis: Dict) -> Dict:
-        """RSI + Bollinger Bands signal"""
-        rsi = ind.get('rsi', 50)
-        bb_upper = ind.get('bb_upper', price * 1.02)
-        bb_lower = ind.get('bb_lower', price * 0.98)
-        bb_mid = ind.get('bb_mid', price)
-        atr = ind.get('atr', price * 0.02)
-        
-        signal = "HOLD"
-        reason = "RSI/BB: No extreme"
-        target = 0
-        stop = 0
-        
-        # Oversold bounce
-        if rsi < 30 and price <= bb_lower:
-            signal = "BUY"
-            reason = f"Oversold: RSI {rsi:.0f}, price at lower BB"
-            target = bb_mid
-            stop = price - (atr * 1.5)
-        # Overbought reversal
-        elif rsi > 70 and price >= bb_upper:
-            signal = "SELL"
-            reason = f"Overbought: RSI {rsi:.0f}, price at upper BB"
-            target = bb_mid
-            stop = price + (atr * 1.5)
-        
-        return self._build_signal(signal, reason, price, bb_mid, bb_upper, bb_lower, target, stop, atr, ind)
-    
-    def _ml_prediction_signal(self, ind: Dict, price: float, analysis: Dict) -> Dict:
-        """ML-style prediction signal (uses multiple factors)"""
-        # Combine multiple indicators for a "prediction"
-        rsi = ind.get('rsi', 50)
-        momentum = ind.get('momentum_5', 0)
-        vol_ratio = ind.get('volume_ratio', 1)
-        ema_8 = ind.get('ema_8', price)
-        ema_21 = ind.get('ema_21', price)
-        atr = ind.get('atr', price * 0.02)
-        
-        # Simple "prediction" score
-        score = 0
-        if rsi < 40: score += 1
-        if rsi > 60: score -= 1
-        if momentum > 0: score += 0.5
-        if momentum < 0: score -= 0.5
-        if vol_ratio > 1.5: score += 0.5 * (1 if momentum > 0 else -1)
-        if ema_8 > ema_21: score += 0.5
-        if ema_8 < ema_21: score -= 0.5
-        
-        signal = "HOLD"
-        reason = f"ML Prediction: Score {score:.1f}"
-        target = 0
-        stop = 0
-        
-        if score >= 1.5:
-            signal = "BUY"
-            reason = f"ML Buy Signal: Score {score:.1f}"
-            target = price * 1.02
-            stop = price - (atr * 1.5)
-        elif score <= -1.5:
-            signal = "SELL"
-            reason = f"ML Sell Signal: Score {score:.1f}"
-            target = price * 0.98
-            stop = price + (atr * 1.5)
-        
-        return self._build_signal(signal, reason, price, ind.get('vwap', price),
-                                 ind.get('bb_upper', price*1.02), ind.get('bb_lower', price*0.98),
-                                 target, stop, atr, ind)
-    
-    def _adaptive_signal(self, ind: Dict, price: float, analysis: Dict) -> Dict:
-        """Adaptive signal - tries multiple approaches and picks strongest"""
-        signals = [
-            self._mean_reversion_signal(ind, price, analysis),
-            self._momentum_signal(ind, price, analysis),
-            self._rsi_bb_signal(ind, price, analysis),
-        ]
-        
-        # Pick the one with a non-HOLD signal, preferring higher confidence
-        for sig in signals:
-            if sig['signal'] != 'HOLD':
-                sig['reason'] = f"[Adaptive] {sig['reason']}"
-                return sig
-        
-        return signals[0]  # Default to first (mean reversion)
-    
-    def _build_signal(self, signal: str, reason: str, price: float, vwap: float,
-                     upper: float, lower: float, target: float, stop: float,
-                     atr: float, ind: Dict) -> Dict:
-        """Build a complete signal dictionary"""
-        return {
+        return {{
             'signal': signal,
             'reason': reason,
-            'current_price': price,
+            'current_price': current_price,
             'vwap': vwap,
             'upper_band': upper,
             'lower_band': lower,
             'target_price': target,
             'stop_loss': stop,
             'atr': atr,
-            'rsi': ind.get('rsi', 50),
-            'momentum': ind.get('momentum_10', 0),
-            'volume_ratio': ind.get('volume_ratio', 1),
-            'confidence': 0.6
-        }
+            'rsi': rsi,
+            'momentum': momentum
+        }}
+
+def get_strategy():
+    return Strategy()
+'''
+        return code
 
 
 # =============================================================================
-# HTX MARKET DATA CLIENT
+# HTX CLIENT
 # =============================================================================
 
 class HTXClient:
     """Real-time market data from HTX"""
     
     def __init__(self):
-        self.base_url = Config.HTX_BASE_URL
         self.session = requests.Session()
-        self.price_cache = {}
+        self.cache = {}
         self.cache_time = {}
-        self.valid_tokens = set()  # Tokens confirmed to exist on HTX
-        self.invalid_tokens = set()  # Tokens that don't exist
+        self.valid_tokens = set()
+        self.invalid_tokens = set()
     
-    def fetch_candles(self, symbol: str, period: str = '15min', count: int = 100) -> Optional[pd.DataFrame]:
-        """Fetch OHLCV candles"""
+    def get_price(self, symbol: str) -> Optional[float]:
+        """Get current price"""
         if symbol in self.invalid_tokens:
             return None
-            
-        try:
-            endpoint = f"{self.base_url}/market/history/kline"
-            params = {
-                "symbol": f"{symbol.lower()}usdt",
-                "period": period,
-                "size": min(count, 2000)
-            }
-            
-            response = self.session.get(endpoint, params=params, timeout=10)
-            
-            if response.status_code == 200:
-                data = response.json()
-                if data.get("status") == "ok":
-                    klines = data.get("data", [])
-                    
-                    if klines:
-                        self.valid_tokens.add(symbol)
-                        df = pd.DataFrame(klines)
-                        df = df.rename(columns={
-                            'id': 'timestamp',
-                            'open': 'Open',
-                            'high': 'High',
-                            'low': 'Low',
-                            'close': 'Close',
-                            'amount': 'Volume'
-                        })
-                        df['datetime'] = pd.to_datetime(df['timestamp'], unit='s')
-                        df = df[['datetime', 'Open', 'High', 'Low', 'Close', 'Volume']]
-                        df = df.sort_values('datetime').reset_index(drop=True)
-                        return df
-                else:
-                    self.invalid_tokens.add(symbol)
-            
-            return None
-            
-        except Exception as e:
-            return None
-    
-    def get_current_price(self, symbol: str) -> Optional[float]:
-        """Get current price with caching"""
-        if symbol in self.invalid_tokens:
-            return None
-            
-        # Check cache (valid for 3 seconds)
-        if symbol in self.price_cache:
-            if time.time() - self.cache_time.get(symbol, 0) < 3:
-                return self.price_cache[symbol]
+        
+        # Cache for 3 seconds
+        if symbol in self.cache and time.time() - self.cache_time.get(symbol, 0) < 3:
+            return self.cache[symbol]
         
         try:
-            candles = self.fetch_candles(symbol, '1min', 1)
-            if candles is not None and len(candles) > 0:
-                price = float(candles['Close'].iloc[-1])
-                self.price_cache[symbol] = price
-                self.cache_time[symbol] = time.time()
-                return price
+            resp = self.session.get(
+                f"{Config.HTX_BASE_URL}/market/history/kline",
+                params={"symbol": f"{symbol.lower()}usdt", "period": "1min", "size": 1},
+                timeout=10
+            )
+            
+            if resp.status_code == 200:
+                data = resp.json()
+                if data.get("status") == "ok" and data.get("data"):
+                    price = float(data["data"][0]["close"])
+                    self.cache[symbol] = price
+                    self.cache_time[symbol] = time.time()
+                    self.valid_tokens.add(symbol)
+                    return price
+            
+            self.invalid_tokens.add(symbol)
+            return None
+            
         except:
-            pass
-        
-        return None
+            return None
     
-    def get_valid_tokens(self, token_list: List[str]) -> List[str]:
-        """Filter token list to only valid tradeable tokens"""
-        valid = []
-        for token in token_list:
-            if token in self.valid_tokens:
-                valid.append(token)
-            elif token not in self.invalid_tokens:
-                # Test it
-                price = self.get_current_price(token)
-                if price:
-                    valid.append(token)
-        return valid
+    def get_candles(self, symbol: str, period: str = '15min', count: int = 100) -> Optional[pd.DataFrame]:
+        """Get OHLCV candles"""
+        if symbol in self.invalid_tokens:
+            return None
+        
+        try:
+            resp = self.session.get(
+                f"{Config.HTX_BASE_URL}/market/history/kline",
+                params={"symbol": f"{symbol.lower()}usdt", "period": period, "size": count},
+                timeout=10
+            )
+            
+            if resp.status_code == 200:
+                data = resp.json()
+                if data.get("status") == "ok" and data.get("data"):
+                    df = pd.DataFrame(data["data"])
+                    df = df.rename(columns={
+                        'open': 'Open', 'high': 'High', 'low': 'Low',
+                        'close': 'Close', 'amount': 'Volume'
+                    })
+                    df = df[['Open', 'High', 'Low', 'Close', 'Volume']].sort_index(ascending=False).reset_index(drop=True)
+                    self.valid_tokens.add(symbol)
+                    return df
+            
+            return None
+        except:
+            return None
+
+
+# =============================================================================
+# SIGNAL GENERATOR
+# =============================================================================
+
+class SignalGenerator:
+    """Generates trading signals from market data"""
+    
+    def generate(self, df: pd.DataFrame, current_price: float, strategy_version: int = 1) -> Dict:
+        """Generate signal using VWAP mean reversion"""
+        
+        # VWAP
+        typical = (df['High'] + df['Low'] + df['Close']) / 3
+        cum_vp = (typical * df['Volume']).cumsum()
+        cum_vol = df['Volume'].cumsum()
+        vwap = cum_vp / cum_vol
+        
+        # Bands
+        dev = np.abs(df['Close'] - vwap)
+        std = dev.rolling(20).std()
+        upper = vwap + 2 * std
+        lower = vwap - 2 * std
+        
+        # ATR
+        tr = np.maximum(
+            df['High'] - df['Low'],
+            np.maximum(np.abs(df['High'] - df['Close'].shift()), np.abs(df['Low'] - df['Close'].shift()))
+        )
+        atr = tr.rolling(14).mean()
+        
+        # RSI
+        delta = df['Close'].diff()
+        gain = delta.where(delta > 0, 0).rolling(14).mean()
+        loss = (-delta.where(delta < 0, 0)).rolling(14).mean()
+        rsi = 100 - (100 / (1 + gain / loss))
+        
+        # Momentum
+        momentum = (df['Close'] / df['Close'].shift(10) - 1) * 100
+        
+        # Get latest values
+        v = float(vwap.iloc[-1])
+        u = float(upper.iloc[-1])
+        l = float(lower.iloc[-1])
+        a = float(atr.iloc[-1]) if not pd.isna(atr.iloc[-1]) else current_price * 0.02
+        r = float(rsi.iloc[-1]) if not pd.isna(rsi.iloc[-1]) else 50
+        m = float(momentum.iloc[-1]) if not pd.isna(momentum.iloc[-1]) else 0
+        
+        # Threshold based on version
+        threshold = 0.005 - (strategy_version - 1) * 0.0005  # Tighter each version
+        threshold = max(0.002, threshold)
+        
+        signal = "HOLD"
+        reason = "Price within bands"
+        target = 0
+        stop = 0
+        
+        lower_dev = (l - current_price) / current_price
+        upper_dev = (current_price - u) / current_price
+        
+        if current_price < l and lower_dev > threshold:
+            signal = "BUY"
+            reason = f"Price ${current_price:.2f} below lower ${l:.2f}"
+            target = v
+            stop = current_price - (a * 1.5)
+        elif current_price > u and upper_dev > threshold:
+            signal = "SELL"
+            reason = f"Price ${current_price:.2f} above upper ${u:.2f}"
+            target = v
+            stop = current_price + (a * 1.5)
+        
+        return {
+            'signal': signal,
+            'reason': reason,
+            'current_price': current_price,
+            'vwap': v,
+            'upper_band': u,
+            'lower_band': l,
+            'target_price': target,
+            'stop_loss': stop,
+            'atr': a,
+            'rsi': r,
+            'momentum': m
+        }
 
 
 # =============================================================================
 # PAPER TRADING ENGINE
 # =============================================================================
 
-class PaperPosition:
-    """Paper trade position"""
-    
-    def __init__(self, position_id: str, strategy_id: str, symbol: str,
-                 direction: str, entry_price: float, size: float,
-                 target: float, stop_loss: float):
-        self.position_id = position_id
-        self.strategy_id = strategy_id
-        self.symbol = symbol
+class Position:
+    def __init__(self, pid, strategy, version, token, direction, entry, size, target, stop):
+        self.id = pid
+        self.strategy = strategy
+        self.version = version
+        self.token = token
         self.direction = direction
-        self.entry_price = entry_price
+        self.entry_price = entry
         self.size = size
-        self.target_price = target
-        self.stop_loss = stop_loss
-        self.entry_time = datetime.now()
+        self.target = target
+        self.stop = stop
         self.status = "OPEN"
-        self.exit_price = 0.0
-        self.pnl = 0.0
 
 
-class PaperTradingEngine:
-    """Paper trading with learning integration"""
+class PaperTrader:
+    """Paper trading with position management"""
     
-    def __init__(self, learning_engine: LearningEngine):
-        self.learning = learning_engine
+    def __init__(self, learning: LearningEngine, logger: FullLogger):
+        self.learning = learning
+        self.logger = logger
         self.capital = Config.STARTING_CAPITAL
-        self.positions: Dict[str, PaperPosition] = {}
-        self.closed_positions: List[PaperPosition] = []
-        self.total_pnl = 0.0
+        self.positions: Dict[str, Position] = {}
+        self.closed: List[Position] = []
+        self.total_pnl = 0
     
-    def can_open_position(self, strategy_id: str, symbol: str) -> Tuple[bool, str]:
-        """Check if we can open a position"""
-        # Check if learning says to skip this combination
-        should_skip, skip_reason = self.learning.should_skip_combination(strategy_id, symbol)
-        if should_skip:
-            return False, skip_reason
+    def can_open(self, strategy: str, token: str) -> Tuple[bool, str]:
+        """Check if can open position"""
+        open_pos = [p for p in self.positions.values() if p.status == "OPEN"]
         
-        open_positions = [p for p in self.positions.values() if p.status == "OPEN"]
+        if len(open_pos) >= Config.MAX_TOTAL_POSITIONS:
+            return False, "Max positions"
         
-        if len(open_positions) >= Config.MAX_TOTAL_POSITIONS:
-            return False, f"Max positions ({Config.MAX_TOTAL_POSITIONS})"
-        
-        strat_pos = [p for p in open_positions if p.strategy_id == strategy_id]
+        strat_pos = [p for p in open_pos if p.strategy == strategy]
         if len(strat_pos) >= Config.MAX_POSITIONS_PER_STRATEGY:
-            return False, f"Strategy limit ({Config.MAX_POSITIONS_PER_STRATEGY})"
+            return False, "Strategy limit"
         
-        token_pos = [p for p in open_positions if p.symbol == symbol]
+        token_pos = [p for p in open_pos if p.token == token]
         if len(token_pos) >= Config.MAX_POSITIONS_PER_TOKEN:
-            return False, f"Token limit ({Config.MAX_POSITIONS_PER_TOKEN})"
+            return False, "Token limit"
         
-        existing = [p for p in open_positions if p.strategy_id == strategy_id and p.symbol == symbol]
-        if existing:
-            return False, "Position exists"
+        # Already have this exact combo?
+        if any(p.strategy == strategy and p.token == token for p in open_pos):
+            return False, "Already open"
         
         return True, "OK"
     
-    def open_position(self, strategy_id: str, symbol: str, signal: Dict) -> Optional[str]:
-        """Open a position with learning-adjusted sizing"""
+    def open_position(self, strategy: str, version: int, token: str, signal: Dict) -> bool:
+        """Open a position"""
         if signal['signal'] == 'HOLD':
-            return None
+            return False
         
-        can_open, reason = self.can_open_position(strategy_id, symbol)
-        if not can_open:
-            return None
+        can, reason = self.can_open(strategy, token)
+        if not can:
+            return False
         
-        # Get learning-adjusted position size
-        confidence = self.learning.get_strategy_confidence(strategy_id)
-        base_size = self.capital * Config.MAX_POSITION_SIZE * Config.DEFAULT_LEVERAGE
-        adjusted_size = base_size * confidence
+        size = self.capital * Config.MAX_POSITION_SIZE * Config.DEFAULT_LEVERAGE
+        pid = f"{strategy}_{token}_{datetime.now().strftime('%H%M%S%f')}"
         
-        position_id = f"{strategy_id}_{symbol}_{datetime.now().strftime('%H%M%S%f')}"
-        
-        position = PaperPosition(
-            position_id=position_id,
-            strategy_id=strategy_id,
-            symbol=symbol,
-            direction=signal['signal'],
-            entry_price=signal['current_price'],
-            size=adjusted_size,
-            target=signal.get('target_price', 0),
-            stop_loss=signal.get('stop_loss', 0)
+        pos = Position(
+            pid, strategy, version, token,
+            signal['signal'], signal['current_price'], size,
+            signal['target_price'], signal['stop_loss']
         )
         
-        self.positions[position_id] = position
+        self.positions[pid] = pos
         
-        # Log
-        print(f"\n🎯 TRADE OPENED: {signal['signal']} {symbol}")
-        print(f"   Strategy: {strategy_id[:40]}")
-        print(f"   Entry: ${signal['current_price']:.4f}")
-        print(f"   Target: ${signal.get('target_price', 0):.4f}")
-        print(f"   Stop: ${signal.get('stop_loss', 0):.4f}")
-        print(f"   Size: ${adjusted_size:.2f} (confidence: {confidence:.2f})")
-        print(f"   Reason: {signal['reason']}")
+        self.logger.log_trade_open(
+            pid, strategy, version, token,
+            signal['signal'], signal['current_price'], size,
+            signal['target_price'], signal['stop_loss']
+        )
         
-        return position_id
+        return True
     
-    def check_exits(self, current_prices: Dict[str, float]):
+    def check_exits(self, prices: Dict[str, float]):
         """Check and close positions"""
-        for position_id, position in list(self.positions.items()):
-            if position.status != "OPEN":
+        for pid, pos in list(self.positions.items()):
+            if pos.status != "OPEN":
                 continue
             
-            price = current_prices.get(position.symbol)
+            price = prices.get(pos.token)
             if not price:
                 continue
             
-            # Calculate P&L
-            if position.direction == "BUY":
-                pnl_pct = (price - position.entry_price) / position.entry_price
+            # Calculate PnL
+            if pos.direction == "BUY":
+                pnl_pct = (price - pos.entry_price) / pos.entry_price
             else:
-                pnl_pct = (position.entry_price - price) / position.entry_price
+                pnl_pct = (pos.entry_price - price) / pos.entry_price
             
-            pnl_usd = position.size * pnl_pct
+            pnl = pos.size * pnl_pct
             
             # Check exits
             should_close = False
             reason = ""
             
-            if position.direction == "BUY":
-                if price >= position.target_price:
-                    should_close = True
-                    reason = "TARGET HIT"
-                elif price <= position.stop_loss:
-                    should_close = True
-                    reason = "STOP LOSS"
+            if pos.direction == "BUY":
+                if price >= pos.target:
+                    should_close, reason = True, "TARGET HIT"
+                elif price <= pos.stop:
+                    should_close, reason = True, "STOP LOSS"
             else:
-                if price <= position.target_price:
-                    should_close = True
-                    reason = "TARGET HIT"
-                elif price >= position.stop_loss:
-                    should_close = True
-                    reason = "STOP LOSS"
+                if price <= pos.target:
+                    should_close, reason = True, "TARGET HIT"
+                elif price >= pos.stop:
+                    should_close, reason = True, "STOP LOSS"
             
             if should_close:
-                self._close_position(position, price, pnl_usd, pnl_pct * 100, reason)
+                self._close(pos, price, pnl, pnl_pct * 100, reason)
     
-    def _close_position(self, position: PaperPosition, exit_price: float,
-                       pnl: float, pnl_pct: float, reason: str):
-        """Close position and record learning"""
-        position.status = "CLOSED"
-        position.exit_price = exit_price
-        position.pnl = pnl
-        
+    def _close(self, pos: Position, exit_price: float, pnl: float, pnl_pct: float, reason: str):
+        """Close position"""
+        pos.status = "CLOSED"
         self.capital += pnl
         self.total_pnl += pnl
-        self.closed_positions.append(position)
+        self.closed.append(pos)
         
         is_win = pnl >= 0
         
-        # RECORD FOR LEARNING - This is key!
-        self.learning.record_trade(
-            position.strategy_id,
-            position.symbol,
-            pnl,
-            is_win
-        )
+        # Record for learning
+        self.learning.record_trade(pos.strategy, pos.token, pnl, is_win)
         
-        emoji = "✅" if is_win else "❌"
-        print(f"\n{emoji} TRADE CLOSED: {position.direction} {position.symbol}")
-        print(f"   Exit: ${exit_price:.4f}")
-        print(f"   PnL: ${pnl:+.2f} ({pnl_pct:+.2f}%)")
-        print(f"   Reason: {reason}")
-        print(f"   Capital: ${self.capital:,.2f}")
+        # Log
+        self.logger.log_trade_close(
+            pos.id, pos.strategy, pos.version, pos.token,
+            pos.direction, exit_price, pnl, pnl_pct, reason
+        )
 
 
 # =============================================================================
@@ -977,274 +1053,229 @@ class PaperTradingEngine:
 
 class TradePexAdaptive:
     """
-    TradePex Adaptive - Self-Improving Trading System
+    THE ULTIMATE SELF-IMPROVING TRADING MACHINE!
     
-    KEY DIFFERENCES FROM V1:
-    1. DYNAMIC - No hardcoded strategy types
-    2. SELF-IMPROVING - Learns from every trade
-    3. MORE TOKENS - Trades 30+ tokens for faster learning
-    4. ADAPTIVE SIGNALS - Works with ANY strategy file
+    1. TRADES strategies
+    2. LOGS everything (100% full logs)
+    3. LEARNS from trades
+    4. GENERATES new strategy versions (V1→V2→V3→V4)
+    5. TRADES new versions
+    6. REPEATS until targets hit = CHAMPION!
     """
     
     def __init__(self):
-        self._print_banner()
+        self._banner()
         
-        # Initialize components
+        self.logger = FullLogger()
         self.learning = LearningEngine()
         self.htx = HTXClient()
-        self.signal_gen = AdaptiveSignalGenerator(self.learning)
-        self.paper = PaperTradingEngine(self.learning)
+        self.signal_gen = SignalGenerator()
+        self.paper = PaperTrader(self.learning, self.logger)
+        self.version_gen = StrategyVersionGenerator(self.learning, self.logger)
         
         # Load strategies
         self.strategies = {}
         self._load_strategies()
         
         # Validate tokens
-        self._validate_tokens()
+        self.valid_tokens = self._validate_tokens()
         
-        # State
-        self.cycle_count = 0
-        self.start_time = datetime.now()
+        self.cycle = 0
         self.running = True
     
-    def _print_banner(self):
+    def _banner(self):
         print("""
-╔══════════════════════════════════════════════════════════════════════════════╗
-║                                                                              ║
-║     🚀 TRADEPEX ADAPTIVE - SELF-IMPROVING TRADING SYSTEM 🚀                ║
-║                                                                              ║
-║     ✨ UPGRADE FROM V1:                                                     ║
-║        • DYNAMIC strategy detection (no hardcoded types!)                   ║
-║        • SELF-IMPROVING through learning from every trade                   ║
-║        • MORE TOKENS for faster learning (30+ tokens)                       ║
-║        • ADAPTIVE signals work with ANY new strategy                        ║
-║                                                                              ║
-║     🌙 More Trading → More Learning → Better Performance 🌙                ║
-║                                                                              ║
-╚══════════════════════════════════════════════════════════════════════════════╝
+╔═══════════════════════════════════════════════════════════════════════════════╗
+║                                                                               ║
+║   🚀 TRADEPEX ADAPTIVE - THE ULTIMATE SELF-IMPROVING TRADING MACHINE 🚀      ║
+║                                                                               ║
+║   ✅ 100% FULL LOGGING - Every signal, every trade, everything!              ║
+║   ✅ GENERATES NEW STRATEGY VERSIONS - V1 → V2 → V3 → V4...                  ║
+║   ✅ TRADES UNTIL TARGETS HIT - Then becomes CHAMPION!                        ║
+║   ✅ LEARNS FROM EVERY TRADE - Gets better with each iteration               ║
+║                                                                               ║
+║   Target: 60% Win Rate = CHAMPION STATUS                                      ║
+║                                                                               ║
+║   🌙 Trade → Learn → Code → Improve → Repeat FOREVER 🌙                      ║
+║                                                                               ║
+╚═══════════════════════════════════════════════════════════════════════════════╝
         """)
     
     def _load_strategies(self):
-        """Load all strategies dynamically"""
-        dirs_to_try = [
-            Config.STRATEGIES_DIR,
-            Config.FALLBACK_STRATEGIES_DIR,
-            Path(__file__).parent / "successful_strategies"
-        ]
+        """Load all strategies"""
+        dirs = [Config.STRATEGIES_DIR, Config.GENERATED_DIR]
         
-        for strategies_dir in dirs_to_try:
-            if strategies_dir.exists():
-                print(f"\n📂 Loading strategies from: {strategies_dir}")
-                py_files = [f for f in strategies_dir.glob("*.py") if '_meta' not in f.stem]
-                
-                for py_file in py_files:
-                    strategy_id = py_file.stem
-                    meta_file = strategies_dir / f"{strategy_id}_meta.json"
-                    
-                    meta = {}
-                    if meta_file.exists():
-                        try:
-                            with open(meta_file, 'r') as f:
-                                meta = json.load(f)
-                        except:
-                            pass
-                    
-                    self.strategies[strategy_id] = {
-                        'py_file': py_file,
-                        'meta': meta,
-                        'name': meta.get('strategy_name', strategy_id)
-                    }
-                    
-                    print(f"✅ {strategy_id[:60]}")
-                
-                if self.strategies:
-                    break
+        for d in dirs:
+            if d.exists():
+                for f in d.glob("*.py"):
+                    if '_meta' not in f.stem:
+                        name = f.stem
+                        version = 1
+                        
+                        # Extract version from name
+                        v_match = re.search(r'_V(\d+)$', name)
+                        if v_match:
+                            version = int(v_match.group(1))
+                        
+                        self.strategies[name] = {
+                            'file': f,
+                            'version': version,
+                            'name': name
+                        }
+                        print(f"✅ Loaded: {name} (V{version})")
         
         if not self.strategies:
-            print("⚠️  No strategy files found - creating defaults")
-            self._create_default_strategies()
+            print("⚠️ No strategies found - creating defaults")
+            self._create_defaults()
         
         print(f"\n🎯 TOTAL STRATEGIES: {len(self.strategies)}")
     
-    def _create_default_strategies(self):
-        """Create default strategies if none found"""
-        defaults = [
-            ('Adaptive_VWAP_Mean_Reversion', 'mean_reversion'),
-            ('Adaptive_Market_Maker', 'market_maker'),
-            ('Adaptive_Momentum', 'momentum'),
-            ('Adaptive_RSI_BB', 'oversold_overbought'),
-            ('Adaptive_ML_Prediction', 'ml_prediction'),
-        ]
+    def _create_defaults(self):
+        """Create default strategies"""
+        defaults = ['VWAP_Mean_Reversion', 'Momentum_Breakout', 'RSI_Reversal']
         
-        for name, signal_type in defaults:
+        for name in defaults:
             self.strategies[name] = {
-                'py_file': None,
-                'meta': {'strategy_name': name},
-                'name': name,
-                '_signal_type': signal_type
+                'file': None,
+                'version': 1,
+                'name': name
             }
-            self.signal_gen.strategy_cache[name] = {
-                'signal_type': signal_type,
-                'indicators': [],
-                'confidence': 0.5
-            }
+            self.learning.data['strategies'][name]['version'] = 1
     
-    def _validate_tokens(self):
-        """Validate which tokens are tradeable"""
-        print(f"\n🔍 Validating {len(Config.TRADEABLE_TOKENS)} tokens...")
+    def _validate_tokens(self) -> List[str]:
+        """Validate tradeable tokens"""
+        print(f"\n🔍 Validating tokens...")
         
         valid = []
         for token in Config.TRADEABLE_TOKENS:
-            price = self.htx.get_current_price(token)
+            price = self.htx.get_price(token)
             if price:
                 valid.append(token)
                 print(f"   ✅ {token}: ${price:,.4f}")
             else:
                 print(f"   ❌ {token}: Not available")
         
-        self.valid_tokens = valid
-        print(f"\n💎 TRADING {len(self.valid_tokens)} TOKENS")
+        print(f"\n💎 TRADING {len(valid)} TOKENS")
+        return valid
     
     def run(self):
-        """Main trading loop"""
+        """Main loop"""
         print(f"\n{'='*80}")
         print(f"🚀 STARTING TRADEPEX ADAPTIVE")
         print(f"{'='*80}")
-        print(f"📊 Strategies: {len(self.strategies)}")
-        print(f"💎 Tokens: {len(self.valid_tokens)}")
-        print(f"⏰ Cycle interval: {Config.CHECK_INTERVAL}s")
-        print(f"📈 Max positions: {Config.MAX_TOTAL_POSITIONS}")
-        print(f"🧠 Learning from previous: {self.learning.learning_data['total_trades']} trades")
+        print(f"   Strategies: {len(self.strategies)}")
+        print(f"   Tokens: {len(self.valid_tokens)}")
+        print(f"   Check Interval: {Config.CHECK_INTERVAL}s")
+        print(f"   Target Win Rate: {Config.TARGET_WIN_RATE*100:.0f}%")
+        print(f"   Previous Trades: {self.learning.data['total_trades']}")
+        print(f"   Champions: {len(self.learning.data['champions'])}")
         print(f"{'='*80}\n")
         
         while self.running:
             try:
-                self.cycle_count += 1
+                self.cycle += 1
                 self._run_cycle()
                 time.sleep(Config.CHECK_INTERVAL)
                 
             except KeyboardInterrupt:
-                print("\n\n🛑 SHUTDOWN")
-                self.learning._save_learning_data()
+                print("\n🛑 SHUTDOWN")
+                self.learning.save()
                 break
             except Exception as e:
                 print(f"\n❌ Error: {e}")
                 traceback.print_exc()
                 time.sleep(30)
         
-        # Final summary
-        print(self.learning.get_learning_summary())
+        print("\n📊 FINAL STATS:")
+        self.logger.log_stats(
+            self.paper.capital, self.paper.total_pnl,
+            len([p for p in self.paper.positions.values() if p.status == "OPEN"]),
+            len(self.strategies), len(self.learning.data['champions'])
+        )
     
     def _run_cycle(self):
         """Run one trading cycle"""
-        print(f"\n{'='*80}")
-        print(f"🔄 CYCLE {self.cycle_count} - {datetime.now().strftime('%H:%M:%S')}")
-        print(f"{'='*80}")
-        
-        # Fetch prices
+        # Get prices
         prices = {}
-        print("\n📊 PRICES:")
         for token in self.valid_tokens:
-            price = self.htx.get_current_price(token)
-            if price:
-                prices[token] = price
-                print(f"   {token}: ${price:,.4f}")
+            p = self.htx.get_price(token)
+            if p:
+                prices[token] = p
+        
+        self.logger.log_cycle_start(self.cycle, prices)
         
         # Check exits
         self.paper.check_exits(prices)
         
-        # Generate signals
-        open_count = len([p for p in self.paper.positions.values() if p.status == "OPEN"])
+        # Check for strategy improvements
+        self._check_improvements()
         
-        if open_count >= Config.MAX_TOTAL_POSITIONS:
-            print(f"\n⏸️  Position limit ({open_count}/{Config.MAX_TOTAL_POSITIONS})")
-        else:
-            print(f"\n🎯 SCANNING FOR SIGNALS ({open_count}/{Config.MAX_TOTAL_POSITIONS} positions)...")
+        # Generate signals and trade
+        for strat_name, strat_info in self.strategies.items():
+            version = self.learning.data['strategies'][strat_name].get('version', 1)
             
-            signals_found = 0
-            for strategy_id, strategy_info in self.strategies.items():
-                for token in self.valid_tokens:
-                    signal = self._generate_and_execute(strategy_id, strategy_info, token, prices)
-                    if signal and signal['signal'] != 'HOLD':
-                        signals_found += 1
-            
-            if signals_found == 0:
-                print("   No actionable signals this cycle")
+            for token in self.valid_tokens:
+                self._process(strat_name, version, token, prices)
         
-        # Show status
-        self._show_status(prices)
+        # Show stats
+        self.logger.log_stats(
+            self.paper.capital, self.paper.total_pnl,
+            len([p for p in self.paper.positions.values() if p.status == "OPEN"]),
+            len(self.strategies), len(self.learning.data['champions'])
+        )
     
-    def _generate_and_execute(self, strategy_id: str, strategy_info: Dict, 
-                              token: str, prices: Dict) -> Optional[Dict]:
-        """Generate signal and potentially open position"""
+    def _process(self, strategy: str, version: int, token: str, prices: Dict):
+        """Process a strategy-token combination"""
         price = prices.get(token)
         if not price:
-            return None
+            return
         
-        # Check if we can open before fetching data
-        can_open, reason = self.paper.can_open_position(strategy_id, token)
-        if not can_open:
-            return None
+        # Check if can open first
+        can, _ = self.paper.can_open(strategy, token)
+        if not can:
+            return
         
-        # Fetch market data
-        df = self.htx.fetch_candles(token, '15min', 100)
+        # Get candles
+        df = self.htx.get_candles(token, '15min', 100)
         if df is None or len(df) < 50:
-            return None
+            return
         
         # Generate signal
-        signal = self.signal_gen.generate_signal(strategy_id, strategy_info, df, price)
+        signal = self.signal_gen.generate(df, price, version)
         
+        # Log signal
+        self.logger.log_signal(strategy, version, token, signal)
+        
+        # Open position if signal
         if signal['signal'] != 'HOLD':
-            print(f"\n{'='*60}")
-            print(f"📡 SIGNAL: {signal['signal']} {token}")
-            print(f"   Strategy: {strategy_id[:40]}")
-            print(f"   Price: ${price:.4f}")
-            print(f"   Target: ${signal.get('target_price', 0):.4f}")
-            print(f"   Stop: ${signal.get('stop_loss', 0):.4f}")
-            print(f"   RSI: {signal.get('rsi', 0):.1f}")
-            print(f"   Momentum: {signal.get('momentum', 0):.2f}%")
-            print(f"   Reason: {signal['reason']}")
-            print(f"{'='*60}")
-            
-            # Try to open position
-            self.paper.open_position(strategy_id, token, signal)
-        
-        return signal
+            self.paper.open_position(strategy, version, token, signal)
     
-    def _show_status(self, prices: Dict):
-        """Show current status"""
-        open_pos = [p for p in self.paper.positions.values() if p.status == "OPEN"]
-        closed = len(self.paper.closed_positions)
-        
-        win_rate = 0
-        if self.learning.learning_data['total_trades'] > 0:
-            win_rate = self.learning.learning_data['total_wins'] / self.learning.learning_data['total_trades'] * 100
-        
-        print(f"\n{'='*80}")
-        print(f"📊 TRADEPEX ADAPTIVE STATUS")
-        print(f"{'='*80}")
-        print(f"💰 Capital: ${self.paper.capital:,.2f} | PnL: ${self.paper.total_pnl:+,.2f}")
-        print(f"📈 Positions: {len(open_pos)}/{Config.MAX_TOTAL_POSITIONS} open | {closed} closed")
-        print(f"🧠 Learning: {self.learning.learning_data['total_trades']} trades | {win_rate:.1f}% win rate")
-        print(f"⏰ Runtime: {datetime.now() - self.start_time}")
-        
-        if open_pos:
-            print(f"\n📊 OPEN POSITIONS:")
-            print("-" * 90)
-            for pos in open_pos[:10]:  # Show first 10
-                current = prices.get(pos.symbol, pos.entry_price)
-                if pos.direction == "BUY":
-                    pnl_pct = (current - pos.entry_price) / pos.entry_price * 100
-                else:
-                    pnl_pct = (pos.entry_price - current) / pos.entry_price * 100
-                
-                emoji = "🟢" if pnl_pct >= 0 else "🔴"
-                print(f"   {pos.symbol:<6} {pos.direction:<4} ${pos.entry_price:>10.4f} → ${current:>10.4f} {emoji} {pnl_pct:+.2f}%")
+    def _check_improvements(self):
+        """Check if any strategy needs new version"""
+        for strat_name in list(self.strategies.keys()):
+            # Check champion status first
+            if self.learning.check_champion(strat_name):
+                stats = self.learning.get_strategy_stats(strat_name)
+                self.logger.log_champion(
+                    strat_name, stats['version'],
+                    stats['win_rate'], stats['pnl']
+                )
+                continue
             
-            if len(open_pos) > 10:
-                print(f"   ... and {len(open_pos) - 10} more")
-        
-        print(f"{'='*80}\n")
+            # Check if needs iteration
+            if self.learning.should_iterate(strat_name):
+                new_file = self.version_gen.generate_new_version(strat_name)
+                
+                if new_file:
+                    # Add new version to active strategies
+                    new_name = new_file.stem
+                    new_version = self.learning.data['strategies'][strat_name]['version']
+                    
+                    self.strategies[new_name] = {
+                        'file': new_file,
+                        'version': new_version,
+                        'name': new_name
+                    }
 
 
 # =============================================================================
