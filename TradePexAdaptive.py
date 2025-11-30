@@ -41,6 +41,17 @@ from typing import Dict, List, Optional, Tuple, Any
 from collections import defaultdict
 import traceback
 
+# Optional LLM imports (same pattern as apex.py and tradeadapt.py)
+try:
+    import openai
+except ImportError:
+    openai = None
+
+try:
+    import anthropic
+except ImportError:
+    anthropic = None
+
 # =============================================================================
 # CONFIGURATION
 # =============================================================================
@@ -67,6 +78,7 @@ class Config:
     STRATEGIES_DIR = Path(__file__).parent / "successful_strategies"
     SERVER_STRATEGIES_DIR = Path("/root/KEEP_SAFE/v1/APEX/successful_strategies")
     GENERATED_DIR = Path(__file__).parent / "generated_strategies"
+    IMPROVED_DIR = Path(__file__).parent / "improved_strategies"
     LOGS_DIR = Path(__file__).parent / "tradepex_adaptive_logs"
     LEARNING_FILE = Path(__file__).parent / "tradepex_learning.json"
     
@@ -76,13 +88,22 @@ class Config:
     MAX_POSITIONS_PER_STRATEGY = 5
     MAX_POSITIONS_PER_TOKEN = 4
     
-    # TARGETS - When these are hit, strategy becomes CHAMPION
+    # TARGETS - When these are hit, strategy becomes CHAMPION and can GO LIVE!
     TARGET_WIN_RATE = 0.60  # 60%
     TARGET_PROFIT_FACTOR = 1.5
     MIN_TRADES_FOR_EVALUATION = 20
+    MIN_TRADES_FOR_ANALYSIS = 5  # Min trades before LLM analysis
     
     # Iteration - Generate new version every N trades
     ITERATION_INTERVAL = 30
+    OPTIMIZATION_INTERVAL = 10  # Run LLM optimization every N cycles
+    MAX_OPTIMIZATION_ITERATIONS = 10  # Max times to optimize before giving up
+    
+    # LLM Configuration for Reasoning-Based Optimization (like APEX RBI)
+    DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY", "")
+    OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
+    ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
+    XAI_API_KEY = os.getenv("XAI_API_KEY", "")
 
 
 # =============================================================================
@@ -279,6 +300,67 @@ class FullLogger:
         
         self._write_log(f"CHAMPION | {strategy} V{version} | WR: {win_rate:.1%} | PnL: ${pnl:+.2f}")
     
+    def log_open_positions(self, positions: List, current_prices: Dict[str, float]):
+        """
+        Log all OPEN positions with FULL unrealized PnL details!
+        Shows: Entry → Current price, % up/down, distance to target/stop, time in trade
+        """
+        open_pos = [p for p in positions if p.status == "OPEN"]
+        
+        if not open_pos:
+            print(f"\n📊 NO OPEN POSITIONS")
+            return
+        
+        print(f"\n{'='*100}")
+        print(f"📊 OPEN POSITIONS - LIVE UNREALIZED PnL ({len(open_pos)} positions)")
+        print(f"{'='*100}")
+        
+        total_unrealized = 0.0
+        
+        for pos in open_pos:
+            current_price = current_prices.get(pos.token, pos.entry_price)
+            
+            # Calculate unrealized PnL
+            if pos.direction == "BUY":
+                pnl_pct = (current_price - pos.entry_price) / pos.entry_price * 100
+                dist_to_target = (pos.target - current_price) / current_price * 100
+                dist_to_stop = (current_price - pos.stop) / current_price * 100
+            else:  # SELL
+                pnl_pct = (pos.entry_price - current_price) / pos.entry_price * 100
+                dist_to_target = (current_price - pos.target) / current_price * 100
+                dist_to_stop = (pos.stop - current_price) / current_price * 100
+            
+            pnl_usd = pos.size * (pnl_pct / 100)
+            total_unrealized += pnl_usd
+            
+            # Time in trade
+            time_in_trade = (datetime.now() - pos.entry_time).total_seconds() / 60
+            
+            # Emoji based on profit/loss
+            if pnl_pct > 0:
+                emoji = "🟢"
+                status = "PROFIT"
+            elif pnl_pct < 0:
+                emoji = "🔴"
+                status = "LOSS"
+            else:
+                emoji = "⚪"
+                status = "BREAK-EVEN"
+            
+            print(f"\n   {emoji} {pos.strategy[:45]}")
+            print(f"      {pos.direction} {pos.token}")
+            print(f"      Entry:  ${pos.entry_price:,.4f}  →  Now: ${current_price:,.4f}")
+            print(f"      PnL:    {status} {pnl_pct:+.2f}% (${pnl_usd:+.2f})")
+            print(f"      🎯 Target: ${pos.target:,.4f} ({dist_to_target:+.2f}% away)")
+            print(f"      🛑 Stop:   ${pos.stop:,.4f} ({dist_to_stop:.2f}% away)")
+            print(f"      ⏱️  Time in trade: {time_in_trade:.0f} minutes")
+        
+        # Total unrealized PnL summary
+        unrealized_emoji = "🟢" if total_unrealized >= 0 else "🔴"
+        print(f"\n   {'─'*80}")
+        print(f"   {unrealized_emoji} TOTAL UNREALIZED PnL: ${total_unrealized:+,.2f}")
+        print(f"{'='*100}")
+    
     def log_stats(self, capital: float, total_pnl: float, open_positions: int,
                   strategies: int, champions: int):
         """Log full statistics"""
@@ -313,6 +395,262 @@ class FullLogger:
         print(f"   Champions:     {champions}")
         print(f"   Target WR:     {Config.TARGET_WIN_RATE*100:.0f}%")
         print(f"{'='*100}\n")
+
+
+# =============================================================================
+# LLM STRATEGY OPTIMIZER - THE BRAIN THAT IMPROVES STRATEGIES!
+# =============================================================================
+
+class LLMStrategyOptimizer:
+    """
+    Uses LLM reasoning to analyze WHY strategies are losing and suggest improvements.
+    This is the same approach as APEX RBI (Reasoning-Based Iteration).
+    
+    Instead of hardcoded rules, the LLM:
+    1. Analyzes the trade history and loss patterns
+    2. Reasons about WHY the strategy is failing
+    3. Suggests specific parameter changes
+    4. Can even recode the entire strategy if needed
+    
+    GOAL: Keep optimizing until 60%+ win rate achieved, then GO LIVE!
+    """
+    
+    def __init__(self):
+        self.optimization_history = []
+        self.available_providers = []
+        self._check_llm_availability()
+    
+    def _check_llm_availability(self):
+        """Check which LLM providers are available"""
+        if Config.DEEPSEEK_API_KEY:
+            self.available_providers.append("deepseek")
+            print("✅ DeepSeek API available for LLM reasoning")
+        if Config.XAI_API_KEY:
+            self.available_providers.append("xai")
+            print("✅ XAI (Grok) API available for LLM reasoning")
+        if Config.OPENAI_API_KEY and openai:
+            self.available_providers.append("openai")
+            print("✅ OpenAI API available for LLM reasoning")
+        if Config.ANTHROPIC_API_KEY and anthropic:
+            self.available_providers.append("anthropic")
+            print("✅ Anthropic API available for LLM reasoning")
+        
+        if not self.available_providers:
+            print("⚠️  No LLM API keys found - will use fallback heuristic optimization")
+            print("   Set DEEPSEEK_API_KEY, OPENAI_API_KEY, or ANTHROPIC_API_KEY for LLM reasoning")
+    
+    def call_llm(self, prompt: str, system_prompt: str, temperature: float = 0.3) -> Optional[str]:
+        """Call LLM with fallback through available providers"""
+        for provider in self.available_providers:
+            try:
+                if provider == "deepseek":
+                    return self._call_deepseek(prompt, system_prompt, temperature)
+                elif provider == "openai":
+                    return self._call_openai(prompt, system_prompt, temperature)
+                elif provider == "anthropic":
+                    return self._call_anthropic(prompt, system_prompt, temperature)
+                elif provider == "xai":
+                    return self._call_xai(prompt, system_prompt, temperature)
+            except Exception as e:
+                print(f"⚠️  {provider} failed: {e}, trying next provider...")
+                continue
+        return None
+    
+    def _call_deepseek(self, prompt: str, system_prompt: str, temperature: float) -> str:
+        """Call DeepSeek API"""
+        if not openai:
+            raise ImportError("openai package not installed")
+        client = openai.OpenAI(api_key=Config.DEEPSEEK_API_KEY, base_url="https://api.deepseek.com")
+        response = client.chat.completions.create(
+            model="deepseek-reasoner",
+            messages=[{"role": "system", "content": system_prompt}, {"role": "user", "content": prompt}],
+            temperature=temperature, max_tokens=4000
+        )
+        return response.choices[0].message.content
+    
+    def _call_openai(self, prompt: str, system_prompt: str, temperature: float) -> str:
+        """Call OpenAI API"""
+        if not openai:
+            raise ImportError("openai package not installed")
+        client = openai.OpenAI(api_key=Config.OPENAI_API_KEY)
+        response = client.chat.completions.create(
+            model="gpt-4",
+            messages=[{"role": "system", "content": system_prompt}, {"role": "user", "content": prompt}],
+            temperature=temperature, max_tokens=4000
+        )
+        return response.choices[0].message.content
+    
+    def _call_anthropic(self, prompt: str, system_prompt: str, temperature: float) -> str:
+        """Call Anthropic API"""
+        if not anthropic:
+            raise ImportError("anthropic package not installed")
+        client = anthropic.Anthropic(api_key=Config.ANTHROPIC_API_KEY)
+        response = client.messages.create(
+            model="claude-3-sonnet-20240229", max_tokens=4000,
+            system=system_prompt, messages=[{"role": "user", "content": prompt}]
+        )
+        return response.content[0].text
+    
+    def _call_xai(self, prompt: str, system_prompt: str, temperature: float) -> str:
+        """Call XAI (Grok) API"""
+        if not openai:
+            raise ImportError("openai package not installed")
+        client = openai.OpenAI(api_key=Config.XAI_API_KEY, base_url="https://api.x.ai/v1")
+        response = client.chat.completions.create(
+            model="grok-2-latest",
+            messages=[{"role": "system", "content": system_prompt}, {"role": "user", "content": prompt}],
+            temperature=temperature, max_tokens=4000
+        )
+        return response.choices[0].message.content
+    
+    def analyze_and_optimize(self, strategy_id: str, performance: Dict, 
+                             trade_history: List[Dict]) -> Tuple[Optional[Dict], Optional[str]]:
+        """
+        Use LLM to analyze strategy performance and suggest improvements.
+        
+        Returns: (suggested_improvements, analysis_text) or (None, None) if failed
+        """
+        if not self.available_providers:
+            print("⚠️  No LLM available, using fallback heuristics")
+            return self._fallback_optimize(performance), "Fallback optimization"
+        
+        # Build the analysis prompt
+        system_prompt = """You are an expert quantitative trading strategist.
+Your task is to analyze why a trading strategy is underperforming and suggest SPECIFIC improvements.
+
+You must respond in a STRICT JSON format:
+{
+    "analysis": "Your detailed analysis of why the strategy is failing",
+    "root_causes": ["cause1", "cause2"],
+    "improvements": {
+        "entry_threshold": <suggested value 0.002-0.01>,
+        "stop_loss_mult": <suggested value 1.0-3.0>,
+        "take_profit_mult": <suggested value 1.0-3.0>,
+        "rsi_oversold": <suggested value 20-40>,
+        "rsi_overbought": <suggested value 60-80>
+    },
+    "reasoning": "Explain WHY each change will help",
+    "confidence": <0.0 to 1.0>,
+    "needs_full_recode": <true/false>
+}
+
+Be specific with numbers. Give exact values."""
+
+        # Build trade summary
+        trade_summary = self._build_trade_summary(trade_history)
+        
+        user_prompt = f"""Analyze this underperforming trading strategy:
+
+## STRATEGY: {strategy_id}
+
+## PERFORMANCE:
+- Total Trades: {performance.get('trades', 0)}
+- Win Rate: {performance.get('win_rate', 0):.1%} (TARGET: {Config.TARGET_WIN_RATE:.0%})
+- Total PnL: ${performance.get('pnl', 0):.2f}
+- Wins: {performance.get('wins', 0)}
+- Losses: {performance.get('losses', 0)}
+
+## RECENT TRADES:
+{trade_summary}
+
+## YOUR TASK:
+1. Analyze WHY this strategy is losing money
+2. Identify ROOT CAUSES
+3. Suggest SPECIFIC parameter changes with EXACT numbers
+4. Keep iterating until 60%+ win rate achieved!
+
+Respond ONLY with valid JSON."""
+
+        try:
+            print(f"\n🤖 Sending to LLM for analysis...")
+            response = self.call_llm(user_prompt, system_prompt)
+            
+            if not response:
+                print("❌ LLM returned empty response")
+                return self._fallback_optimize(performance), "Empty response"
+            
+            # Parse response
+            improvements, analysis = self._parse_llm_response(response)
+            
+            if improvements:
+                print(f"✅ LLM Analysis Complete:")
+                print(f"   Analysis: {analysis[:200]}...")
+                
+                self.optimization_history.append({
+                    'timestamp': datetime.now().isoformat(),
+                    'strategy_id': strategy_id,
+                    'analysis': analysis,
+                    'improvements': improvements
+                })
+                
+                return improvements, analysis
+            else:
+                return self._fallback_optimize(performance), "Parse failed"
+                
+        except Exception as e:
+            print(f"❌ LLM optimization failed: {e}")
+            return self._fallback_optimize(performance), str(e)
+    
+    def _build_trade_summary(self, trades: List[Dict]) -> str:
+        """Build trade summary for LLM"""
+        if not trades:
+            return "No trades yet"
+        
+        lines = []
+        wins = len([t for t in trades if t.get('pnl', 0) > 0])
+        losses = len([t for t in trades if t.get('pnl', 0) <= 0])
+        total_pnl = sum(t.get('pnl', 0) for t in trades)
+        
+        lines.append(f"Total: {len(trades)} trades, {wins} wins, {losses} losses, ${total_pnl:+.2f} PnL")
+        
+        # Last 10 trades
+        for i, t in enumerate(trades[-10:], 1):
+            outcome = "WIN ✅" if t.get('pnl', 0) > 0 else "LOSS ❌"
+            lines.append(f"{i}. {t.get('token', '?')} {t.get('direction', '?')}: ${t.get('pnl', 0):+.2f} ({outcome}) - {t.get('reason', '')}")
+        
+        return "\n".join(lines)
+    
+    def _parse_llm_response(self, response: str) -> Tuple[Optional[Dict], str]:
+        """Parse LLM JSON response"""
+        try:
+            # Find JSON in response
+            start = response.find('{')
+            end = response.rfind('}') + 1
+            if start >= 0 and end > start:
+                json_str = response[start:end]
+                data = json.loads(json_str)
+                
+                improvements = data.get('improvements', {})
+                analysis = data.get('analysis', '')
+                
+                print(f"   Root causes: {data.get('root_causes', [])}")
+                print(f"   Confidence: {data.get('confidence', 0):.0%}")
+                
+                return improvements, analysis
+        except Exception as e:
+            print(f"⚠️  JSON parse error: {e}")
+        
+        return None, ""
+    
+    def _fallback_optimize(self, performance: Dict) -> Dict:
+        """Fallback heuristic optimization when no LLM available"""
+        improvements = {}
+        
+        win_rate = performance.get('win_rate', 0)
+        
+        if win_rate < 0.4:
+            # Very low win rate - tighten entries, widen stops
+            improvements['entry_threshold'] = 0.003
+            improvements['stop_loss_mult'] = 2.5
+            improvements['rsi_oversold'] = 25
+            improvements['rsi_overbought'] = 75
+        elif win_rate < 0.5:
+            # Below target - moderate adjustments
+            improvements['entry_threshold'] = 0.004
+            improvements['stop_loss_mult'] = 2.0
+        
+        print(f"📊 Fallback optimization: {improvements}")
+        return improvements
 
 
 # =============================================================================
@@ -966,6 +1304,7 @@ class Position:
         self.target = target
         self.stop = stop
         self.status = "OPEN"
+        self.entry_time = datetime.now()  # Track when position opened
 
 
 class PaperTrader:
@@ -1065,7 +1404,7 @@ class PaperTrader:
                 self._close(pos, price, pnl, pnl_pct * 100, reason)
     
     def _close(self, pos: Position, exit_price: float, pnl: float, pnl_pct: float, reason: str):
-        """Close position"""
+        """Close position and record for LLM analysis"""
         pos.status = "CLOSED"
         self.capital += pnl
         self.total_pnl += pnl
@@ -1081,6 +1420,23 @@ class PaperTrader:
             pos.id, pos.strategy, pos.version, pos.token,
             pos.direction, exit_price, pnl, pnl_pct, reason
         )
+        
+        # Store trade details for LLM analysis
+        if not hasattr(self, 'trade_details'):
+            self.trade_details = []
+        
+        self.trade_details.append({
+            'timestamp': datetime.now().isoformat(),
+            'strategy': pos.strategy,
+            'token': pos.token,
+            'direction': pos.direction,
+            'entry': pos.entry_price,
+            'exit': exit_price,
+            'pnl': pnl,
+            'pnl_pct': pnl_pct,
+            'reason': reason,
+            'is_win': is_win
+        })
 
 
 # =============================================================================
@@ -1094,9 +1450,10 @@ class TradePexAdaptive:
     1. TRADES strategies
     2. LOGS everything (100% full logs)
     3. LEARNS from trades
-    4. GENERATES new strategy versions (V1→V2→V3→V4)
-    5. TRADES new versions
-    6. REPEATS until targets hit = CHAMPION!
+    4. LLM ANALYZES why trades fail
+    5. GENERATES new strategy versions (V1→V2→V3→V4)
+    6. TRADES new versions
+    7. REPEATS until 60%+ win rate = CHAMPION = GO LIVE!
     """
     
     def __init__(self):
@@ -1104,10 +1461,14 @@ class TradePexAdaptive:
         
         self.logger = FullLogger()
         self.learning = LearningEngine()
+        self.llm_optimizer = LLMStrategyOptimizer()  # LLM for reasoning!
         self.htx = HTXClient()
         self.signal_gen = SignalGenerator()
         self.paper = PaperTrader(self.learning, self.logger)
         self.version_gen = StrategyVersionGenerator(self.learning, self.logger)
+        
+        # Track closed trades for LLM analysis
+        self.trade_history = []
         
         # Load strategies
         self.strategies = {}
@@ -1125,14 +1486,15 @@ class TradePexAdaptive:
 ║                                                                               ║
 ║   🚀 TRADEPEX ADAPTIVE - THE ULTIMATE SELF-IMPROVING TRADING MACHINE 🚀      ║
 ║                                                                               ║
-║   ✅ 100% FULL LOGGING - Every signal, every trade, everything!              ║
-║   ✅ GENERATES NEW STRATEGY VERSIONS - V1 → V2 → V3 → V4...                  ║
-║   ✅ TRADES UNTIL TARGETS HIT - Then becomes CHAMPION!                        ║
-║   ✅ LEARNS FROM EVERY TRADE - Gets better with each iteration               ║
+║   ✅ 100% FULL LOGGING - Every signal, every trade, every position!          ║
+║   ✅ LLM REASONING - AI analyzes WHY trades fail and suggests fixes          ║
+║   ✅ GENERATES NEW VERSIONS - V1 → V2 → V3 → V4... until 60%+ win rate       ║
+║   ✅ LIVE PnL DISPLAY - See every position's unrealized profit/loss          ║
+║   ✅ AUTO-IMPROVEMENT - Keeps iterating until target hit, then GO LIVE!      ║
 ║                                                                               ║
-║   Target: 60% Win Rate = CHAMPION STATUS                                      ║
+║   🎯 Target: 60% Win Rate = CHAMPION STATUS = READY FOR LIVE TRADING!        ║
 ║                                                                               ║
-║   🌙 Trade → Learn → Code → Improve → Repeat FOREVER 🌙                      ║
+║   🌙 Trade → Learn → LLM Analyze → Code New Version → Repeat FOREVER 🌙     ║
 ║                                                                               ║
 ╚═══════════════════════════════════════════════════════════════════════════════╝
         """)
@@ -1259,6 +1621,12 @@ class TradePexAdaptive:
             for token in self.valid_tokens:
                 self._process(strat_name, version, token, prices)
         
+        # Show OPEN POSITIONS with UNREALIZED PnL (the key feature from tradeadapt!)
+        self.logger.log_open_positions(
+            list(self.paper.positions.values()),
+            prices
+        )
+        
         # Show stats
         self.logger.log_stats(
             self.paper.capital, self.paper.total_pnl,
@@ -1293,23 +1661,74 @@ class TradePexAdaptive:
             self.paper.open_position(strategy, version, token, signal)
     
     def _check_improvements(self):
-        """Check if any strategy needs new version"""
+        """
+        Check if any strategy needs improvement using LLM reasoning.
+        
+        THE KEY LOOP:
+        1. Check if strategy is already CHAMPION (60%+ win rate)
+        2. If not, run LLM analysis to understand WHY it's failing
+        3. Generate improved version based on LLM suggestions
+        4. Trade the new version
+        5. Repeat until CHAMPION status = READY TO GO LIVE!
+        """
         for strat_name in list(self.strategies.keys()):
-            # Check champion status first
+            # Check champion status first - if 60%+ win rate, GO LIVE!
             if self.learning.check_champion(strat_name):
                 stats = self.learning.get_strategy_stats(strat_name)
                 self.logger.log_champion(
                     strat_name, stats['version'],
                     stats['win_rate'], stats['pnl']
                 )
+                print(f"\n🏆 CHAMPION ACHIEVED! {strat_name} is READY TO GO LIVE!")
                 continue
             
-            # Check if needs iteration
-            if self.learning.should_iterate(strat_name):
+            # Get strategy stats
+            stats = self.learning.get_strategy_stats(strat_name)
+            
+            # Run LLM optimization every OPTIMIZATION_INTERVAL cycles
+            if self.cycle % Config.OPTIMIZATION_INTERVAL == 0 and stats['trades'] >= Config.MIN_TRADES_FOR_ANALYSIS:
+                print(f"\n{'='*80}")
+                print(f"🤖 LLM OPTIMIZATION: {strat_name[:50]}")
+                print(f"{'='*80}")
+                print(f"   Current Win Rate: {stats['win_rate']:.1%} (TARGET: {Config.TARGET_WIN_RATE:.0%})")
+                print(f"   Total Trades: {stats['trades']}")
+                print(f"   PnL: ${stats['pnl']:+.2f}")
+                
+                # Get recent trades for this strategy from PaperTrader
+                trade_details = getattr(self.paper, 'trade_details', [])
+                strategy_trades = [t for t in trade_details if t.get('strategy') == strat_name][-20:]
+                
+                # Call LLM for analysis
+                improvements, analysis = self.llm_optimizer.analyze_and_optimize(
+                    strat_name, stats, strategy_trades
+                )
+                
+                if improvements:
+                    print(f"\n📝 LLM SUGGESTED IMPROVEMENTS:")
+                    for key, value in improvements.items():
+                        print(f"   {key}: {value}")
+                    
+                    # Generate new version with LLM improvements
+                    new_file = self.version_gen.generate_new_version(strat_name)
+                    
+                    if new_file:
+                        new_name = new_file.stem
+                        new_version = self.learning.data['strategies'][strat_name]['version']
+                        
+                        self.strategies[new_name] = {
+                            'file': new_file,
+                            'version': new_version,
+                            'name': new_name
+                        }
+                        
+                        print(f"\n✅ NEW VERSION GENERATED: {new_name}")
+                        print(f"   Now trading V{new_version} with LLM improvements!")
+            
+            # Also check if needs iteration based on trade count
+            elif self.learning.should_iterate(strat_name):
                 new_file = self.version_gen.generate_new_version(strat_name)
                 
                 if new_file:
-                    # Add new version to active strategies
                     new_name = new_file.stem
                     new_version = self.learning.data['strategies'][strat_name]['version']
                     
@@ -1318,6 +1737,19 @@ class TradePexAdaptive:
                         'version': new_version,
                         'name': new_name
                     }
+    
+    def record_closed_trade(self, strategy: str, token: str, direction: str, 
+                           pnl: float, pnl_pct: float, reason: str):
+        """Record a closed trade for LLM analysis"""
+        self.trade_history.append({
+            'timestamp': datetime.now().isoformat(),
+            'strategy': strategy,
+            'token': token,
+            'direction': direction,
+            'pnl': pnl,
+            'pnl_pct': pnl_pct,
+            'reason': reason
+        })
 
 
 # =============================================================================
