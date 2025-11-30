@@ -1086,6 +1086,404 @@ class RealHTXClient:
         return None
 
 # =============================================================================
+# LLM-BASED SIGNAL GENERATOR - READS STRATEGY CODE TO UNDERSTAND WHAT TO TRADE
+# =============================================================================
+
+class LLMSignalGenerator:
+    """
+    Uses LLM to read strategy code and generate appropriate trading signals.
+    
+    Instead of hardcoding VWAP logic for all strategies, this class:
+    1. Reads the actual strategy Python file
+    2. Asks LLM to understand what signals the strategy looks for
+    3. Generates signals based on the strategy's actual logic
+    """
+    
+    def __init__(self, llm_optimizer: 'LLMStrategyOptimizer'):
+        self.llm_optimizer = llm_optimizer
+        self.strategy_cache: Dict[str, Dict] = {}  # Cache parsed strategy info
+    
+    def parse_strategy_logic(self, strategy_file: Path) -> Dict:
+        """Read strategy file and use LLM to understand its trading logic"""
+        strategy_id = strategy_file.stem
+        
+        # Return cached result if available
+        if strategy_id in self.strategy_cache:
+            return self.strategy_cache[strategy_id]
+        
+        try:
+            # Read strategy code
+            with open(strategy_file, 'r') as f:
+                code = f.read()
+            
+            # If no LLM available, extract basic info from code
+            if not self.llm_optimizer.available_providers:
+                return self._extract_basic_logic(code, strategy_id)
+            
+            # Ask LLM to understand the strategy
+            system_prompt = """You are a quantitative trading expert analyzing Python trading strategies.
+Your task is to understand what trading signals a strategy generates and extract the key conditions.
+
+Return a JSON object with:
+{
+    "strategy_type": "MEAN_REVERSION" or "MOMENTUM" or "MARKET_MAKING" or "PAIRS_TRADING" or "ML_PREDICTION" or "OTHER",
+    "entry_conditions": {
+        "long": "description of when to buy",
+        "short": "description of when to sell"
+    },
+    "key_indicators": ["list of indicators used like VWAP, RSI, MACD, etc"],
+    "risk_management": {
+        "stop_loss_logic": "how stop loss is calculated",
+        "take_profit_logic": "how take profit is calculated"
+    }
+}"""
+            
+            user_prompt = f"""Analyze this trading strategy code and extract its trading logic:
+
+```python
+{code[:4000]}  # Truncate to avoid token limits
+```
+
+What conditions trigger BUY and SELL signals? Return JSON only."""
+            
+            response = self.llm_optimizer.call_llm(user_prompt, system_prompt, temperature=0.2)
+            
+            if response:
+                try:
+                    # Try to parse JSON from response
+                    import json
+                    # Find JSON in response
+                    json_start = response.find('{')
+                    json_end = response.rfind('}') + 1
+                    if json_start >= 0 and json_end > json_start:
+                        parsed = json.loads(response[json_start:json_end])
+                        parsed['code_snippet'] = code[:2000]
+                        self.strategy_cache[strategy_id] = parsed
+                        return parsed
+                except:
+                    pass
+            
+            # Fallback to basic extraction
+            return self._extract_basic_logic(code, strategy_id)
+            
+        except Exception as e:
+            print(f"⚠️  Could not parse strategy {strategy_id}: {e}")
+            return {'strategy_type': 'UNKNOWN', 'key_indicators': []}
+    
+    def _extract_basic_logic(self, code: str, strategy_id: str) -> Dict:
+        """Extract basic strategy info from code without LLM"""
+        code_upper = code.upper()
+        
+        # Detect strategy type from code patterns
+        if 'VWAP' in code_upper or 'MEAN_REVERSION' in code_upper:
+            strategy_type = 'MEAN_REVERSION'
+        elif 'INVENTORY' in code_upper or 'MARKET_MAKER' in code_upper or 'STOIKOV' in code_upper:
+            strategy_type = 'MARKET_MAKING'
+        elif 'NEURAL' in code_upper or 'MLP' in code_upper or 'LSTM' in code_upper or 'PREDICT' in code_upper:
+            strategy_type = 'ML_PREDICTION'
+        elif 'COINTEGRATION' in code_upper or 'PAIRS' in code_upper or 'Z_SCORE' in code_upper:
+            strategy_type = 'PAIRS_TRADING'
+        elif 'RSI' in code_upper or 'MACD' in code_upper or 'MOMENTUM' in code_upper:
+            strategy_type = 'MOMENTUM'
+        elif 'GAP' in code_upper or 'EARNINGS' in code_upper or 'REVERSAL' in code_upper:
+            strategy_type = 'EVENT_DRIVEN'
+        else:
+            strategy_type = 'UNKNOWN'
+        
+        # Extract indicators mentioned
+        indicators = []
+        indicator_patterns = ['VWAP', 'RSI', 'MACD', 'ATR', 'SMA', 'EMA', 'BOLLINGER', 'STOCHASTIC', 'ADX', 'VOLUME']
+        for ind in indicator_patterns:
+            if ind in code_upper:
+                indicators.append(ind)
+        
+        return {
+            'strategy_type': strategy_type,
+            'key_indicators': indicators,
+            'code_snippet': code[:2000]
+        }
+    
+    def generate_signal_for_strategy(self, strategy_file: Path, df: pd.DataFrame, 
+                                     current_price: float, params: 'AdaptiveParameters') -> Dict:
+        """Generate signal using LLM understanding of strategy logic"""
+        
+        strategy_info = self.parse_strategy_logic(strategy_file)
+        strategy_type = strategy_info.get('strategy_type', 'UNKNOWN')
+        
+        # Calculate common market metrics
+        context = self._calculate_market_context(df, params)
+        
+        # Generate signal based on strategy type
+        if strategy_type == 'MEAN_REVERSION':
+            return self._generate_mean_reversion_signal(df, current_price, context, params)
+        elif strategy_type == 'MARKET_MAKING':
+            return self._generate_market_making_signal(df, current_price, context, params)
+        elif strategy_type == 'ML_PREDICTION':
+            return self._generate_ml_prediction_signal(df, current_price, context, params)
+        elif strategy_type == 'PAIRS_TRADING':
+            return self._generate_pairs_trading_signal(df, current_price, context, params)
+        elif strategy_type == 'MOMENTUM':
+            return self._generate_momentum_signal(df, current_price, context, params)
+        elif strategy_type == 'EVENT_DRIVEN':
+            return self._generate_event_driven_signal(df, current_price, context, params)
+        else:
+            # Default to mean reversion for unknown types
+            return self._generate_mean_reversion_signal(df, current_price, context, params)
+    
+    def _calculate_market_context(self, df: pd.DataFrame, params: 'AdaptiveParameters') -> Dict:
+        """Calculate comprehensive market context"""
+        # VWAP and Bands
+        typical_price = (df['High'] + df['Low'] + df['Close']) / 3
+        cumulative_vp = (typical_price * df['Volume']).cumsum()
+        cumulative_volume = df['Volume'].cumsum()
+        vwap = cumulative_vp / cumulative_volume
+
+        price_deviation = np.abs(df['Close'] - vwap)
+        std_dev = price_deviation.rolling(window=params.lookback_period).std()
+
+        upper_band = vwap + (params.std_dev_multiplier * std_dev)
+        lower_band = vwap - (params.std_dev_multiplier * std_dev)
+
+        # ATR
+        high, low, close = df['High'], df['Low'], df['Close']
+        tr1 = high - low
+        tr2 = abs(high - close.shift())
+        tr3 = abs(low - close.shift())
+        true_range = np.maximum(tr1, np.maximum(tr2, tr3))
+        atr = true_range.rolling(window=14).mean()
+        
+        # RSI
+        delta = df['Close'].diff()
+        gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
+        loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
+        rs = gain / loss
+        rsi = 100 - (100 / (1 + rs))
+        
+        # MACD
+        ema_12 = df['Close'].ewm(span=12).mean()
+        ema_26 = df['Close'].ewm(span=26).mean()
+        macd = ema_12 - ema_26
+        macd_signal = macd.ewm(span=9).mean()
+        
+        # Volatility
+        returns = df['Close'].pct_change()
+        volatility_24h = returns.tail(96).std() * 100 * np.sqrt(96)
+        
+        # Volume Ratio
+        avg_volume = df['Volume'].rolling(window=20).mean()
+        volume_ratio = df['Volume'].iloc[-1] / avg_volume.iloc[-1] if avg_volume.iloc[-1] > 0 else 1.0
+        
+        # Trend
+        ma_20 = df['Close'].rolling(window=20).mean()
+        ma_5 = df['Close'].rolling(window=5).mean()
+        if ma_5.iloc[-1] > ma_20.iloc[-1] * 1.005:
+            trend = "UP"
+        elif ma_5.iloc[-1] < ma_20.iloc[-1] * 0.995:
+            trend = "DOWN"
+        else:
+            trend = "SIDEWAYS"
+
+        return {
+            'vwap': float(vwap.iloc[-1]) if not pd.isna(vwap.iloc[-1]) else 0.0,
+            'upper_band': float(upper_band.iloc[-1]) if not pd.isna(upper_band.iloc[-1]) else 0.0,
+            'lower_band': float(lower_band.iloc[-1]) if not pd.isna(lower_band.iloc[-1]) else 0.0,
+            'atr': float(atr.iloc[-1]) if not pd.isna(atr.iloc[-1]) else 0.0,
+            'rsi': float(rsi.iloc[-1]) if not pd.isna(rsi.iloc[-1]) else 50.0,
+            'macd': float(macd.iloc[-1]) if not pd.isna(macd.iloc[-1]) else 0.0,
+            'macd_signal': float(macd_signal.iloc[-1]) if not pd.isna(macd_signal.iloc[-1]) else 0.0,
+            'volatility_24h': float(volatility_24h) if not pd.isna(volatility_24h) else 0.0,
+            'volume_ratio': float(volume_ratio) if not pd.isna(volume_ratio) else 1.0,
+            'trend': trend
+        }
+    
+    def _generate_mean_reversion_signal(self, df: pd.DataFrame, current_price: float, 
+                                        context: Dict, params: 'AdaptiveParameters') -> Dict:
+        """Mean reversion: Buy oversold, sell overbought"""
+        signal = "HOLD"
+        reason = "No signal"
+        target_price = 0.0
+        stop_loss = 0.0
+        
+        lower_dev = (context['lower_band'] - current_price) / current_price * 100 if context['lower_band'] > 0 else 0
+        upper_dev = (current_price - context['upper_band']) / current_price * 100 if context['upper_band'] > 0 else 0
+        
+        if current_price < context['lower_band'] and lower_dev > params.min_deviation_percent:
+            signal = "BUY"
+            reason = f"Mean Reversion: Price ${current_price:.2f} below VWAP band (dev: {lower_dev:.2f}%)"
+            target_price = current_price + (context['atr'] * params.take_profit_atr_multiplier)
+            stop_loss = current_price - (context['atr'] * params.stop_loss_atr_multiplier)
+        elif current_price > context['upper_band'] and upper_dev > params.min_deviation_percent:
+            signal = "SELL"
+            reason = f"Mean Reversion: Price ${current_price:.2f} above VWAP band (dev: {upper_dev:.2f}%)"
+            target_price = current_price - (context['atr'] * params.take_profit_atr_multiplier)
+            stop_loss = current_price + (context['atr'] * params.stop_loss_atr_multiplier)
+        
+        return {'signal': signal, 'reason': reason, 'target_price': target_price, 'stop_loss': stop_loss, 
+                'current_price': current_price, 'deviation_percent': max(lower_dev, upper_dev), **context}
+    
+    def _generate_market_making_signal(self, df: pd.DataFrame, current_price: float,
+                                       context: Dict, params: 'AdaptiveParameters') -> Dict:
+        """Market making: Trade around mid-price with inventory management"""
+        signal = "HOLD"
+        reason = "No signal"
+        target_price = 0.0
+        stop_loss = 0.0
+        
+        # Spread-based entry
+        spread = (df['High'].iloc[-1] - df['Low'].iloc[-1]) / current_price * 100
+        mid_price = (df['High'].iloc[-1] + df['Low'].iloc[-1]) / 2
+        price_vs_mid = (current_price - mid_price) / mid_price * 100
+        
+        # Buy if price is below mid with good spread
+        if price_vs_mid < -0.1 and spread > 0.2 and context['volume_ratio'] > 0.5:
+            signal = "BUY"
+            reason = f"Market Making: Price ${current_price:.2f} below mid ${mid_price:.2f} (spread: {spread:.2f}%)"
+            target_price = mid_price + (context['atr'] * 0.5)
+            stop_loss = current_price - (context['atr'] * params.stop_loss_atr_multiplier)
+        elif price_vs_mid > 0.1 and spread > 0.2 and context['volume_ratio'] > 0.5:
+            signal = "SELL"
+            reason = f"Market Making: Price ${current_price:.2f} above mid ${mid_price:.2f} (spread: {spread:.2f}%)"
+            target_price = mid_price - (context['atr'] * 0.5)
+            stop_loss = current_price + (context['atr'] * params.stop_loss_atr_multiplier)
+        
+        return {'signal': signal, 'reason': reason, 'target_price': target_price, 'stop_loss': stop_loss,
+                'current_price': current_price, 'deviation_percent': abs(price_vs_mid), **context}
+    
+    def _generate_ml_prediction_signal(self, df: pd.DataFrame, current_price: float,
+                                       context: Dict, params: 'AdaptiveParameters') -> Dict:
+        """ML-based: Use multiple indicators for prediction"""
+        signal = "HOLD"
+        reason = "No signal"
+        target_price = 0.0
+        stop_loss = 0.0
+        
+        # Multi-indicator scoring
+        score = 0
+        
+        # RSI signals
+        if context['rsi'] < 30:
+            score += 2  # Oversold
+        elif context['rsi'] > 70:
+            score -= 2  # Overbought
+        
+        # MACD signals
+        if context['macd'] > context['macd_signal']:
+            score += 1  # Bullish crossover
+        else:
+            score -= 1  # Bearish crossover
+        
+        # Trend alignment
+        if context['trend'] == 'UP':
+            score += 1
+        elif context['trend'] == 'DOWN':
+            score -= 1
+        
+        # Volume confirmation
+        if context['volume_ratio'] > 1.2:
+            score = int(score * 1.2)  # Amplify signal on high volume
+        
+        if score >= 3:
+            signal = "BUY"
+            reason = f"ML Prediction: Bullish score {score} (RSI: {context['rsi']:.1f}, MACD: bullish)"
+            target_price = current_price + (context['atr'] * params.take_profit_atr_multiplier)
+            stop_loss = current_price - (context['atr'] * params.stop_loss_atr_multiplier)
+        elif score <= -3:
+            signal = "SELL"
+            reason = f"ML Prediction: Bearish score {score} (RSI: {context['rsi']:.1f}, MACD: bearish)"
+            target_price = current_price - (context['atr'] * params.take_profit_atr_multiplier)
+            stop_loss = current_price + (context['atr'] * params.stop_loss_atr_multiplier)
+        
+        return {'signal': signal, 'reason': reason, 'target_price': target_price, 'stop_loss': stop_loss,
+                'current_price': current_price, 'deviation_percent': abs(score), **context}
+    
+    def _generate_pairs_trading_signal(self, df: pd.DataFrame, current_price: float,
+                                       context: Dict, params: 'AdaptiveParameters') -> Dict:
+        """Pairs trading: Z-score based mean reversion"""
+        signal = "HOLD"
+        reason = "No signal"
+        target_price = 0.0
+        stop_loss = 0.0
+        
+        # Calculate z-score of price vs moving average
+        ma_50 = df['Close'].rolling(window=50).mean()
+        std_50 = df['Close'].rolling(window=50).std()
+        z_score = (current_price - ma_50.iloc[-1]) / std_50.iloc[-1] if std_50.iloc[-1] > 0 else 0
+        
+        # Entry on extreme z-scores
+        if z_score < -2.0:
+            signal = "BUY"
+            reason = f"Pairs/Z-Score: Z={z_score:.2f} (oversold, expecting reversion)"
+            target_price = ma_50.iloc[-1]  # Target mean
+            stop_loss = current_price - (context['atr'] * params.stop_loss_atr_multiplier * 1.5)
+        elif z_score > 2.0:
+            signal = "SELL"
+            reason = f"Pairs/Z-Score: Z={z_score:.2f} (overbought, expecting reversion)"
+            target_price = ma_50.iloc[-1]  # Target mean
+            stop_loss = current_price + (context['atr'] * params.stop_loss_atr_multiplier * 1.5)
+        
+        return {'signal': signal, 'reason': reason, 'target_price': target_price, 'stop_loss': stop_loss,
+                'current_price': current_price, 'deviation_percent': abs(z_score), **context}
+    
+    def _generate_momentum_signal(self, df: pd.DataFrame, current_price: float,
+                                  context: Dict, params: 'AdaptiveParameters') -> Dict:
+        """Momentum: Follow the trend"""
+        signal = "HOLD"
+        reason = "No signal"
+        target_price = 0.0
+        stop_loss = 0.0
+        
+        # Calculate momentum
+        momentum_5 = (current_price - df['Close'].iloc[-5]) / df['Close'].iloc[-5] * 100
+        momentum_20 = (current_price - df['Close'].iloc[-20]) / df['Close'].iloc[-20] * 100
+        
+        # Strong momentum with confirmation
+        if momentum_5 > 1.0 and momentum_20 > 2.0 and context['rsi'] < 70 and context['volume_ratio'] > 1.0:
+            signal = "BUY"
+            reason = f"Momentum: Strong uptrend (5d: {momentum_5:.2f}%, 20d: {momentum_20:.2f}%)"
+            target_price = current_price + (context['atr'] * params.take_profit_atr_multiplier * 1.5)
+            stop_loss = current_price - (context['atr'] * params.stop_loss_atr_multiplier)
+        elif momentum_5 < -1.0 and momentum_20 < -2.0 and context['rsi'] > 30 and context['volume_ratio'] > 1.0:
+            signal = "SELL"
+            reason = f"Momentum: Strong downtrend (5d: {momentum_5:.2f}%, 20d: {momentum_20:.2f}%)"
+            target_price = current_price - (context['atr'] * params.take_profit_atr_multiplier * 1.5)
+            stop_loss = current_price + (context['atr'] * params.stop_loss_atr_multiplier)
+        
+        return {'signal': signal, 'reason': reason, 'target_price': target_price, 'stop_loss': stop_loss,
+                'current_price': current_price, 'deviation_percent': abs(momentum_5), **context}
+    
+    def _generate_event_driven_signal(self, df: pd.DataFrame, current_price: float,
+                                      context: Dict, params: 'AdaptiveParameters') -> Dict:
+        """Event-driven: Gap reversals and unusual moves"""
+        signal = "HOLD"
+        reason = "No signal"
+        target_price = 0.0
+        stop_loss = 0.0
+        
+        # Calculate gap from previous close
+        prev_close = df['Close'].iloc[-2]
+        gap_percent = (df['Open'].iloc[-1] - prev_close) / prev_close * 100
+        
+        # Intraday reversal
+        intraday_move = (current_price - df['Open'].iloc[-1]) / df['Open'].iloc[-1] * 100
+        
+        # Gap down with reversal = buy
+        if gap_percent < -1.0 and intraday_move > 0.3 and context['volume_ratio'] > 1.5:
+            signal = "BUY"
+            reason = f"Event: Gap down {gap_percent:.2f}% with reversal {intraday_move:.2f}%"
+            target_price = prev_close  # Target gap fill
+            stop_loss = df['Low'].iloc[-1] - (context['atr'] * 0.5)
+        # Gap up with reversal = sell
+        elif gap_percent > 1.0 and intraday_move < -0.3 and context['volume_ratio'] > 1.5:
+            signal = "SELL"
+            reason = f"Event: Gap up {gap_percent:.2f}% with reversal {intraday_move:.2f}%"
+            target_price = prev_close  # Target gap fill
+            stop_loss = df['High'].iloc[-1] + (context['atr'] * 0.5)
+        
+        return {'signal': signal, 'reason': reason, 'target_price': target_price, 'stop_loss': stop_loss,
+                'current_price': current_price, 'deviation_percent': abs(gap_percent), **context}
+
+
+# =============================================================================
 # ADAPTIVE STRATEGY EXECUTOR
 # =============================================================================
 
@@ -1095,6 +1493,8 @@ class AdaptiveStrategyExecutor:
     def __init__(self, params: AdaptiveParameters):
         self.params = params
         self.current_regime = "MIXED"  # Track current market regime
+        self.strategy_type = "UNKNOWN"  # Will be set when strategy file is analyzed
+        self.strategy_file: Optional[Path] = None
     
     def detect_market_regime(self, df: pd.DataFrame) -> str:
         """
@@ -2119,11 +2519,21 @@ class AdaptiveTradingEngine:
         self.cycle_count = 0
         self.start_time = datetime.now()
         
+        # Create LLM signal generator for strategy-aware signals
+        self.llm_signal_generator = LLMSignalGenerator(self.paper_engine.llm_optimizer)
+        
         # Create strategy executors with adaptive parameters
         self.executors: Dict[str, AdaptiveStrategyExecutor] = {}
-        for strategy_id in self.strategies:
+        for strategy_id, strategy_info in self.strategies.items():
             params = self.paper_engine.get_params(strategy_id)
-            self.executors[strategy_id] = AdaptiveStrategyExecutor(params)
+            executor = AdaptiveStrategyExecutor(params)
+            executor.strategy_file = strategy_info['py_file']  # Set strategy file for LLM analysis
+            self.executors[strategy_id] = executor
+            
+            # Analyze strategy type using LLM
+            strategy_logic = self.llm_signal_generator.parse_strategy_logic(strategy_info['py_file'])
+            executor.strategy_type = strategy_logic.get('strategy_type', 'UNKNOWN')
+            print(f"   📊 {strategy_id[:40]}: Type={executor.strategy_type}")
     
     def load_strategies(self) -> Dict:
         """
@@ -2246,7 +2656,7 @@ class AdaptiveTradingEngine:
                     print(f"🆕 Now using improved v{best_version} for: {strategy_id[:40]}")
     
     def execute_strategy_for_token(self, strategy_id: str, token: str):
-        """Execute strategy with adaptive parameters"""
+        """Execute strategy with LLM-based signal generation based on actual strategy code"""
         try:
             df = self.htx_client.fetch_candles(token, '15min', 100)
             if df is None or len(df) < 50:
@@ -2256,13 +2666,24 @@ class AdaptiveTradingEngine:
             if not current_price:
                 return
             
-            # Get executor with current adaptive parameters
+            # Get executor and strategy info
             executor = self.executors[strategy_id]
-            signal = executor.generate_signal(df, current_price)
+            strategy_info = self.strategies.get(strategy_id, {})
+            strategy_file = strategy_info.get('py_file')
+            
+            # Use LLM signal generator to generate signals based on strategy type
+            if strategy_file and strategy_file.exists():
+                signal = self.llm_signal_generator.generate_signal_for_strategy(
+                    strategy_file, df, current_price, executor.params
+                )
+            else:
+                # Fallback to generic signal generation
+                signal = executor.generate_signal(df, current_price)
             
             if signal['signal'] != 'HOLD':
+                strategy_type = executor.strategy_type if hasattr(executor, 'strategy_type') else 'UNKNOWN'
                 print(f"\n🚀 SIGNAL: {strategy_id[:40]} - {signal['signal']} {token}")
-                print(f"   Reason: {signal['reason']}")
+                print(f"   Type: {strategy_type} | Reason: {signal['reason']}")
                 self.paper_engine.open_position(strategy_id, token, signal)
             
         except Exception as e:
