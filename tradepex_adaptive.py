@@ -95,6 +95,21 @@ class Config:
     MAX_OPTIMIZATION_ITERATIONS = 10  # Max times to optimize before giving up
     USE_IMPROVED_STRATEGIES = True    # Automatically use improved strategies (v1, v2, v3...)
     
+    # Market Regime Detection Thresholds
+    PERIODS_PER_24H = 96              # 24h = 96 periods of 15 minutes each
+    REGIME_HIGH_VOL_THRESHOLD = 8.0   # Volatility % above this = high volatility
+    REGIME_LOW_VOL_THRESHOLD = 3.0    # Volatility % below this = low volatility
+    REGIME_VERY_LOW_VOL_THRESHOLD = 2.0  # Volatility % below this = very low volatility
+    REGIME_STRONG_TREND_THRESHOLD = 1.0  # Trend strength above this = strong trend
+    REGIME_WEAK_TREND_THRESHOLD = 0.5    # Trend strength below this = weak/no trend
+    REGIME_RANGING_TREND_THRESHOLD = 0.3 # Trend strength below this = ranging
+    
+    # Real-Time Performance Monitoring Thresholds
+    ALERT_RECENT_WIN_RATE = 0.2       # Alert if win rate below 20%
+    ALERT_REGIME_WIN_RATE = 0.3       # Alert if regime-specific win rate below 30%
+    ALERT_RAPID_LOSS_THRESHOLD = 50.0 # Alert if losing more than $50 rapidly
+    MIN_TRADES_FOR_REGIME_ALERT = 5   # Min trades needed before regime alert
+    
     # Log Files - CRITICAL for state persistence
     TRADE_LOG_FILE = Path("./tradepex_trades.json")        # All trade history
     ANALYSIS_LOG_FILE = Path("./tradepex_analysis.json")   # Strategy performance
@@ -146,9 +161,11 @@ class TradeContext:
     volatility_24h: float = 0.0
     volume_ratio: float = 0.0  # Current volume vs average
     trend_direction: str = ""  # UP, DOWN, SIDEWAYS
+    market_regime: str = ""    # NEW: CHOPPY_HIGH_VOL, STRONG_TREND, RANGING_LOW_VOL, MIXED
     
     # Duration
     holding_time_minutes: float = 0.0
+    holding_periods: int = 0   # NEW: Track number of holding periods
     
     def to_dict(self) -> dict:
         return asdict(self)
@@ -876,7 +893,41 @@ Respond ONLY with valid JSON."""
         sell_wins = sum(1 for t in sell_trades if t.pnl_usd > 0) if sell_trades else 0
         analysis["Direction Performance"] = f"BUY: {buy_wins}/{len(buy_trades)} wins, SELL: {sell_wins}/{len(sell_trades)} wins"
         
+        # NEW: Regime performance analysis
+        regime_perf = self._build_regime_trade_summary(trades)
+        analysis["Regime Performance"] = regime_perf
+        
         return analysis
+    
+    def _build_regime_trade_summary(self, trades: List['TradeContext']) -> str:
+        """Build summary of trades by market regime for LLM context"""
+        if not trades:
+            return "No trades yet"
+        
+        regime_performance = {}
+        for trade in trades[-20:]:  # Last 20 trades
+            regime = getattr(trade, 'market_regime', 'UNKNOWN')
+            if not regime:
+                regime = 'UNKNOWN'
+            if regime not in regime_performance:
+                regime_performance[regime] = {'wins': 0, 'losses': 0, 'total': 0, 'pnl': 0.0}
+            
+            regime_performance[regime]['total'] += 1
+            regime_performance[regime]['pnl'] += trade.pnl_usd
+            if trade.pnl_usd > 0:
+                regime_performance[regime]['wins'] += 1
+            else:
+                regime_performance[regime]['losses'] += 1
+        
+        summary_lines = []
+        for regime, stats in regime_performance.items():
+            win_rate = stats['wins'] / stats['total'] if stats['total'] > 0 else 0
+            summary_lines.append(
+                f"  - {regime}: {stats['wins']}W/{stats['losses']}L "
+                f"({win_rate:.1%} WR, ${stats['pnl']:+.2f} PnL)"
+            )
+        
+        return "\n".join(summary_lines) if summary_lines else "No regime data available"
     
     def _parse_llm_response(self, response: str, current_params: 'AdaptiveParameters') -> Tuple[Optional['AdaptiveParameters'], Dict]:
         """Parse LLM JSON response and create new parameters"""
@@ -1039,10 +1090,115 @@ class RealHTXClient:
 # =============================================================================
 
 class AdaptiveStrategyExecutor:
-    """Strategy executor with adaptive parameters"""
+    """Strategy executor with adaptive parameters and market regime awareness"""
     
     def __init__(self, params: AdaptiveParameters):
         self.params = params
+        self.current_regime = "MIXED"  # Track current market regime
+    
+    def detect_market_regime(self, df: pd.DataFrame) -> str:
+        """
+        Detect current market regime for adaptive trading.
+        
+        Regimes:
+        - CHOPPY_HIGH_VOL: High volatility with no clear trend (avoid mean reversion)
+        - STRONG_TREND: Low volatility with clear trend (use momentum/trend following)
+        - RANGING_LOW_VOL: Low volatility, no trend (good for mean reversion)
+        - MIXED: Standard conditions
+        
+        Returns:
+            str: Market regime classification
+        """
+        try:
+            # Check if we have enough data
+            if len(df) < 20:
+                return "MIXED"  # Not enough data for regime detection
+            
+            # Calculate returns and volatility (24h = 96 periods of 15 min each)
+            returns = df['Close'].pct_change().dropna()
+            volatility = returns.std() * 100 * np.sqrt(Config.PERIODS_PER_24H)
+            
+            # Calculate trend strength (ADX-like calculation)
+            high, low, close = df['High'], df['Low'], df['Close']
+            tr1 = high - low
+            tr2 = abs(high - close.shift())
+            tr3 = abs(low - close.shift())
+            true_range = np.maximum(tr1, np.maximum(tr2, tr3))
+            atr = true_range.rolling(14).mean()
+            
+            # Moving averages for trend detection
+            ma_20 = df['Close'].rolling(20).mean()
+            ma_50 = df['Close'].rolling(50).mean() if len(df) >= 50 else ma_20
+            
+            # Safe trend strength calculation - use current price as fallback
+            current_atr = atr.iloc[-1] if not pd.isna(atr.iloc[-1]) else 1.0
+            current_price = df['Close'].iloc[-1]
+            ma20_val = ma_20.iloc[-1] if not pd.isna(ma_20.iloc[-1]) else current_price
+            ma50_val = ma_50.iloc[-1] if not pd.isna(ma_50.iloc[-1]) else ma20_val
+            
+            if current_atr > 0:
+                trend_strength = abs(ma20_val - ma50_val) / current_atr
+            else:
+                trend_strength = 0.5  # Default to medium trend strength
+            
+            # Regime classification using Config thresholds
+            if volatility > Config.REGIME_HIGH_VOL_THRESHOLD and trend_strength < Config.REGIME_WEAK_TREND_THRESHOLD:
+                regime = "CHOPPY_HIGH_VOL"
+            elif volatility < Config.REGIME_LOW_VOL_THRESHOLD and trend_strength > Config.REGIME_STRONG_TREND_THRESHOLD:
+                regime = "STRONG_TREND"
+            elif volatility < Config.REGIME_VERY_LOW_VOL_THRESHOLD and trend_strength < Config.REGIME_RANGING_TREND_THRESHOLD:
+                regime = "RANGING_LOW_VOL"
+            else:
+                regime = "MIXED"
+            
+            self.current_regime = regime
+            return regime
+            
+        except Exception as e:
+            print(f"⚠️  Regime detection error: {e}")
+            return "MIXED"
+    
+    def get_regime_adjusted_params(self, regime: str) -> Dict:
+        """
+        Get parameter adjustments based on current market regime.
+        
+        This implements strategy-specific adaptation rules for different market conditions.
+        """
+        adjustments = {
+            'min_deviation_mult': 1.0,
+            'stop_loss_mult': 1.0,
+            'take_profit_mult': 1.0,
+            'volatility_filter_mult': 1.0,
+            'volume_filter_mult': 1.0,
+            'regime_note': ''
+        }
+        
+        if regime == "CHOPPY_HIGH_VOL":
+            # High volatility choppy market - widen stops, require larger deviation
+            adjustments['min_deviation_mult'] = 1.5  # Require bigger moves to enter
+            adjustments['stop_loss_mult'] = 1.5      # Wider stops to avoid whipsaws
+            adjustments['take_profit_mult'] = 1.3    # Slightly further targets
+            adjustments['volatility_filter_mult'] = 1.3  # Allow higher volatility
+            adjustments['regime_note'] = "⚡ CHOPPY: Wider stops, larger entries"
+            
+        elif regime == "STRONG_TREND":
+            # Strong trending market - tighter stops, follow the trend
+            adjustments['min_deviation_mult'] = 0.8   # Enter on smaller pullbacks
+            adjustments['stop_loss_mult'] = 0.8       # Tighter stops (trend protects)
+            adjustments['take_profit_mult'] = 1.2     # Let winners run
+            adjustments['regime_note'] = "📈 TRENDING: Tighter stops, trail profits"
+            
+        elif regime == "RANGING_LOW_VOL":
+            # Low volatility ranging - perfect for mean reversion
+            adjustments['min_deviation_mult'] = 0.7   # Enter on smaller deviations
+            adjustments['stop_loss_mult'] = 1.0       # Normal stops
+            adjustments['take_profit_mult'] = 0.8     # Closer targets (quick scalps)
+            adjustments['regime_note'] = "📊 RANGING: Quick scalps, tight targets"
+            
+        else:  # MIXED
+            adjustments['regime_note'] = "⚖️  MIXED: Standard parameters"
+        
+        return adjustments
     
     def calculate_market_context(self, df: pd.DataFrame) -> Dict:
         """Calculate comprehensive market context"""
@@ -1097,13 +1253,24 @@ class AdaptiveStrategyExecutor:
         }
 
     def generate_signal(self, df: pd.DataFrame, current_price: float) -> Dict:
-        """Generate trading signal with full context"""
+        """Generate trading signal with market regime awareness and adaptive parameters"""
         context = self.calculate_market_context(df)
+        
+        # NEW: Detect market regime and get adjustments
+        regime = self.detect_market_regime(df)
+        regime_adj = self.get_regime_adjusted_params(regime)
         
         signal = "HOLD"
         reason = "No signal"
         target_price = 0.0
         stop_loss = 0.0
+        
+        # Apply regime adjustments to parameters
+        effective_min_deviation = self.params.min_deviation_percent * regime_adj['min_deviation_mult']
+        effective_max_volatility = self.params.max_volatility_percent * regime_adj['volatility_filter_mult']
+        effective_stop_mult = self.params.stop_loss_atr_multiplier * regime_adj['stop_loss_mult']
+        effective_target_mult = self.params.take_profit_atr_multiplier * regime_adj['take_profit_mult']
+        effective_min_volume = self.params.min_volume_ratio * regime_adj['volume_filter_mult']
         
         # Calculate deviations
         lower_deviation = 0.0
@@ -1114,39 +1281,39 @@ class AdaptiveStrategyExecutor:
         if context['upper_band'] > 0:
             upper_deviation = (current_price - context['upper_band']) / current_price * 100
 
-        # Filter Conditions
-        volatility_ok = context['volatility_24h'] < self.params.max_volatility_percent
-        volume_ok = context['volume_ratio'] >= self.params.min_volume_ratio
+        # Filter Conditions with regime-adjusted parameters
+        volatility_ok = context['volatility_24h'] < effective_max_volatility
+        volume_ok = context['volume_ratio'] >= effective_min_volume
         
-        # BUY Signal - Price below lower band
+        # BUY Signal - Price below lower band (with regime-adjusted thresholds)
         if (current_price < context['lower_band'] and 
-            lower_deviation > self.params.min_deviation_percent and
+            lower_deviation > effective_min_deviation and
             volatility_ok and volume_ok):
             
             signal = "BUY"
             reason = f"Price ${current_price:.2f} below lower band ${context['lower_band']:.2f} (dev: {lower_deviation:.2f}%)"
-            target_price = current_price + (context['atr'] * self.params.take_profit_atr_multiplier)
-            stop_loss = current_price - (context['atr'] * self.params.stop_loss_atr_multiplier)
+            target_price = current_price + (context['atr'] * effective_target_mult)
+            stop_loss = current_price - (context['atr'] * effective_stop_mult)
 
-        # SELL Signal - Price above upper band
+        # SELL Signal - Price above upper band (with regime-adjusted thresholds)
         elif (current_price > context['upper_band'] and 
-              upper_deviation > self.params.min_deviation_percent and
+              upper_deviation > effective_min_deviation and
               volatility_ok and volume_ok):
             
             signal = "SELL"
             reason = f"Price ${current_price:.2f} above upper band ${context['upper_band']:.2f} (dev: {upper_deviation:.2f}%)"
-            target_price = current_price - (context['atr'] * self.params.take_profit_atr_multiplier)
-            stop_loss = current_price + (context['atr'] * self.params.stop_loss_atr_multiplier)
+            target_price = current_price - (context['atr'] * effective_target_mult)
+            stop_loss = current_price + (context['atr'] * effective_stop_mult)
         
         else:
             if not volatility_ok:
-                reason = f"Volatility {context['volatility_24h']:.2f}% > max {self.params.max_volatility_percent}%"
+                reason = f"Volatility {context['volatility_24h']:.2f}% > max {effective_max_volatility:.2f}%"
             elif not volume_ok:
-                reason = f"Volume ratio {context['volume_ratio']:.2f} < min {self.params.min_volume_ratio}"
-            elif lower_deviation > 0 and lower_deviation < self.params.min_deviation_percent:
-                reason = f"Deviation {lower_deviation:.2f}% < min {self.params.min_deviation_percent}%"
-            elif upper_deviation > 0 and upper_deviation < self.params.min_deviation_percent:
-                reason = f"Deviation {upper_deviation:.2f}% < min {self.params.min_deviation_percent}%"
+                reason = f"Volume ratio {context['volume_ratio']:.2f} < min {effective_min_volume:.2f}"
+            elif lower_deviation > 0 and lower_deviation < effective_min_deviation:
+                reason = f"Deviation {lower_deviation:.2f}% < min {effective_min_deviation:.2f}%"
+            elif upper_deviation > 0 and upper_deviation < effective_min_deviation:
+                reason = f"Deviation {upper_deviation:.2f}% < min {effective_min_deviation:.2f}%"
             else:
                 reason = "Price within bands"
 
@@ -1156,9 +1323,54 @@ class AdaptiveStrategyExecutor:
             'current_price': current_price,
             'target_price': target_price,
             'stop_loss': stop_loss,
+            'market_regime': regime,
+            'regime_note': regime_adj['regime_note'],
             **context,
             'deviation_percent': max(lower_deviation, upper_deviation)
         }
+    
+    def check_regime_suitability(self, regime: str, lower_dev: float, upper_dev: float) -> Tuple[bool, str]:
+        """
+        Check if current market regime is suitable for VWAP mean reversion strategy.
+        Returns (is_suitable, reason).
+        """
+        dev = max(lower_dev, upper_dev)
+        
+        if regime == "STRONG_TREND":
+            # In strong trends, require larger deviations (trend may continue)
+            min_required = self.params.min_deviation_percent * 1.5
+            if dev > min_required:
+                return True, f"Strong trend but deviation {dev:.2f}% > {min_required:.2f}%"
+            return False, f"Strong trend - need {min_required:.2f}% deviation, only {dev:.2f}%"
+            
+        elif regime == "CHOPPY_HIGH_VOL":
+            # In choppy high vol, be more selective
+            min_required = self.params.min_deviation_percent * 1.3
+            if dev > min_required:
+                return True, f"Choppy market but deviation {dev:.2f}% > {min_required:.2f}%"
+            return False, f"Choppy high vol - need {min_required:.2f}% deviation, only {dev:.2f}%"
+            
+        elif regime == "RANGING_LOW_VOL":
+            # Perfect for mean reversion - more permissive
+            return True, f"Ranging market - ideal for mean reversion"
+            
+        else:  # MIXED
+            return True, f"Mixed regime - standard parameters apply"
+    
+    def classify_strategy_type(self, strategy_name: str) -> str:
+        """Classify strategy type based on name for regime-specific adjustments"""
+        name_upper = strategy_name.upper()
+        
+        if any(x in name_upper for x in ['MEAN_REVERSION', 'VWAP', 'REVERSAL', 'MARKET_MAKER']):
+            return "MEAN_REVERSION"
+        elif any(x in name_upper for x in ['BREAKOUT', 'MOMENTUM', 'TREND']):
+            return "BREAKOUT"
+        elif any(x in name_upper for x in ['COINTEGRATION', 'PAIRS', 'CORRELATION']):
+            return "PAIRS_TRADING"
+        elif any(x in name_upper for x in ['NEURAL', 'ML', 'MACHINE_LEARNING', 'AI']):
+            return "ML_BASED"
+        else:
+            return "UNKNOWN"
     
     def load_and_execute_strategy(self, strategy_file: Path, df: pd.DataFrame, current_price: float) -> Dict:
         """
@@ -1440,6 +1652,8 @@ class AdaptivePaperTrade:
     volatility_24h: float = 0.0
     volume_ratio: float = 0.0
     trend_direction: str = ""
+    market_regime: str = ""  # NEW: CHOPPY_HIGH_VOL, STRONG_TREND, RANGING_LOW_VOL, MIXED
+    regime_note: str = ""    # NEW: Human-readable regime adjustment note
 
 class AdaptivePaperTradingEngine:
     """Paper trading engine with trade analysis and adaptive learning"""
@@ -1506,7 +1720,7 @@ class AdaptivePaperTradingEngine:
         return True, "OK"
     
     def open_position(self, strategy_id: str, symbol: str, signal: Dict) -> Optional[str]:
-        """Open position with full context"""
+        """Open position with full context including market regime"""
         if signal['signal'] == 'HOLD':
             return None
         
@@ -1536,17 +1750,84 @@ class AdaptivePaperTradingEngine:
             deviation_percent=signal.get('deviation_percent', 0),
             volatility_24h=signal.get('volatility_24h', 0),
             volume_ratio=signal.get('volume_ratio', 0),
-            trend_direction=signal.get('trend', '')
+            trend_direction=signal.get('trend', ''),
+            market_regime=signal.get('market_regime', ''),  # NEW: Market regime
+            regime_note=signal.get('regime_note', '')       # NEW: Regime note
         )
         
         self.positions[position_id] = position
         
+        # Enhanced logging with regime info
+        regime = signal.get('market_regime', 'UNKNOWN')
+        regime_note = signal.get('regime_note', '')
         print(f"🎯 OPENED: {position_id[:50]}")
         print(f"   {signal['signal']} {symbol} @ ${signal['current_price']:.2f}")
         print(f"   Target: ${signal.get('target_price', 0):.2f} | Stop: ${signal.get('stop_loss', 0):.2f}")
         print(f"   Deviation: {signal.get('deviation_percent', 0):.2f}% | Volatility: {signal.get('volatility_24h', 0):.2f}%")
+        print(f"   Regime: {regime} {regime_note}")
         
         return position_id
+    
+    def check_real_time_metrics(self):
+        """
+        Real-time performance monitoring and alerts.
+        Triggers immediate warnings when strategy performance deteriorates.
+        """
+        alerts = []
+        
+        for strategy_id, perf in self.analyzer.strategy_performance.items():
+            # Check for consecutive losses
+            if perf.consecutive_losses >= Config.MAX_CONSECUTIVE_LOSSES:
+                alerts.append(f"🚨 ALERT: {strategy_id[:40]} has {perf.consecutive_losses} consecutive losses!")
+                if not perf.is_paused:
+                    perf.is_paused = True
+                    alerts.append(f"   ⏸️  Strategy PAUSED - will resume after optimization")
+            
+            # Check recent performance (last 5 trades)
+            recent_trades = [t for t in self.trade_history if t.strategy_id == strategy_id][-5:]
+            if len(recent_trades) >= 3:
+                recent_wins = sum(1 for t in recent_trades if t.pnl_usd > 0)
+                recent_win_rate = recent_wins / len(recent_trades)
+                recent_pnl = sum(t.pnl_usd for t in recent_trades)
+                
+                if recent_win_rate < Config.ALERT_RECENT_WIN_RATE:
+                    alerts.append(f"🚨 ALERT: {strategy_id[:40]} recent win rate only {recent_win_rate:.1%}!")
+                    alerts.append(f"   Recent PnL: ${recent_pnl:+.2f}")
+                
+                # Check if losing money rapidly (proportional to capital)
+                loss_threshold = Config.ALERT_RAPID_LOSS_THRESHOLD
+                if recent_pnl < -loss_threshold:
+                    alerts.append(f"🚨 ALERT: {strategy_id[:40]} rapid loss: ${recent_pnl:.2f} in last {len(recent_trades)} trades")
+        
+        # Check regime-specific performance
+        regime_stats = {}
+        for trade in self.trade_history[-50:]:  # Last 50 trades
+            regime = getattr(trade, 'market_regime', 'UNKNOWN')
+            if regime not in regime_stats:
+                regime_stats[regime] = {'wins': 0, 'losses': 0}
+            if trade.pnl_usd > 0:
+                regime_stats[regime]['wins'] += 1
+            else:
+                regime_stats[regime]['losses'] += 1
+        
+        # Alert on consistently bad regimes
+        for regime, stats in regime_stats.items():
+            total = stats['wins'] + stats['losses']
+            if total >= Config.MIN_TRADES_FOR_REGIME_ALERT:
+                win_rate = stats['wins'] / total
+                if win_rate < Config.ALERT_REGIME_WIN_RATE:
+                    alerts.append(f"⚠️  WARNING: Regime {regime} only {win_rate:.1%} win rate ({stats['wins']}W/{stats['losses']}L)")
+        
+        # Print alerts
+        if alerts:
+            print("\n" + "=" * 60)
+            print("📊 REAL-TIME PERFORMANCE ALERTS")
+            print("=" * 60)
+            for alert in alerts:
+                print(alert)
+            print("=" * 60 + "\n")
+        
+        return alerts
     
     def check_exits(self, current_prices: Dict):
         """Check and execute exits"""
@@ -2033,7 +2314,7 @@ class AdaptiveTradingEngine:
         print(f"{'='*80}\n")
     
     def run_adaptive(self):
-        """Run with adaptive learning"""
+        """Run with adaptive learning and real-time monitoring"""
         print("🚀 STARTING TRADEPEX ADAPTIVE - Dynamic Strategy Optimizer")
         print(f"🎯 Strategies: {len(self.strategies)}")
         print(f"💰 Tokens: {Config.TRADEABLE_TOKENS}")
@@ -2057,6 +2338,9 @@ class AdaptiveTradingEngine:
                 
                 # Check exits first
                 self.paper_engine.check_exits(current_prices)
+                
+                # NEW: Real-time performance monitoring
+                self.paper_engine.check_real_time_metrics()
                 
                 # Look for new opportunities - iterate TOKEN first, then strategies
                 # This ensures we spread positions across different tokens
