@@ -84,7 +84,7 @@ class Config:
     # Position Limits
     MAX_TOTAL_POSITIONS = 8           # Max 8 positions at once
     MAX_POSITIONS_PER_STRATEGY = 2    # Max 2 positions per strategy
-    MAX_POSITIONS_PER_TOKEN = 2       # Max 2 positions per token
+    MAX_POSITIONS_PER_TOKEN = 8       # Allow all strategies to trade same token if signal is there
     
     # Adaptive Optimization Settings
     MIN_TRADES_FOR_ANALYSIS = 5       # Need at least 5 trades before analyzing
@@ -2310,8 +2310,11 @@ class AdaptiveTradingEngine:
                 # Calculate time in trade
                 time_in_trade = (datetime.now() - position.entry_time).total_seconds() / 60
                 
-                print(f"   {position.strategy_id[:25]:<25} {position.symbol:<5} {position.direction:<4} "
-                      f"PnL: {pnl_percent:+.2f}% | Target: {dist_to_target:+.2f}% away | Stop: {dist_to_stop:.2f}% away | {time_in_trade:.0f}min")
+                # Full details with prices
+                print(f"   📍 {position.strategy_id[:35]}")
+                print(f"      {position.direction} {position.symbol} @ ${position.entry_price:.2f} → Now: ${current_price:.2f} ({pnl_percent:+.2f}%)")
+                print(f"      🎯 Target: ${position.target_price:.2f} ({dist_to_target:+.2f}% away) | 🛑 Stop: ${position.stop_loss:.2f} ({dist_to_stop:.2f}% away)")
+                print(f"      ⏱️ Time: {time_in_trade:.0f}min | Dev: {position.deviation_percent:.2f}% | Vol: {position.volatility_24h:.2f}%")
         
         print(f"{'='*80}\n")
     
