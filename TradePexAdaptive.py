@@ -83,6 +83,12 @@ class Config:
     LOGS_DIR = Path(__file__).parent / "tradepex_adaptive_logs"
     LEARNING_FILE = Path(__file__).parent / "tradepex_learning.json"
     
+    # NEW: LLM Reasoning Logs - Save ALL prompts, responses, and generated code
+    LLM_REASONING_DIR = Path(__file__).parent / "llm_reasoning_logs"
+    LLM_PROMPTS_DIR = Path(__file__).parent / "llm_reasoning_logs" / "prompts"
+    LLM_RESPONSES_DIR = Path(__file__).parent / "llm_reasoning_logs" / "responses"
+    LLM_GENERATED_CODE_DIR = Path(__file__).parent / "llm_reasoning_logs" / "generated_code"
+    
     # Trading
     CHECK_INTERVAL = 20  # Seconds
     MAX_TOTAL_POSITIONS = 20
@@ -1215,8 +1221,501 @@ Respond ONLY with valid JSON."""
         
         print(f"📊 Fallback optimization: {improvements}")
         return improvements
+    
+    # =========================================================================
+    # FULL CODE REWRITE - LLM READS CODE, OUTPUTS JSON, REWRITES ENTIRE FILE
+    # =========================================================================
+    
+    def analyze_and_recode_strategy(self, strategy_id: str, strategy_file: Path, 
+                                    performance: Dict, trade_history: List[Dict]) -> Optional[Path]:
+        """
+        THE APEX PATTERN - Full code rewrite cycle:
+        
+        1. READ the actual .py strategy code
+        2. ANALYZE what's wrong based on trade results  
+        3. OUTPUT JSON with reasoning and changes needed
+        4. REWRITE THE ENTIRE CODE (not patch!)
+        5. SAVE AS NEW FILE that runs clean
+        6. REPEAT until 60%+ win rate!
+        """
+        print(f"\n{'='*100}")
+        print(f"🤖 LLM FULL CODE REWRITE - APEX PATTERN")
+        print(f"{'='*100}")
+        print(f"Strategy: {strategy_id}")
+        print(f"File: {strategy_file}")
+        
+        if not self.available_providers:
+            print("⚠️  No LLM available, cannot recode")
+            return None
+        
+        # Create all directories
+        for d in [Config.LLM_REASONING_DIR, Config.LLM_PROMPTS_DIR, 
+                  Config.LLM_RESPONSES_DIR, Config.LLM_GENERATED_CODE_DIR]:
+            d.mkdir(parents=True, exist_ok=True)
+        
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        
+        # =====================================================================
+        # STEP 1: READ THE ACTUAL STRATEGY CODE
+        # =====================================================================
+        print(f"\n📖 STEP 1: Reading strategy code...")
+        
+        original_code = ""
+        if strategy_file.exists():
+            try:
+                with open(strategy_file, 'r') as f:
+                    original_code = f.read()
+                print(f"   ✅ Read {len(original_code)} characters from {strategy_file.name}")
+            except Exception as e:
+                print(f"   ⚠️  Could not read file: {e}")
+        
+        if not original_code:
+            print(f"   ⚠️  No original code found, will generate from scratch")
+        
+        # =====================================================================
+        # STEP 2: BUILD ANALYSIS CONTEXT
+        # =====================================================================
+        print(f"\n📊 STEP 2: Building analysis context...")
+        
+        trade_summary = self._build_detailed_trade_summary(trade_history)
+        print(f"   ✅ Analyzed {len(trade_history)} trades")
+        
+        # =====================================================================
+        # STEP 3: SEND TO LLM - GET JSON REASONING
+        # =====================================================================
+        print(f"\n🧠 STEP 3: LLM Analysis - Getting JSON reasoning...")
+        
+        analysis_json = self._get_llm_analysis_json(
+            strategy_id, original_code, performance, trade_summary, timestamp
+        )
+        
+        if not analysis_json:
+            print(f"   ❌ Failed to get LLM analysis")
+            return None
+        
+        print(f"\n{'='*80}")
+        print(f"📋 LLM ANALYSIS JSON:")
+        print(f"{'='*80}")
+        print(json.dumps(analysis_json, indent=2)[:2000])
+        print(f"{'='*80}")
+        
+        # =====================================================================
+        # STEP 4: SEND TO LLM - REWRITE ENTIRE CODE
+        # =====================================================================
+        print(f"\n✍️  STEP 4: LLM Rewriting entire strategy code...")
+        
+        new_code = self._get_llm_rewritten_code(
+            strategy_id, original_code, analysis_json, performance, timestamp
+        )
+        
+        if not new_code:
+            print(f"   ❌ Failed to get rewritten code")
+            return None
+        
+        # =====================================================================
+        # STEP 5: VALIDATE AND SAVE NEW CODE
+        # =====================================================================
+        print(f"\n💾 STEP 5: Validating and saving new code...")
+        
+        # Validate syntax
+        valid, error = self._validate_code_syntax(new_code)
+        if not valid:
+            print(f"   ❌ Syntax error: {error}")
+            print(f"   🔧 Attempting LLM fix...")
+            new_code = self._fix_code_with_llm(new_code, error, strategy_id)
+            if not new_code:
+                return None
+        
+        # Get version number
+        version = self._get_next_version(strategy_id)
+        
+        # Save to improved_strategies folder
+        Config.IMPROVED_DIR.mkdir(parents=True, exist_ok=True)
+        new_filename = f"{strategy_id}_v{version}.py"
+        new_filepath = Config.IMPROVED_DIR / new_filename
+        
+        try:
+            with open(new_filepath, 'w') as f:
+                f.write(new_code)
+            print(f"   ✅ Saved: {new_filepath}")
+        except Exception as e:
+            print(f"   ❌ Failed to save: {e}")
+            return None
+        
+        # Also save to LLM generated code dir for reference
+        ref_file = Config.LLM_GENERATED_CODE_DIR / f"{strategy_id}_v{version}_{timestamp}.py"
+        try:
+            with open(ref_file, 'w') as f:
+                f.write(new_code)
+        except Exception:
+            pass
+        
+        print(f"\n{'='*100}")
+        print(f"✅ STRATEGY REWRITTEN SUCCESSFULLY!")
+        print(f"   Old: {strategy_file.name}")
+        print(f"   New: {new_filename}")
+        print(f"   Version: {version}")
+        print(f"{'='*100}")
+        
+        return new_filepath
+    
+    def _get_llm_analysis_json(self, strategy_id: str, original_code: str,
+                               performance: Dict, trade_summary: str, timestamp: str) -> Optional[Dict]:
+        """
+        STEP 3: Get JSON analysis from LLM
+        
+        LLM reads the code and trade history, outputs structured JSON with:
+        - What's wrong
+        - Why it's failing  
+        - What specific changes to make
+        """
+        system_prompt = """You are an expert quantitative trading analyst.
 
+Your task is to analyze a trading strategy's CODE and TRADE HISTORY, then output a JSON analysis.
 
+You must respond with ONLY valid JSON in this exact format:
+{
+    "strategy_type": "VWAP_MEAN_REVERSION" or "MOMENTUM" or "MARKET_MAKING" etc,
+    "current_issues": [
+        "Issue 1 description",
+        "Issue 2 description"
+    ],
+    "root_causes": [
+        "Root cause 1",
+        "Root cause 2"
+    ],
+    "parameter_changes": {
+        "min_deviation_percent": {"old": 0.003, "new": 0.005, "reason": "Entries too tight"},
+        "stop_loss_atr_mult": {"old": 1.5, "new": 2.5, "reason": "Stops hit too often"},
+        "take_profit_atr_mult": {"old": 2.0, "new": 1.8, "reason": "Targets too far"},
+        "rsi_oversold": {"old": 30, "new": 25, "reason": "Need stronger oversold signal"},
+        "rsi_overbought": {"old": 70, "new": 75, "reason": "Need stronger overbought signal"}
+    },
+    "logic_changes": [
+        "Add trend filter - don't buy in downtrend",
+        "Add volume confirmation",
+        "Tighter entry conditions"
+    ],
+    "confidence": 0.75,
+    "expected_improvement": "Win rate should improve from X% to Y%"
+}
+
+Be SPECIFIC with numbers. Analyze the actual code to understand current parameters."""
+
+        user_prompt = f"""Analyze this trading strategy and its results:
+
+## STRATEGY: {strategy_id}
+
+## CURRENT CODE:
+```python
+{original_code[:3000] if original_code else "No code available - this is a new strategy"}
+```
+
+## PERFORMANCE:
+- Total Trades: {performance.get('trades', 0)}
+- Win Rate: {performance.get('win_rate', 0):.1%} (TARGET: 60%)
+- Total PnL: ${performance.get('pnl', 0):.2f}
+- Wins: {performance.get('wins', 0)}
+- Losses: {performance.get('losses', 0)}
+
+## TRADE HISTORY:
+{trade_summary}
+
+## YOUR TASK:
+1. READ the actual code to understand current parameters
+2. ANALYZE why trades are losing
+3. OUTPUT JSON with specific changes needed
+
+Respond with ONLY the JSON analysis:"""
+
+        # Save prompt
+        prompt_file = Config.LLM_PROMPTS_DIR / f"analysis_{strategy_id}_{timestamp}.json"
+        try:
+            with open(prompt_file, 'w') as f:
+                json.dump({
+                    'timestamp': timestamp,
+                    'type': 'analysis',
+                    'strategy_id': strategy_id,
+                    'system_prompt': system_prompt,
+                    'user_prompt': user_prompt
+                }, f, indent=2)
+            print(f"   📝 Prompt saved: {prompt_file.name}")
+        except Exception:
+            pass
+        
+        # Call LLM
+        try:
+            response = self.call_llm(user_prompt, system_prompt, temperature=0.3)
+            
+            if not response:
+                return None
+            
+            # Save response
+            response_file = Config.LLM_RESPONSES_DIR / f"analysis_{strategy_id}_{timestamp}.json"
+            try:
+                with open(response_file, 'w') as f:
+                    json.dump({
+                        'timestamp': timestamp,
+                        'type': 'analysis',
+                        'response': response
+                    }, f, indent=2)
+                print(f"   📝 Response saved: {response_file.name}")
+            except Exception:
+                pass
+            
+            # Parse JSON
+            start = response.find('{')
+            end = response.rfind('}') + 1
+            if start >= 0 and end > start:
+                return json.loads(response[start:end])
+            
+        except Exception as e:
+            print(f"   ❌ LLM analysis failed: {e}")
+        
+        return None
+    
+    def _get_llm_rewritten_code(self, strategy_id: str, original_code: str,
+                                 analysis: Dict, performance: Dict, timestamp: str) -> Optional[str]:
+        """
+        STEP 4: Get COMPLETE rewritten code from LLM
+        
+        LLM takes the analysis JSON and rewrites the ENTIRE strategy code.
+        NO PATCHES - complete rewrite so it runs clean!
+        """
+        system_prompt = """You are an expert Python developer specializing in trading strategies.
+
+Your task is to REWRITE a trading strategy based on analysis feedback.
+
+IMPORTANT RULES:
+1. Write COMPLETE, EXECUTABLE Python code
+2. DO NOT patch - rewrite the entire file
+3. Include ALL imports at the top
+4. The strategy class must have a generate_signal(df, current_price) method
+5. The method must return a dict with: signal, reason, target_price, stop_loss, current_price, vwap, deviation_percent
+6. Include proper error handling
+7. Use the parameter values from the analysis
+
+Return ONLY the Python code, no explanations."""
+
+        # Format the analysis changes
+        param_changes = analysis.get('parameter_changes', {})
+        logic_changes = analysis.get('logic_changes', [])
+        
+        param_summary = "\n".join([
+            f"- {k}: {v.get('old', '?')} → {v.get('new', '?')} ({v.get('reason', '')})"
+            for k, v in param_changes.items()
+        ])
+        
+        logic_summary = "\n".join([f"- {change}" for change in logic_changes])
+
+        user_prompt = f"""Rewrite this trading strategy with the improvements:
+
+## STRATEGY: {strategy_id}
+
+## ORIGINAL CODE:
+```python
+{original_code[:2500] if original_code else "# No original code - create new strategy"}
+```
+
+## ANALYSIS FINDINGS:
+Issues: {analysis.get('current_issues', [])}
+Root Causes: {analysis.get('root_causes', [])}
+
+## PARAMETER CHANGES TO MAKE:
+{param_summary}
+
+## LOGIC CHANGES TO MAKE:
+{logic_summary}
+
+## CURRENT PERFORMANCE:
+- Win Rate: {performance.get('win_rate', 0):.1%} (TARGET: 60%)
+- Need to improve by: {60 - performance.get('win_rate', 0)*100:.1f}%
+
+## REQUIREMENTS:
+1. REWRITE the entire file (don't patch)
+2. Apply ALL the parameter changes above
+3. Apply ALL the logic changes above
+4. Keep the class name as ImprovedStrategy
+5. The generate_signal method must return the required dict format
+
+Write the COMPLETE Python code now:
+
+```python"""
+
+        # Save prompt
+        prompt_file = Config.LLM_PROMPTS_DIR / f"recode_{strategy_id}_{timestamp}.json"
+        try:
+            with open(prompt_file, 'w') as f:
+                json.dump({
+                    'timestamp': timestamp,
+                    'type': 'recode',
+                    'strategy_id': strategy_id,
+                    'system_prompt': system_prompt,
+                    'user_prompt': user_prompt,
+                    'analysis': analysis
+                }, f, indent=2)
+            print(f"   📝 Prompt saved: {prompt_file.name}")
+        except Exception:
+            pass
+        
+        # Call LLM
+        try:
+            response = self.call_llm(user_prompt, system_prompt, temperature=0.2)
+            
+            if not response:
+                return None
+            
+            # Save response
+            response_file = Config.LLM_RESPONSES_DIR / f"recode_{strategy_id}_{timestamp}.json"
+            try:
+                with open(response_file, 'w') as f:
+                    json.dump({
+                        'timestamp': timestamp,
+                        'type': 'recode',
+                        'response': response
+                    }, f, indent=2)
+                print(f"   📝 Response saved: {response_file.name}")
+            except Exception:
+                pass
+            
+            # Extract code
+            code = self._extract_code_from_response(response)
+            
+            if code:
+                print(f"   ✅ Extracted {len(code)} characters of code")
+                return code
+            
+        except Exception as e:
+            print(f"   ❌ LLM recode failed: {e}")
+        
+        return None
+    
+    def _get_next_version(self, strategy_id: str) -> int:
+        """Get next version number for strategy"""
+        version = 1
+        if Config.IMPROVED_DIR.exists():
+            existing = list(Config.IMPROVED_DIR.glob(f"{strategy_id}_v*.py"))
+            if existing:
+                versions = []
+                for f in existing:
+                    try:
+                        v = int(f.stem.split('_v')[-1])
+                        versions.append(v)
+                    except ValueError:
+                        pass
+                if versions:
+                    version = max(versions) + 1
+        return version
+    
+    def _build_detailed_trade_summary(self, trades: List[Dict]) -> str:
+        """Build detailed trade summary for LLM analysis"""
+        if not trades:
+            return "No trades yet - generate initial strategy based on VWAP mean reversion"
+        
+        lines = []
+        
+        # Overall stats
+        wins = len([t for t in trades if t.get('pnl', 0) > 0])
+        losses = len([t for t in trades if t.get('pnl', 0) <= 0])
+        total_pnl = sum(t.get('pnl', 0) for t in trades)
+        
+        lines.append(f"### OVERALL STATISTICS")
+        lines.append(f"- Total Trades: {len(trades)}")
+        lines.append(f"- Wins: {wins}, Losses: {losses}")
+        lines.append(f"- Win Rate: {wins/len(trades)*100:.1f}%")
+        lines.append(f"- Total PnL: ${total_pnl:+.2f}")
+        lines.append("")
+        
+        # Analyze loss patterns
+        loss_reasons = {}
+        for t in trades:
+            if t.get('pnl', 0) <= 0:
+                reason = t.get('reason', 'UNKNOWN')
+                loss_reasons[reason] = loss_reasons.get(reason, 0) + 1
+        
+        if loss_reasons:
+            lines.append(f"### LOSS PATTERN ANALYSIS")
+            for reason, count in sorted(loss_reasons.items(), key=lambda x: -x[1]):
+                lines.append(f"- {reason}: {count} losses")
+            lines.append("")
+        
+        # Individual trade details
+        lines.append(f"### RECENT TRADES (Last 15)")
+        for i, t in enumerate(trades[-15:], 1):
+            outcome = "✅ WIN" if t.get('pnl', 0) > 0 else "❌ LOSS"
+            lines.append(f"{i}. {t.get('token', '?')} {t.get('direction', '?')}: ${t.get('pnl', 0):+.2f} ({outcome})")
+            lines.append(f"   Entry: ${t.get('entry', 0):.4f}, Exit: ${t.get('exit', 0):.4f}")
+            lines.append(f"   Reason: {t.get('reason', 'N/A')}")
+        
+        return "\n".join(lines)
+    
+    def _extract_code_from_response(self, response: str) -> Optional[str]:
+        """Extract Python code from LLM response"""
+        # Try to find code block
+        if "```python" in response:
+            start = response.find("```python") + 9
+            end = response.find("```", start)
+            if end > start:
+                return response[start:end].strip()
+        
+        if "```" in response:
+            start = response.find("```") + 3
+            end = response.find("```", start)
+            if end > start:
+                code = response[start:end].strip()
+                if "import" in code or "class" in code or "def " in code:
+                    return code
+        
+        # No code block, try to find code directly
+        if "import pandas" in response or "class " in response:
+            for marker in ["#!/usr/bin/env", "import pandas", "import numpy", "from typing", "class "]:
+                if marker in response:
+                    start = response.find(marker)
+                    return response[start:].strip()
+        
+        return None
+    
+    def _validate_code_syntax(self, code: str) -> Tuple[bool, Optional[str]]:
+        """Validate Python code syntax"""
+        try:
+            ast.parse(code)
+            return True, None
+        except SyntaxError as e:
+            return False, str(e)
+    
+    def _fix_code_with_llm(self, code: str, error: str, strategy_id: str) -> Optional[str]:
+        """Use LLM to fix code syntax errors (APEX pattern)"""
+        print(f"\n🔧 Attempting to fix code with LLM...")
+        
+        system_prompt = """You are a Python debugging expert.
+Fix the syntax error in this trading strategy code.
+Return ONLY the fixed Python code, no explanations."""
+        
+        user_prompt = f"""Fix this Python code:
+
+```python
+{code}
+```
+
+Error: {error}
+
+Return the COMPLETE fixed Python code:"""
+        
+        try:
+            response = self.call_llm(user_prompt, system_prompt, temperature=0.2)
+            if response:
+                fixed_code = self._extract_code_from_response(response)
+                if fixed_code:
+                    valid, new_error = self._validate_code_syntax(fixed_code)
+                    if valid:
+                        print(f"✅ Code fixed successfully!")
+                        return fixed_code
+                    else:
+                        print(f"❌ Fix failed, still has error: {new_error}")
+        except Exception as e:
+            print(f"❌ Fix attempt failed: {e}")
+        
+        return None
 # =============================================================================
 # LEARNING ENGINE - TRACKS EVERYTHING FOR IMPROVEMENT
 # =============================================================================
@@ -2230,15 +2729,15 @@ class TradePexAdaptive:
     
     def _check_improvements(self):
         """
-        Check if any strategy needs improvement using LLM reasoning + TradeAnalyzer.
+        THE APEX PATTERN - Full code rewrite cycle!
         
-        THE KEY LOOP:
         1. Check if strategy is already CHAMPION (60%+ win rate)
-        2. TradeAnalyzer identifies LOSS PATTERNS
-        3. LLM analyzes WHY it's failing
-        4. StrategyRecoder generates improved .py file
-        5. Trade the new version
-        6. Repeat until CHAMPION status = READY TO GO LIVE!
+        2. If not, READ the actual .py strategy code
+        3. ANALYZE what's wrong based on trade results  
+        4. LLM outputs JSON with reasoning and changes needed
+        5. LLM REWRITES THE ENTIRE CODE (not patch!)
+        6. SAVE AS NEW FILE that runs clean
+        7. REPEAT until 60%+ win rate = GO LIVE!
         """
         for strat_name in list(self.strategies.keys()):
             # Check champion status first - if 60%+ win rate, GO LIVE!
@@ -2248,104 +2747,81 @@ class TradePexAdaptive:
                     strat_name, stats['version'],
                     stats['win_rate'], stats['pnl']
                 )
-                print(f"\n🏆 CHAMPION ACHIEVED! {strat_name} is READY TO GO LIVE!")
+                print(f"\n{'='*100}")
+                print(f"🏆🏆🏆 CHAMPION ACHIEVED! 🏆🏆🏆")
+                print(f"   Strategy: {strat_name}")
+                print(f"   Win Rate: {stats['win_rate']:.1%}")
+                print(f"   PnL: ${stats['pnl']:+.2f}")
+                print(f"   STATUS: READY TO GO LIVE!")
+                print(f"{'='*100}")
                 continue
             
             # Get strategy stats
             stats = self.learning.get_strategy_stats(strat_name)
             
-            # Run optimization every OPTIMIZATION_INTERVAL cycles
+            # Run LLM CODE REWRITE every OPTIMIZATION_INTERVAL cycles
             if self.cycle % Config.OPTIMIZATION_INTERVAL == 0 and stats['trades'] >= Config.MIN_TRADES_FOR_ANALYSIS:
                 print(f"\n{'='*100}")
-                print(f"🤖 OPTIMIZATION ANALYSIS: {strat_name[:50]}")
+                print(f"🔄 APEX PATTERN: STRATEGY REWRITE CYCLE")
                 print(f"{'='*100}")
+                print(f"   Strategy: {strat_name}")
                 print(f"   Current Win Rate: {stats['win_rate']:.1%} (TARGET: {Config.TARGET_WIN_RATE:.0%})")
                 print(f"   Total Trades: {stats['trades']}")
                 print(f"   PnL: ${stats['pnl']:+.2f}")
                 
-                # 1. TradeAnalyzer: Identify loss patterns
-                print(f"\n🔍 TRADE ANALYZER - Loss Pattern Detection:")
-                suggestions = self.trade_analyzer.get_optimization_suggestions(strat_name)
-                patterns = suggestions.get('patterns', [])
-                if patterns:
-                    print(f"   Patterns Found: {patterns}")
-                    for suggestion in suggestions.get('suggestions', []):
-                        print(f"   💡 {suggestion}")
-                else:
-                    print(f"   No clear loss patterns identified yet")
+                # Get strategy file path
+                strat_info = self.strategies.get(strat_name, {})
+                strategy_file = strat_info.get('file', None)
                 
-                # 2. LLM: Deep analysis with reasoning
+                if not strategy_file:
+                    print(f"   ⚠️  No strategy file found for {strat_name}")
+                    continue
+                
+                # Get trade history for this strategy
                 trade_details = getattr(self.paper, 'trade_details', [])
-                strategy_trades = [t for t in trade_details if t.get('strategy') == strat_name][-20:]
+                strategy_trades = [t for t in trade_details if t.get('strategy') == strat_name][-30:]
                 
-                print(f"\n🤖 LLM REASONING:")
-                improvements, analysis = self.llm_optimizer.analyze_and_optimize(
-                    strat_name, stats, strategy_trades
+                # =============================================================
+                # THE APEX PATTERN: LLM READS CODE → ANALYZES → REWRITES ENTIRE FILE
+                # =============================================================
+                new_file = self.llm_optimizer.analyze_and_recode_strategy(
+                    strategy_id=strat_name,
+                    strategy_file=strategy_file,
+                    performance=stats,
+                    trade_history=strategy_trades
                 )
                 
-                if improvements:
-                    print(f"\n📝 LLM SUGGESTED IMPROVEMENTS:")
-                    for key, value in improvements.items():
-                        print(f"   {key}: {value}")
+                if new_file:
+                    # Add new strategy version to trading rotation
+                    new_name = new_file.stem
+                    version = self.strategy_params.get(strat_name, AdaptiveParameters()).version + 1
                     
-                    # 3. Create/Update AdaptiveParameters
-                    params = self.strategy_params.get(strat_name, AdaptiveParameters())
-                    params.version += 1
-                    params.optimization_count += 1
-                    params.last_optimized = datetime.now().isoformat()
+                    self.strategies[new_name] = {
+                        'file': new_file,
+                        'version': version,
+                        'name': new_name
+                    }
                     
-                    # Apply LLM improvements to params
-                    if 'entry_threshold' in improvements:
-                        params.min_deviation_percent = float(improvements['entry_threshold'])
-                    if 'stop_loss_mult' in improvements:
-                        params.stop_loss_atr_multiplier = float(improvements['stop_loss_mult'])
-                    if 'take_profit_mult' in improvements:
-                        params.take_profit_atr_multiplier = float(improvements['take_profit_mult'])
+                    # Update version in params
+                    if strat_name not in self.strategy_params:
+                        self.strategy_params[strat_name] = AdaptiveParameters()
+                    self.strategy_params[strat_name].version = version
                     
-                    self.strategy_params[strat_name] = params
-                    
-                    # 4. StrategyRecoder: Generate improved .py file
-                    perf = self.trade_analyzer.strategy_performance.get(
-                        strat_name, 
-                        StrategyPerformance(strategy_id=strat_name)
-                    )
-                    perf.total_trades = stats['trades']
-                    perf.win_rate = stats['win_rate']
-                    perf.total_pnl = stats['pnl']
-                    
-                    strat_info = self.strategies.get(strat_name, {})
-                    original_file = strat_info.get('file', Path(f"./{strat_name}.py"))
-                    
-                    new_file = self.strategy_recoder.recode_strategy(
-                        strategy_id=strat_name,
-                        params=params,
-                        performance=perf,
-                        original_file=original_file
-                    )
-                    
+                    print(f"\n✅ STRATEGY REWRITTEN!")
+                    print(f"   New file: {new_file.name}")
+                    print(f"   Version: {version}")
+                    print(f"   Will trade this version until 60%+ = CHAMPION!")
+                else:
+                    print(f"\n⚠️  LLM rewrite failed, falling back to template generation")
+                    # Fallback to old method
+                    new_file = self.version_gen.generate_new_version(strat_name)
                     if new_file:
                         new_name = new_file.stem
                         self.strategies[new_name] = {
                             'file': new_file,
-                            'version': params.version,
+                            'version': self.learning.data['strategies'][strat_name]['version'],
                             'name': new_name
                         }
-                        
-                        print(f"\n✅ STRATEGY RECODED: {new_file.name}")
-                        print(f"   Saved improved .py file with V{params.version} parameters!")
-                    else:
-                        # Fallback to version generator
-                        new_file = self.version_gen.generate_new_version(strat_name)
-                        if new_file:
-                            new_name = new_file.stem
-                            self.strategies[new_name] = {
-                                'file': new_file,
-                                'version': params.version,
-                                'name': new_name
-                            }
-                
-                # Print full analysis report
-                self.trade_analyzer.print_analysis(strat_name)
             
             # Also check if needs iteration based on trade count
             elif self.learning.should_iterate(strat_name):
