@@ -1,0 +1,26 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Virtual environments
+venv/
+.venv/
+env/
+.env/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Log files
+tradepex_trades.json
+tradepex_analysis.json
+tradepex_parameters.json
+
+# OS
+.DS_Store
+Thumbs.db
