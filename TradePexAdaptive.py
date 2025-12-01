@@ -2410,18 +2410,35 @@ class SignalGenerator:
         lower_dev = (l - current_price) / current_price
         upper_dev = (current_price - u) / current_price
         
+        # 🔥 TREND FILTER - Don't buy in falling market, don't sell in rising market!
+        enable_trend_filter = getattr(Config, 'ENABLE_TREND_FILTER', True)
+        min_trend_strength = getattr(Config, 'MIN_TREND_STRENGTH', 0.002)
+        
         # BUY when: Price < Lower Band AND deviation exceeds threshold
+        # 🔥 NEW: Also check trend is not strongly DOWN
         if current_price < l and lower_dev > threshold:
-            signal = "BUY"
-            reason = f"Price ${current_price:.2f} below lower ${l:.2f}"
-            target = v  # Target = VWAP (expect mean reversion)
-            stop = current_price - (a * 1.5)  # Stop = 1.5x ATR below entry
+            # Check trend filter - skip BUY if trend is strongly DOWN
+            if enable_trend_filter and trend_direction == "DOWN" and abs(trend_strength) > min_trend_strength:
+                signal = "HOLD"
+                reason = f"SKIPPED BUY - Trend is DOWN ({trend_strength:.2%}), waiting for reversal"
+            else:
+                signal = "BUY"
+                reason = f"Price ${current_price:.2f} below lower ${l:.2f} (trend: {trend_direction})"
+                target = v  # Target = VWAP (expect mean reversion)
+                stop = current_price - (a * 1.5)  # Stop = 1.5x ATR below entry
+                
         # SELL when: Price > Upper Band AND deviation exceeds threshold
+        # 🔥 NEW: Also check trend is not strongly UP
         elif current_price > u and upper_dev > threshold:
-            signal = "SELL"
-            reason = f"Price ${current_price:.2f} above upper ${u:.2f}"
-            target = v  # Target = VWAP (expect mean reversion)
-            stop = current_price + (a * 1.5)  # Stop = 1.5x ATR above entry
+            # Check trend filter - skip SELL if trend is strongly UP
+            if enable_trend_filter and trend_direction == "UP" and abs(trend_strength) > min_trend_strength:
+                signal = "HOLD"
+                reason = f"SKIPPED SELL - Trend is UP ({trend_strength:.2%}), waiting for reversal"
+            else:
+                signal = "SELL"
+                reason = f"Price ${current_price:.2f} above upper ${u:.2f} (trend: {trend_direction})"
+                target = v  # Target = VWAP (expect mean reversion)
+                stop = current_price + (a * 1.5)  # Stop = 1.5x ATR above entry
         
         return {
             'signal': signal,
