@@ -101,6 +101,13 @@ class Config:
     MIN_TRADES_FOR_EVALUATION = 20
     MIN_TRADES_FOR_ANALYSIS = 5  # Min trades before LLM analysis
     
+    # 🚨 PORTFOLIO TAKE PROFIT - THE MISSING DYNAMIC!
+    # When total unrealized PnL hits this threshold, CLOSE ALL and bank profit!
+    # This prevents winning trades from turning into losers!
+    PORTFOLIO_TAKE_PROFIT_THRESHOLD = 300.0  # Close all when $300+ unrealized profit
+    PORTFOLIO_STOP_LOSS_THRESHOLD = -500.0   # Close all if losing too much
+    ENABLE_PORTFOLIO_TAKE_PROFIT = True      # Enable/disable this feature
+    
     # Iteration - Generate new version every N trades
     ITERATION_INTERVAL = 30
     OPTIMIZATION_INTERVAL = 10  # Run LLM optimization every N cycles
@@ -2480,7 +2487,40 @@ class PaperTrader:
         return True
     
     def check_exits(self, prices: Dict[str, float]):
-        """Check and close positions"""
+        """Check and close positions - INCLUDING PORTFOLIO TAKE PROFIT!"""
+        
+        # =================================================================
+        # 🚨 PORTFOLIO TAKE PROFIT - THE MISSING DYNAMIC!
+        # When we have $300+ profit on the table, TAKE IT before it disappears!
+        # =================================================================
+        if Config.ENABLE_PORTFOLIO_TAKE_PROFIT:
+            total_unrealized = self._calculate_total_unrealized_pnl(prices)
+            
+            # TAKE PROFIT - Bank the gains!
+            if total_unrealized >= Config.PORTFOLIO_TAKE_PROFIT_THRESHOLD:
+                print("\n" + "="*80)
+                print(f"💰💰💰 PORTFOLIO TAKE PROFIT TRIGGERED! 💰💰💰")
+                print(f"   Total Unrealized: ${total_unrealized:+.2f}")
+                print(f"   Threshold: ${Config.PORTFOLIO_TAKE_PROFIT_THRESHOLD:.2f}")
+                print(f"   ACTION: CLOSING ALL {len([p for p in self.positions.values() if p.status == 'OPEN'])} POSITIONS TO BANK PROFIT!")
+                print("="*80 + "\n")
+                
+                self._close_all_positions(prices, f"PORTFOLIO TAKE PROFIT (${total_unrealized:+.2f})")
+                return
+            
+            # STOP LOSS - Cut losses before they get worse
+            if total_unrealized <= Config.PORTFOLIO_STOP_LOSS_THRESHOLD:
+                print("\n" + "="*80)
+                print(f"🛑🛑🛑 PORTFOLIO STOP LOSS TRIGGERED! 🛑🛑🛑")
+                print(f"   Total Unrealized: ${total_unrealized:+.2f}")
+                print(f"   Threshold: ${Config.PORTFOLIO_STOP_LOSS_THRESHOLD:.2f}")
+                print(f"   ACTION: CLOSING ALL POSITIONS TO LIMIT LOSSES!")
+                print("="*80 + "\n")
+                
+                self._close_all_positions(prices, f"PORTFOLIO STOP LOSS (${total_unrealized:+.2f})")
+                return
+        
+        # Normal individual position exit checks
         for pid, pos in list(self.positions.items()):
             if pos.status != "OPEN":
                 continue
@@ -2514,6 +2554,50 @@ class PaperTrader:
             
             if should_close:
                 self._close(pos, price, pnl, pnl_pct * 100, reason)
+    
+    def _calculate_total_unrealized_pnl(self, prices: Dict[str, float]) -> float:
+        """Calculate total unrealized PnL across all open positions"""
+        total = 0.0
+        for pos in self.positions.values():
+            if pos.status != "OPEN":
+                continue
+            price = prices.get(pos.token)
+            if not price:
+                continue
+            if pos.direction == "BUY":
+                pnl_pct = (price - pos.entry_price) / pos.entry_price
+            else:
+                pnl_pct = (pos.entry_price - price) / pos.entry_price
+            total += pos.size * pnl_pct
+        return total
+    
+    def _close_all_positions(self, prices: Dict[str, float], reason: str):
+        """Close ALL open positions - used for portfolio take profit/stop loss"""
+        closed_count = 0
+        total_pnl = 0.0
+        
+        for pid, pos in list(self.positions.items()):
+            if pos.status != "OPEN":
+                continue
+            
+            price = prices.get(pos.token)
+            if not price:
+                continue
+            
+            if pos.direction == "BUY":
+                pnl_pct = (price - pos.entry_price) / pos.entry_price
+            else:
+                pnl_pct = (pos.entry_price - price) / pos.entry_price
+            
+            pnl = pos.size * pnl_pct
+            total_pnl += pnl
+            
+            # This counts as a WIN if we're taking profit!
+            self._close(pos, price, pnl, pnl_pct * 100, reason)
+            closed_count += 1
+        
+        print(f"\n✅ CLOSED {closed_count} positions for ${total_pnl:+.2f} total PnL")
+        print(f"   Reason: {reason}\n")
     
     def _close(self, pos: Position, exit_price: float, pnl: float, pnl_pct: float, reason: str):
         """Close position and record for LLM analysis"""
