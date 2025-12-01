@@ -89,11 +89,12 @@ class Config:
     LLM_RESPONSES_DIR = Path(__file__).parent / "llm_reasoning_logs" / "responses"
     LLM_GENERATED_CODE_DIR = Path(__file__).parent / "llm_reasoning_logs" / "generated_code"
     
-    # Trading
+    # Trading - INCREASED for more data collection!
+    # Need more positions so ALL strategies can trade and get optimized!
     CHECK_INTERVAL = 20  # Seconds
-    MAX_TOTAL_POSITIONS = 20
-    MAX_POSITIONS_PER_STRATEGY = 5
-    MAX_POSITIONS_PER_TOKEN = 4
+    MAX_TOTAL_POSITIONS = 40          # Max 40 positions (10 strategies × 4 avg)
+    MAX_POSITIONS_PER_STRATEGY = 5    # Max 5 per strategy (enough to trigger LLM analysis)
+    MAX_POSITIONS_PER_TOKEN = 10      # Allow all strategies to trade same token
     
     # TARGETS - When these are hit, strategy becomes CHAMPION and can GO LIVE!
     TARGET_WIN_RATE = 0.60  # 60%
@@ -953,7 +954,18 @@ class FullLogger:
         # Total unrealized PnL summary
         unrealized_emoji = "🟢" if total_unrealized >= 0 else "🔴"
         print(f"\n   {'─'*80}")
-        print(f"   {unrealized_emoji} TOTAL UNREALIZED PnL: ${total_unrealized:+,.2f}")
+        print(f"   {unrealized_emoji} TOTAL PORTFOLIO UNREALIZED P&L: ${total_unrealized:+,.2f}")
+        
+        # Show distance to take profit threshold
+        if Config.ENABLE_PORTFOLIO_TAKE_PROFIT:
+            if total_unrealized >= Config.PORTFOLIO_TAKE_PROFIT_THRESHOLD:
+                print(f"   💰 TAKE PROFIT THRESHOLD REACHED! (${total_unrealized:+,.2f} >= ${Config.PORTFOLIO_TAKE_PROFIT_THRESHOLD})")
+            elif total_unrealized > 0:
+                distance = Config.PORTFOLIO_TAKE_PROFIT_THRESHOLD - total_unrealized
+                print(f"   📈 ${distance:,.2f} away from take profit threshold (${Config.PORTFOLIO_TAKE_PROFIT_THRESHOLD})")
+            else:
+                print(f"   📉 ${Config.PORTFOLIO_TAKE_PROFIT_THRESHOLD:,.2f} away from take profit threshold (need to get into profit first)")
+        
         print(f"{'='*100}")
     
     def log_stats(self, capital: float, total_pnl: float, open_positions: int,

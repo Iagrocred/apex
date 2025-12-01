@@ -81,10 +81,12 @@ class Config:
     STRATEGIES_DIR = Path("./successful_strategies")  # Local path
     CHECK_INTERVAL = 30  # Seconds between market checks
 
-    # Position Limits
-    MAX_TOTAL_POSITIONS = 8           # Max 8 positions at once
-    MAX_POSITIONS_PER_STRATEGY = 2    # Max 2 positions per strategy
-    MAX_POSITIONS_PER_TOKEN = 8       # Allow all strategies to trade same token if signal is there
+    # Position Limits - INCREASED for more data collection!
+    # Previous: 8 total, 2 per strategy = only 4 strategies trading = 6 never got improved!
+    # Now: 40 total, 5 per strategy = ALL 10 strategies can trade and get optimized!
+    MAX_TOTAL_POSITIONS = 40          # Max 40 positions at once (10 strategies × 4 avg)
+    MAX_POSITIONS_PER_STRATEGY = 5    # Max 5 positions per strategy (enough to trigger LLM analysis)
+    MAX_POSITIONS_PER_TOKEN = 10      # Allow all strategies to trade same token if signal is there
 
     # ==========================================================================
     # 🚨 PORTFOLIO TAKE PROFIT - THE MISSING DYNAMIC!
@@ -3065,6 +3067,16 @@ class AdaptiveTradingEngine:
                     
                     total_emoji = "🟢" if total_unrealized > 0 else "🔴"
                     print(f"   {total_emoji} TOTAL UNREALIZED P&L: ${total_unrealized:+.2f}")
+                    
+                    # Show distance to take profit threshold
+                    if Config.ENABLE_PORTFOLIO_TAKE_PROFIT:
+                        if total_unrealized >= Config.PORTFOLIO_TAKE_PROFIT_THRESHOLD:
+                            print(f"   💰 TAKE PROFIT THRESHOLD REACHED! (${total_unrealized:+.2f} >= ${Config.PORTFOLIO_TAKE_PROFIT_THRESHOLD})")
+                        elif total_unrealized > 0:
+                            distance = Config.PORTFOLIO_TAKE_PROFIT_THRESHOLD - total_unrealized
+                            print(f"   📈 ${distance:.2f} away from take profit threshold (${Config.PORTFOLIO_TAKE_PROFIT_THRESHOLD})")
+                        else:
+                            print(f"   📉 ${Config.PORTFOLIO_TAKE_PROFIT_THRESHOLD:.2f} away from take profit threshold (need to get into profit first)")
                     
                     # Check portfolio take profit
                     if Config.ENABLE_PORTFOLIO_TAKE_PROFIT and total_unrealized >= Config.PORTFOLIO_TAKE_PROFIT_THRESHOLD:
