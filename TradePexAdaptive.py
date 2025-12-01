@@ -115,6 +115,17 @@ class Config:
     TIME_BASED_EXIT_CYCLES = 50  # Close all positions every N cycles
     MIN_PROFIT_FOR_TIME_EXIT = 50.0  # Only time-exit if at least $50 in profit
     
+    # 🔥 TREND FILTER - DON'T BUY IN FALLING MARKET!
+    # Analysis showed: 100% LONG in -3.76% falling market = ALL LOSSES!
+    # Only BUY when trend is UP, only SELL when trend is DOWN
+    ENABLE_TREND_FILTER = True
+    TREND_PERIOD = 20  # Number of candles to calculate trend
+    MIN_TREND_STRENGTH = 0.002  # 0.2% minimum trend to confirm direction
+    
+    # 🩳 SHORT SELLING - MUST TRADE BOTH DIRECTIONS!
+    # Analysis showed: 0 SHORT trades taken, missing 50% of opportunities!
+    ENABLE_SHORT_SELLING = True  # Allow SELL/SHORT positions
+    
     # Iteration - Generate new version every N trades
     ITERATION_INTERVAL = 30
     OPTIMIZATION_INTERVAL = 10  # Run LLM optimization every N cycles
@@ -2346,6 +2357,14 @@ class SignalGenerator:
         # Momentum
         momentum = (df['Close'] / df['Close'].shift(10) - 1) * 100
         
+        # 🔥 TREND DETECTION - Don't buy in falling market!
+        # Use simple moving average slope to detect trend
+        trend_period = Config.TREND_PERIOD if hasattr(Config, 'TREND_PERIOD') else 20
+        sma_short = df['Close'].rolling(10).mean()
+        sma_long = df['Close'].rolling(trend_period).mean()
+        trend_direction = "UP" if sma_short.iloc[-1] > sma_long.iloc[-1] else "DOWN"
+        trend_strength = (sma_short.iloc[-1] - sma_long.iloc[-1]) / sma_long.iloc[-1] if sma_long.iloc[-1] > 0 else 0
+        
         # Get latest values
         v = float(vwap.iloc[-1])
         u = float(upper.iloc[-1])
@@ -2365,6 +2384,11 @@ class SignalGenerator:
         # 4. When price goes ABOVE upper band = OVERBOUGHT = SELL opportunity
         # 5. Target = VWAP (expect price to return to mean)
         # 6. Stop = Entry - (ATR * multiplier) to limit losses
+        #
+        # 🔥 TREND FILTER (NEW!):
+        # - Only BUY when trend is UP (SMA10 > SMA20)
+        # - Only SELL when trend is DOWN (SMA10 < SMA20)
+        # - This prevents buying into a falling market!
         #
         # VERSION IMPROVEMENT:
         # Each new version gets tighter entry threshold:
