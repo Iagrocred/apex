@@ -2196,6 +2196,27 @@ class AdaptivePaperTradingEngine:
         """Register the original strategy file for potential recoding"""
         self.strategy_files[strategy_id] = file_path
 
+    def detect_strategy_type(self, strategy_id: str) -> str:
+        """Detect strategy type from strategy name"""
+        sid_lower = strategy_id.lower()
+        
+        if 'vwap' in sid_lower or 'mean_reversion' in sid_lower:
+            return 'MEAN_REVERSION'
+        elif 'market_maker' in sid_lower or 'stoikov' in sid_lower or 'inventory' in sid_lower:
+            return 'MARKET_MAKING'
+        elif 'neural' in sid_lower or 'ml' in sid_lower or 'machine_learning' in sid_lower or 'ai_' in sid_lower:
+            return 'ML_PREDICTION'
+        elif 'pairs' in sid_lower or 'cointegration' in sid_lower or 'correlation' in sid_lower:
+            return 'PAIRS_TRADING'
+        elif 'momentum' in sid_lower or 'trend' in sid_lower:
+            return 'MOMENTUM'
+        elif 'reversal' in sid_lower or 'earnings' in sid_lower:
+            return 'EVENT_DRIVEN'
+        elif 'seasonality' in sid_lower or 'pattern' in sid_lower:
+            return 'PATTERN_RECOGNITION'
+        else:
+            return 'UNKNOWN'
+
     def get_params(self, strategy_id: str) -> AdaptiveParameters:
         """Get or create adaptive parameters for strategy"""
         if strategy_id not in self.strategy_params:
