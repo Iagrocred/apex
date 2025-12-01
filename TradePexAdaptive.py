@@ -1769,7 +1769,14 @@ class LearningEngine:
                                 v['by_token']
                             )
                 
-                for key in ['tokens', 'total_trades', 'total_wins', 'total_pnl', 'iterations', 'champions']:
+                # Convert tokens back to defaultdict
+                if 'tokens' in saved:
+                    self.data['tokens'] = defaultdict(
+                        lambda: {'trades': 0, 'wins': 0, 'pnl': 0},
+                        saved['tokens']
+                    )
+                
+                for key in ['total_trades', 'total_wins', 'total_pnl', 'iterations', 'champions']:
                     if key in saved:
                         self.data[key] = saved[key]
                 
@@ -1804,6 +1811,26 @@ class LearningEngine:
     
     def record_trade(self, strategy: str, token: str, pnl: float, is_win: bool):
         """Record a completed trade"""
+        # Ensure token exists in tokens dict (fix KeyError)
+        if token not in self.data['tokens']:
+            self.data['tokens'][token] = {'trades': 0, 'wins': 0, 'pnl': 0}
+        
+        # Ensure strategy exists
+        if strategy not in self.data['strategies']:
+            self.data['strategies'][strategy] = {
+                'trades': 0, 'wins': 0, 'losses': 0, 'total_pnl': 0,
+                'version': 1, 'is_champion': False,
+                'by_token': defaultdict(lambda: {'trades': 0, 'wins': 0, 'pnl': 0})
+            }
+        
+        # Ensure by_token exists for strategy
+        if 'by_token' not in self.data['strategies'][strategy]:
+            self.data['strategies'][strategy]['by_token'] = defaultdict(lambda: {'trades': 0, 'wins': 0, 'pnl': 0})
+        
+        # Ensure token exists in strategy's by_token
+        if token not in self.data['strategies'][strategy]['by_token']:
+            self.data['strategies'][strategy]['by_token'][token] = {'trades': 0, 'wins': 0, 'pnl': 0}
+        
         # Strategy stats
         self.data['strategies'][strategy]['trades'] += 1
         self.data['strategies'][strategy]['total_pnl'] += pnl
@@ -2313,7 +2340,26 @@ class SignalGenerator:
         r = float(rsi.iloc[-1]) if not pd.isna(rsi.iloc[-1]) else 50
         m = float(momentum.iloc[-1]) if not pd.isna(momentum.iloc[-1]) else 0
         
-        # Threshold based on version
+        # =====================================================================
+        # HOW THE STRATEGY DECIDES WHEN TO TRADE:
+        # =====================================================================
+        # 
+        # VWAP MEAN REVERSION STRATEGY:
+        # 1. Calculate VWAP (Volume Weighted Average Price) - the "fair value"
+        # 2. Calculate Upper/Lower bands (2 standard deviations from VWAP)
+        # 3. When price goes BELOW lower band = OVERSOLD = BUY opportunity
+        # 4. When price goes ABOVE upper band = OVERBOUGHT = SELL opportunity
+        # 5. Target = VWAP (expect price to return to mean)
+        # 6. Stop = Entry - (ATR * multiplier) to limit losses
+        #
+        # VERSION IMPROVEMENT:
+        # Each new version gets tighter entry threshold:
+        # V1: 0.5% deviation required
+        # V2: 0.45% deviation required
+        # V3: 0.40% deviation required (more selective entries)
+        # =====================================================================
+        
+        # Threshold based on version - gets tighter each version
         threshold = 0.005 - (strategy_version - 1) * 0.0005  # Tighter each version
         threshold = max(0.002, threshold)
         
@@ -2322,19 +2368,22 @@ class SignalGenerator:
         target = 0
         stop = 0
         
+        # How far is price from the bands?
         lower_dev = (l - current_price) / current_price
         upper_dev = (current_price - u) / current_price
         
+        # BUY when: Price < Lower Band AND deviation exceeds threshold
         if current_price < l and lower_dev > threshold:
             signal = "BUY"
             reason = f"Price ${current_price:.2f} below lower ${l:.2f}"
-            target = v
-            stop = current_price - (a * 1.5)
+            target = v  # Target = VWAP (expect mean reversion)
+            stop = current_price - (a * 1.5)  # Stop = 1.5x ATR below entry
+        # SELL when: Price > Upper Band AND deviation exceeds threshold
         elif current_price > u and upper_dev > threshold:
             signal = "SELL"
             reason = f"Price ${current_price:.2f} above upper ${u:.2f}"
-            target = v
-            stop = current_price + (a * 1.5)
+            target = v  # Target = VWAP (expect mean reversion)
+            stop = current_price + (a * 1.5)  # Stop = 1.5x ATR above entry
         
         return {
             'signal': signal,
