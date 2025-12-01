@@ -317,10 +317,34 @@ class StrategyRecoder:
             json.dump(self.improvement_history, f, indent=2, default=str)
 
     def get_next_version(self, strategy_id: str) -> int:
-        """Get the next version number for a strategy"""
-        if strategy_id not in self.improvement_history:
-            return 1
-        return len(self.improvement_history[strategy_id]) + 1
+        """Get the next version number for a strategy by scanning actual files"""
+        max_version = 0
+        
+        # Check history first
+        if strategy_id in self.improvement_history:
+            max_version = len(self.improvement_history[strategy_id])
+        
+        # Also scan the improved_strategies folder for BOTH naming conventions
+        if Config.IMPROVED_STRATEGIES_DIR.exists():
+            # Pattern 1: Strategy_v23.py (new naming)
+            for f in Config.IMPROVED_STRATEGIES_DIR.glob(f"{strategy_id}_v*.py"):
+                try:
+                    version = int(f.stem.rsplit("_v", 1)[1])
+                    if version > max_version:
+                        max_version = version
+                except (ValueError, IndexError):
+                    continue
+            
+            # Pattern 2: Strategy_improved_v23.py (old naming)
+            for f in Config.IMPROVED_STRATEGIES_DIR.glob(f"{strategy_id}_improved_v*.py"):
+                try:
+                    version = int(f.stem.rsplit("_v", 1)[1])
+                    if version > max_version:
+                        max_version = version
+                except (ValueError, IndexError):
+                    continue
+        
+        return max_version + 1
 
     def recode_strategy(self, strategy_id: str, params: AdaptiveParameters,
                        performance: 'StrategyPerformance', original_file: Path) -> Optional[Path]:
@@ -331,8 +355,9 @@ class StrategyRecoder:
         version = self.get_next_version(strategy_id)
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
-        # Create new filename with version
-        new_filename = f"{strategy_id}_improved_v{version}.py"
+        # Create new filename with version - USE SAME NAMING AS SERVER!
+        # Server uses: Strategy_v23.py (not Strategy_improved_v23.py)
+        new_filename = f"{strategy_id}_v{version}.py"
         new_filepath = Config.IMPROVED_STRATEGIES_DIR / new_filename
 
         # Generate the improved strategy code
@@ -350,7 +375,7 @@ class StrategyRecoder:
                 f.write(strategy_code)
 
             # Also save a metadata JSON file
-            meta_filepath = Config.IMPROVED_STRATEGIES_DIR / f"{strategy_id}_improved_v{version}_meta.json"
+            meta_filepath = Config.IMPROVED_STRATEGIES_DIR / f"{strategy_id}_v{version}_meta.json"
             meta_data = {
                 'strategy_id': strategy_id,
                 'version': version,
@@ -2749,15 +2774,20 @@ class AdaptiveTradingEngine:
         improved_versions = {}  # Maps original_strategy_id -> (version, filepath)
 
         if Config.USE_IMPROVED_STRATEGIES and Config.IMPROVED_STRATEGIES_DIR.exists():
-            improved_files = list(Config.IMPROVED_STRATEGIES_DIR.glob("*_improved_v*.py"))
+            # Look for BOTH naming conventions:
+            # 1. Strategy_improved_v1.py (old naming)
+            # 2. Strategy_v1.py (new naming - what the server has!)
+            improved_files = list(Config.IMPROVED_STRATEGIES_DIR.glob("*_v*.py"))
             if improved_files:
-                print(f"📁 Found {len(improved_files)} improved strategy files")
+                print(f"📁 Found {len(improved_files)} improved strategy files in improved_strategies/")
 
                 for improved_file in improved_files:
-                    # Parse filename: original_strategy_id_improved_v1.py
                     filename = improved_file.stem
-                    if "_improved_v" in filename:
-                        parts = filename.rsplit("_improved_v", 1)
+                    
+                    # Try new naming: Strategy_v23.py
+                    if "_v" in filename and "_improved_v" not in filename:
+                        # Parse: 20251124_061812_Market_Maker_Inventory_Rebalancing_Strategy_v23
+                        parts = filename.rsplit("_v", 1)
                         if len(parts) == 2:
                             original_id = parts[0]
                             try:
@@ -2765,6 +2795,20 @@ class AdaptiveTradingEngine:
                                 # Keep track of highest version for each original strategy
                                 if original_id not in improved_versions or version > improved_versions[original_id][0]:
                                     improved_versions[original_id] = (version, improved_file)
+                                    print(f"   📌 {original_id[:50]}... → v{version}")
+                            except ValueError:
+                                continue
+                    
+                    # Also try old naming: Strategy_improved_v1.py
+                    elif "_improved_v" in filename:
+                        parts = filename.rsplit("_improved_v", 1)
+                        if len(parts) == 2:
+                            original_id = parts[0]
+                            try:
+                                version = int(parts[1])
+                                if original_id not in improved_versions or version > improved_versions[original_id][0]:
+                                    improved_versions[original_id] = (version, improved_file)
+                                    print(f"   📌 {original_id[:50]}... → v{version}")
                             except ValueError:
                                 continue
 
@@ -2819,9 +2863,13 @@ class AdaptiveTradingEngine:
         if not Config.USE_IMPROVED_STRATEGIES or not Config.IMPROVED_STRATEGIES_DIR.exists():
             return
 
-        # Look for improved versions
-        pattern = f"{strategy_id}_improved_v*.py"
-        improved_files = list(Config.IMPROVED_STRATEGIES_DIR.glob(pattern))
+        # Look for improved versions - BOTH naming conventions!
+        # 1. Strategy_v23.py (new naming - what server has)
+        # 2. Strategy_improved_v23.py (old naming)
+        pattern1 = f"{strategy_id}_v*.py"
+        pattern2 = f"{strategy_id}_improved_v*.py"
+        improved_files = list(Config.IMPROVED_STRATEGIES_DIR.glob(pattern1))
+        improved_files.extend(list(Config.IMPROVED_STRATEGIES_DIR.glob(pattern2)))
 
         if improved_files:
             # Find the highest version
