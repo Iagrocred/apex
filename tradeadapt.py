@@ -3076,7 +3076,9 @@ class AdaptiveTradingEngine:
                             distance = Config.PORTFOLIO_TAKE_PROFIT_THRESHOLD - total_unrealized
                             print(f"   📈 ${distance:.2f} away from take profit threshold (${Config.PORTFOLIO_TAKE_PROFIT_THRESHOLD})")
                         else:
-                            print(f"   📉 ${Config.PORTFOLIO_TAKE_PROFIT_THRESHOLD:.2f} away from take profit threshold (need to get into profit first)")
+                            # When in loss, actual distance = get to breakeven + reach threshold
+                            distance = abs(total_unrealized) + Config.PORTFOLIO_TAKE_PROFIT_THRESHOLD
+                            print(f"   📉 ${distance:.2f} away from take profit threshold (need +${abs(total_unrealized):.2f} to breakeven, then +${Config.PORTFOLIO_TAKE_PROFIT_THRESHOLD:.2f} more)")
                     
                     # Check portfolio take profit
                     if Config.ENABLE_PORTFOLIO_TAKE_PROFIT and total_unrealized >= Config.PORTFOLIO_TAKE_PROFIT_THRESHOLD:
