@@ -86,6 +86,34 @@ class Config:
     MAX_POSITIONS_PER_STRATEGY = 2    # Max 2 positions per strategy
     MAX_POSITIONS_PER_TOKEN = 8       # Allow all strategies to trade same token if signal is there
 
+    # ==========================================================================
+    # 🚨 PORTFOLIO TAKE PROFIT - THE MISSING DYNAMIC!
+    # ==========================================================================
+    # Analysis of 24-hour logs showed:
+    # - We hit $482 unrealized profit but NEVER TOOK IT
+    # - 0% win rate because individual targets too far (5-7%)
+    # - With $200 take profit: 16 wins, $2,864 NET PROFIT!
+    PORTFOLIO_TAKE_PROFIT_THRESHOLD = 200.0  # Close all when $200+ unrealized profit
+    PORTFOLIO_STOP_LOSS_THRESHOLD = -400.0   # Close all if losing too much
+    ENABLE_PORTFOLIO_TAKE_PROFIT = True      # Enable this feature
+    
+    # ==========================================================================
+    # 🎯 TIME-BASED EXIT - Close positions periodically to bank profits
+    # ==========================================================================
+    # Analysis showed: Close every 50 cycles = 64% win rate, $1192 profit!
+    ENABLE_TIME_BASED_EXIT = True
+    TIME_BASED_EXIT_CYCLES = 50  # Close all positions every N cycles
+    MIN_PROFIT_FOR_TIME_EXIT = 50.0  # Only time-exit if at least $50 in profit
+    
+    # ==========================================================================
+    # 🔥 TREND FILTER - Don't buy in falling market!
+    # ==========================================================================
+    # Analysis showed: 100% LONG in -3.76% falling market = ALL LOSSES!
+    # Only BUY when trend is UP, only SELL when trend is DOWN
+    ENABLE_TREND_FILTER = True
+    TREND_PERIOD = 20  # Number of candles to calculate trend
+    MIN_TREND_STRENGTH = 0.002  # 0.2% minimum trend to confirm direction
+
     # Adaptive Optimization Settings
     MIN_TRADES_FOR_ANALYSIS = 5       # Need at least 5 trades before analyzing
     TARGET_WIN_RATE = 0.55            # Target 55% win rate
@@ -1298,7 +1326,13 @@ What conditions trigger BUY and SELL signals? Return JSON only."""
 
     def _generate_mean_reversion_signal(self, df: pd.DataFrame, current_price: float,
                                         context: Dict, params: 'AdaptiveParameters') -> Dict:
-        """Mean reversion: Buy oversold, sell overbought"""
+        """Mean reversion: Buy oversold, sell overbought
+        
+        🔥 TREND-BASED TRADING:
+        - Trend DOWN → SELL/SHORT (profit from falling prices!)
+        - Trend UP → BUY/LONG (profit from rising prices!)
+        - Don't fight the trend - trade WITH it!
+        """
         signal = "HOLD"
         reason = "No signal"
         target_price = 0.0
@@ -1306,24 +1340,54 @@ What conditions trigger BUY and SELL signals? Return JSON only."""
 
         lower_dev = (context['lower_band'] - current_price) / current_price * 100 if context['lower_band'] > 0 else 0
         upper_dev = (current_price - context['upper_band']) / current_price * 100 if context['upper_band'] > 0 else 0
+        
+        # Get trend from context
+        trend = context.get('trend', 'SIDEWAYS')
+        
+        # 🔥 TREND FILTER: Trade WITH the trend, not against it!
+        enable_trend_filter = getattr(Config, 'ENABLE_TREND_FILTER', True)
 
+        # Original mean reversion logic (price below lower band = oversold)
         if current_price < context['lower_band'] and lower_dev > params.min_deviation_percent:
-            signal = "BUY"
-            reason = f"Mean Reversion: Price ${current_price:.2f} below VWAP band (dev: {lower_dev:.2f}%)"
-            target_price = current_price + (context['atr'] * params.take_profit_atr_multiplier)
-            stop_loss = current_price - (context['atr'] * params.stop_loss_atr_multiplier)
+            if enable_trend_filter and trend == "DOWN":
+                # 🔥 Trend is DOWN - don't BUY into falling knife, SELL instead!
+                signal = "SELL"
+                reason = f"TREND SELL: Price ${current_price:.2f} falling, trend DOWN - SHORT for profit!"
+                target_price = current_price - (context['atr'] * params.take_profit_atr_multiplier)
+                stop_loss = current_price + (context['atr'] * params.stop_loss_atr_multiplier)
+            else:
+                # Trend is UP or SIDEWAYS - safe to BUY the dip
+                signal = "BUY"
+                reason = f"Mean Reversion BUY: Price ${current_price:.2f} below band (trend: {trend})"
+                target_price = current_price + (context['atr'] * params.take_profit_atr_multiplier)
+                stop_loss = current_price - (context['atr'] * params.stop_loss_atr_multiplier)
+                
+        # Original mean reversion logic (price above upper band = overbought)
         elif current_price > context['upper_band'] and upper_dev > params.min_deviation_percent:
-            signal = "SELL"
-            reason = f"Mean Reversion: Price ${current_price:.2f} above VWAP band (dev: {upper_dev:.2f}%)"
-            target_price = current_price - (context['atr'] * params.take_profit_atr_multiplier)
-            stop_loss = current_price + (context['atr'] * params.stop_loss_atr_multiplier)
+            if enable_trend_filter and trend == "UP":
+                # 🔥 Trend is UP - don't SELL into rally, BUY instead!
+                signal = "BUY"
+                reason = f"TREND BUY: Price ${current_price:.2f} rising, trend UP - LONG for profit!"
+                target_price = current_price + (context['atr'] * params.take_profit_atr_multiplier)
+                stop_loss = current_price - (context['atr'] * params.stop_loss_atr_multiplier)
+            else:
+                # Trend is DOWN or SIDEWAYS - safe to SELL the top
+                signal = "SELL"
+                reason = f"Mean Reversion SELL: Price ${current_price:.2f} above band (trend: {trend})"
+                target_price = current_price - (context['atr'] * params.take_profit_atr_multiplier)
+                stop_loss = current_price + (context['atr'] * params.stop_loss_atr_multiplier)
 
         return {'signal': signal, 'reason': reason, 'target_price': target_price, 'stop_loss': stop_loss,
                 'current_price': current_price, 'deviation_percent': max(lower_dev, upper_dev), **context}
 
     def _generate_market_making_signal(self, df: pd.DataFrame, current_price: float,
                                        context: Dict, params: 'AdaptiveParameters') -> Dict:
-        """Market making: Trade around mid-price with inventory management"""
+        """Market making: Trade around mid-price with inventory management
+        
+        🔥 TREND-BASED TRADING:
+        - Trend DOWN → SELL/SHORT
+        - Trend UP → BUY/LONG
+        """
         signal = "HOLD"
         reason = "No signal"
         target_price = 0.0
@@ -1333,18 +1397,38 @@ What conditions trigger BUY and SELL signals? Return JSON only."""
         spread = (df['High'].iloc[-1] - df['Low'].iloc[-1]) / current_price * 100
         mid_price = (df['High'].iloc[-1] + df['Low'].iloc[-1]) / 2
         price_vs_mid = (current_price - mid_price) / mid_price * 100
+        
+        # Get trend from context
+        trend = context.get('trend', 'SIDEWAYS')
+        enable_trend_filter = getattr(Config, 'ENABLE_TREND_FILTER', True)
 
-        # Buy if price is below mid with good spread
+        # Price below mid with good spread
         if price_vs_mid < -0.1 and spread > 0.2 and context['volume_ratio'] > 0.5:
-            signal = "BUY"
-            reason = f"Market Making: Price ${current_price:.2f} below mid ${mid_price:.2f} (spread: {spread:.2f}%)"
-            target_price = mid_price + (context['atr'] * 0.5)
-            stop_loss = current_price - (context['atr'] * params.stop_loss_atr_multiplier)
+            if enable_trend_filter and trend == "DOWN":
+                # 🔥 Trend DOWN - SELL instead of BUY!
+                signal = "SELL"
+                reason = f"TREND SELL: Price ${current_price:.2f} falling, trend DOWN - SHORT!"
+                target_price = current_price - (context['atr'] * 0.5)
+                stop_loss = current_price + (context['atr'] * params.stop_loss_atr_multiplier)
+            else:
+                signal = "BUY"
+                reason = f"Market Making BUY: Price ${current_price:.2f} below mid (trend: {trend})"
+                target_price = mid_price + (context['atr'] * 0.5)
+                stop_loss = current_price - (context['atr'] * params.stop_loss_atr_multiplier)
+                
+        # Price above mid with good spread
         elif price_vs_mid > 0.1 and spread > 0.2 and context['volume_ratio'] > 0.5:
-            signal = "SELL"
-            reason = f"Market Making: Price ${current_price:.2f} above mid ${mid_price:.2f} (spread: {spread:.2f}%)"
-            target_price = mid_price - (context['atr'] * 0.5)
-            stop_loss = current_price + (context['atr'] * params.stop_loss_atr_multiplier)
+            if enable_trend_filter and trend == "UP":
+                # 🔥 Trend UP - BUY instead of SELL!
+                signal = "BUY"
+                reason = f"TREND BUY: Price ${current_price:.2f} rising, trend UP - LONG!"
+                target_price = current_price + (context['atr'] * 0.5)
+                stop_loss = current_price - (context['atr'] * params.stop_loss_atr_multiplier)
+            else:
+                signal = "SELL"
+                reason = f"Market Making SELL: Price ${current_price:.2f} above mid (trend: {trend})"
+                target_price = mid_price - (context['atr'] * 0.5)
+                stop_loss = current_price + (context['atr'] * params.stop_loss_atr_multiplier)
 
         return {'signal': signal, 'reason': reason, 'target_price': target_price, 'stop_loss': stop_loss,
                 'current_price': current_price, 'deviation_percent': abs(price_vs_mid), **context}
@@ -2231,8 +2315,114 @@ class AdaptivePaperTradingEngine:
 
         return alerts
 
-    def check_exits(self, current_prices: Dict):
-        """Check and execute exits"""
+    def check_exits(self, current_prices: Dict, cycle: int = 0):
+        """Check and execute exits
+        
+        🚨 NEW: PORTFOLIO TAKE PROFIT
+        - Close ALL positions when total unrealized PnL hits threshold
+        - This banks profits before they disappear!
+        
+        🎯 NEW: TIME-BASED EXIT
+        - Close all positions every N cycles if profitable
+        """
+        
+        # ==========================================================================
+        # 🚨 PORTFOLIO TAKE PROFIT - Close all when we hit profit threshold!
+        # ==========================================================================
+        if getattr(Config, 'ENABLE_PORTFOLIO_TAKE_PROFIT', True):
+            total_unrealized = 0.0
+            open_positions = [(pid, pos) for pid, pos in self.positions.items() if pos.status == "OPEN"]
+            
+            for position_id, position in open_positions:
+                current_price = current_prices.get(position.symbol)
+                if not current_price:
+                    continue
+                    
+                if position.direction == "BUY":
+                    unrealized = (current_price - position.entry_price) / position.entry_price * position.size
+                else:
+                    unrealized = (position.entry_price - current_price) / position.entry_price * position.size
+                total_unrealized += unrealized
+            
+            # Check TAKE PROFIT threshold
+            take_profit_threshold = getattr(Config, 'PORTFOLIO_TAKE_PROFIT_THRESHOLD', 200.0)
+            if total_unrealized >= take_profit_threshold:
+                print(f"\n{'='*80}")
+                print(f"💰💰💰 PORTFOLIO TAKE PROFIT TRIGGERED! 💰💰💰")
+                print(f"   Unrealized: ${total_unrealized:.2f} >= ${take_profit_threshold:.2f}")
+                print(f"   Closing ALL {len(open_positions)} positions to bank profit!")
+                print(f"{'='*80}")
+                
+                for position_id, position in open_positions:
+                    current_price = current_prices.get(position.symbol)
+                    if current_price:
+                        if position.direction == "BUY":
+                            pnl_pct = (current_price - position.entry_price) / position.entry_price * 100
+                        else:
+                            pnl_pct = (position.entry_price - current_price) / position.entry_price * 100
+                        self.close_position(position_id, current_price, f"PORTFOLIO_TAKE_PROFIT ({pnl_pct:+.2f}%)")
+                return  # Done checking exits
+            
+            # Check STOP LOSS threshold
+            stop_loss_threshold = getattr(Config, 'PORTFOLIO_STOP_LOSS_THRESHOLD', -400.0)
+            if total_unrealized <= stop_loss_threshold:
+                print(f"\n{'='*80}")
+                print(f"🛑 PORTFOLIO STOP LOSS TRIGGERED!")
+                print(f"   Unrealized: ${total_unrealized:.2f} <= ${stop_loss_threshold:.2f}")
+                print(f"   Closing ALL positions to limit losses!")
+                print(f"{'='*80}")
+                
+                for position_id, position in open_positions:
+                    current_price = current_prices.get(position.symbol)
+                    if current_price:
+                        if position.direction == "BUY":
+                            pnl_pct = (current_price - position.entry_price) / position.entry_price * 100
+                        else:
+                            pnl_pct = (position.entry_price - current_price) / position.entry_price * 100
+                        self.close_position(position_id, current_price, f"PORTFOLIO_STOP_LOSS ({pnl_pct:+.2f}%)")
+                return
+        
+        # ==========================================================================
+        # 🎯 TIME-BASED EXIT - Close all every N cycles if profitable
+        # ==========================================================================
+        if getattr(Config, 'ENABLE_TIME_BASED_EXIT', True) and cycle > 0:
+            exit_cycles = getattr(Config, 'TIME_BASED_EXIT_CYCLES', 50)
+            min_profit = getattr(Config, 'MIN_PROFIT_FOR_TIME_EXIT', 50.0)
+            
+            if cycle % exit_cycles == 0:
+                total_unrealized = 0.0
+                open_positions = [(pid, pos) for pid, pos in self.positions.items() if pos.status == "OPEN"]
+                
+                for position_id, position in open_positions:
+                    current_price = current_prices.get(position.symbol)
+                    if not current_price:
+                        continue
+                    if position.direction == "BUY":
+                        unrealized = (current_price - position.entry_price) / position.entry_price * position.size
+                    else:
+                        unrealized = (position.entry_price - current_price) / position.entry_price * position.size
+                    total_unrealized += unrealized
+                
+                if total_unrealized >= min_profit:
+                    print(f"\n{'='*80}")
+                    print(f"⏰ TIME-BASED EXIT - Cycle {cycle}")
+                    print(f"   Unrealized: ${total_unrealized:.2f} >= ${min_profit:.2f}")
+                    print(f"   Closing {len(open_positions)} positions")
+                    print(f"{'='*80}")
+                    
+                    for position_id, position in open_positions:
+                        current_price = current_prices.get(position.symbol)
+                        if current_price:
+                            if position.direction == "BUY":
+                                pnl_pct = (current_price - position.entry_price) / position.entry_price * 100
+                            else:
+                                pnl_pct = (position.entry_price - current_price) / position.entry_price * 100
+                            self.close_position(position_id, current_price, f"TIME_EXIT_CYCLE_{cycle} ({pnl_pct:+.2f}%)")
+                    return
+        
+        # ==========================================================================
+        # NORMAL EXIT CHECKING (individual positions)
+        # ==========================================================================
         for position_id, position in list(self.positions.items()):
             if position.status != "OPEN":
                 continue
