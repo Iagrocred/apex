@@ -2838,6 +2838,23 @@ class AdaptiveTradingEngine:
         # Summary
         improved_count = sum(1 for s in strategies.values() if s.get('is_improved', False))
         print(f"🎯 Total strategies: {len(strategies)} ({improved_count} using improved versions)")
+        
+        # Show strategy types
+        for sid, sinfo in list(strategies.items())[:5]:
+            stype = self.paper_engine.detect_strategy_type(sid)
+            print(f"   📊 {sid[:40]}: Type={stype}")
+        if len(strategies) > 5:
+            print(f"   ... and {len(strategies) - 5} more")
+        
+        print()
+        print("🚀" + "="*78)
+        print("   STARTING LIVE TRADING LOOP - Watching for signals...")
+        print("   • Each cycle: Fetch prices → Check signals → Open/Close trades")
+        print("   • Trades will show with LIVE P&L when positions are open")
+        print("   • Portfolio take profit at $200+ unrealized profit")
+        print("   • Press Ctrl+C to stop and save state")
+        print("="*80)
+        print()
 
         return strategies
 
@@ -3010,6 +3027,31 @@ class AdaptiveTradingEngine:
                 # This ensures we spread positions across different tokens
                 open_positions = [p for p in self.paper_engine.positions.values() if p.status == "OPEN"]
                 position_limit_reached = len(open_positions) >= Config.MAX_TOTAL_POSITIONS
+                
+                # Show live P&L for open positions
+                if open_positions:
+                    total_unrealized = 0
+                    print(f"\n📊 OPEN POSITIONS ({len(open_positions)}):")
+                    for pos in open_positions:
+                        curr_price = current_prices.get(pos.symbol, pos.entry_price)
+                        if pos.direction == "BUY":
+                            pnl_pct = (curr_price - pos.entry_price) / pos.entry_price * 100
+                            pnl_usd = (curr_price - pos.entry_price) / pos.entry_price * pos.size * Config.DEFAULT_LEVERAGE
+                        else:
+                            pnl_pct = (pos.entry_price - curr_price) / pos.entry_price * 100
+                            pnl_usd = (pos.entry_price - curr_price) / pos.entry_price * pos.size * Config.DEFAULT_LEVERAGE
+                        total_unrealized += pnl_usd
+                        emoji = "🟢" if pnl_pct > 0 else "🔴"
+                        print(f"   {emoji} {pos.direction} {pos.symbol} @ ${pos.entry_price:.2f} → ${curr_price:.2f} ({pnl_pct:+.2f}%) = ${pnl_usd:+.2f}")
+                    
+                    total_emoji = "🟢" if total_unrealized > 0 else "🔴"
+                    print(f"   {total_emoji} TOTAL UNREALIZED P&L: ${total_unrealized:+.2f}")
+                    
+                    # Check portfolio take profit
+                    if Config.ENABLE_PORTFOLIO_TAKE_PROFIT and total_unrealized >= Config.PORTFOLIO_TAKE_PROFIT_THRESHOLD:
+                        print(f"\n💰 PORTFOLIO TAKE PROFIT TRIGGERED! Closing all {len(open_positions)} positions for ${total_unrealized:+.2f}")
+                else:
+                    print(f"\n📊 No open positions - scanning for signals...")
 
                 if not position_limit_reached:
                     for token in Config.TRADEABLE_TOKENS:
