@@ -63,7 +63,7 @@ class Config:
     # Capital
     STARTING_CAPITAL = 10000.0
     MAX_POSITION_SIZE = 0.10
-    DEFAULT_LEVERAGE = 3
+    DEFAULT_LEVERAGE = 8  # 8X KINGS! Perfect entry = quick profit before reversal! 8 is the number for prosperity 🎰
     
     # Exchange
     HTX_BASE_URL = "https://api.huobi.pro"

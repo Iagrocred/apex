@@ -70,7 +70,7 @@ except ImportError:
 class Config:
     STARTING_CAPITAL = 10000.0
     MAX_POSITION_SIZE = 0.15  # 15% per trade
-    DEFAULT_LEVERAGE = 3
+    DEFAULT_LEVERAGE = 8  # 8X KINGS! Perfect entry = quick profit before reversal! 8 is the number for prosperity 🎰
     HTX_BASE_URL = "https://api.huobi.pro"
 
     # TRADEABLE TOKENS - Can be expanded to scan more of the market
