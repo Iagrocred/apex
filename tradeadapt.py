@@ -2972,25 +2972,44 @@ class AdaptiveTradingEngine:
 
         if open_positions:
             print(f"\n📊 OPEN POSITIONS (waiting to close for analysis):")
+            total_unrealized_pnl = 0.0
+            
             for position in open_positions:
                 current_price = self.htx_client.get_current_price(position.symbol) or position.entry_price
                 if position.direction == "BUY":
                     pnl_percent = (current_price - position.entry_price) / position.entry_price * 100
+                    pnl_usd = (current_price - position.entry_price) / position.entry_price * position.size * Config.DEFAULT_LEVERAGE
                     dist_to_target = (position.target_price - current_price) / current_price * 100
                     dist_to_stop = (current_price - position.stop_loss) / current_price * 100
                 else:
                     pnl_percent = (position.entry_price - current_price) / position.entry_price * 100
+                    pnl_usd = (position.entry_price - current_price) / position.entry_price * position.size * Config.DEFAULT_LEVERAGE
                     dist_to_target = (current_price - position.target_price) / current_price * 100
                     dist_to_stop = (position.stop_loss - current_price) / current_price * 100
+                
+                total_unrealized_pnl += pnl_usd
 
                 # Calculate time in trade
                 time_in_trade = (datetime.now() - position.entry_time).total_seconds() / 60
 
-                # Full details with prices
+                # Full details with prices and P&L in dollars
+                emoji = "🟢" if pnl_percent > 0 else "🔴"
                 print(f"   📍 {position.strategy_id[:35]}")
-                print(f"      {position.direction} {position.symbol} @ ${position.entry_price:.2f} → Now: ${current_price:.2f} ({pnl_percent:+.2f}%)")
+                print(f"      {position.direction} {position.symbol} @ ${position.entry_price:.2f} → Now: ${current_price:.2f} ({pnl_percent:+.2f}%) {emoji} ${pnl_usd:+.2f}")
                 print(f"      🎯 Target: ${position.target_price:.2f} ({dist_to_target:+.2f}% away) | 🛑 Stop: ${position.stop_loss:.2f} ({dist_to_stop:.2f}% away)")
                 print(f"      ⏱️ Time: {time_in_trade:.0f}min | Dev: {position.deviation_percent:.2f}% | Vol: {position.volatility_24h:.2f}%")
+            
+            # Show total portfolio unrealized P&L
+            total_emoji = "🟢" if total_unrealized_pnl > 0 else "🔴"
+            print(f"\n   {total_emoji} TOTAL PORTFOLIO UNREALIZED P&L: ${total_unrealized_pnl:+.2f}")
+            
+            # Check if we're close to take profit threshold
+            if Config.ENABLE_PORTFOLIO_TAKE_PROFIT:
+                if total_unrealized_pnl >= Config.PORTFOLIO_TAKE_PROFIT_THRESHOLD:
+                    print(f"   💰 TAKE PROFIT THRESHOLD HIT! (${total_unrealized_pnl:+.2f} >= ${Config.PORTFOLIO_TAKE_PROFIT_THRESHOLD})")
+                elif total_unrealized_pnl > 0:
+                    distance = Config.PORTFOLIO_TAKE_PROFIT_THRESHOLD - total_unrealized_pnl
+                    print(f"   📈 ${distance:.2f} away from take profit threshold (${Config.PORTFOLIO_TAKE_PROFIT_THRESHOLD})")
 
         print(f"{'='*80}\n")
 
