@@ -3037,12 +3037,14 @@ class AdaptiveTradingEngine:
                     for pos in open_positions:
                         if pos.symbol in current_prices:
                             current_price = current_prices[pos.symbol]
+                            # pos.size already includes leverage (it's leverage_size = capital * position_pct * leverage)
+                            # So we DON'T multiply by leverage again!
                             if pos.direction == "BUY":
                                 pnl_pct = (current_price - pos.entry_price) / pos.entry_price * 100
-                                pnl_usd = pnl_pct / 100 * pos.size * Config.DEFAULT_LEVERAGE
+                                pnl_usd = pnl_pct / 100 * pos.size  # NO extra leverage!
                             else:
                                 pnl_pct = (pos.entry_price - current_price) / pos.entry_price * 100
-                                pnl_usd = pnl_pct / 100 * pos.size * Config.DEFAULT_LEVERAGE
+                                pnl_usd = pnl_pct / 100 * pos.size  # NO extra leverage!
                             
                             total_unrealized += pnl_usd
                             emoji = "🟢" if pnl_usd >= 0 else "🔴"
