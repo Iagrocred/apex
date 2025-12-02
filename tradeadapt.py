@@ -63,514 +63,47 @@ try:
 except ImportError:
     anthropic = None
 
-# Flask for REST API
-try:
-    from flask import Flask, jsonify, request
-    from flask_cors import CORS
-    import threading
-    FLASK_AVAILABLE = True
-except ImportError:
-    FLASK_AVAILABLE = False
-    Flask = None
-
-# =============================================================================
-# REST API SERVER - localhost:8000
-# =============================================================================
-# Provides endpoints for frontend:
-#   GET /api/status - Overall system status
-#   GET /api/strategies - List all strategies with performance
-#   GET /api/positions - Current open positions
-#   GET /api/trades - Trade history
-#   GET /api/portfolio - Portfolio P&L summary
-#   GET /api/ready-for-live - Strategies ready for live trading
-#   POST /api/go-live/{strategy_id} - Promote strategy to live trading
-
-class APIServer:
-    """REST API Server for frontend integration"""
-    
-    def __init__(self, trading_engine=None):
-        if not FLASK_AVAILABLE:
-            print("⚠️ Flask not installed. Run: pip install flask flask-cors")
-            self.app = None
-            return
-            
-        self.app = Flask(__name__)
-        CORS(self.app)  # Enable CORS for frontend
-        self.trading_engine = trading_engine
-        self._setup_routes()
-    
-    def _setup_routes(self):
-        """Setup all API endpoints"""
-        
-        @self.app.route('/api/status', methods=['GET'])
-        def get_status():
-            """System status summary"""
-            if not self.trading_engine:
-                return jsonify({"error": "Trading engine not initialized"}), 503
-            
-            pe = self.trading_engine.paper_engine
-            status = {
-                "cycle": pe.cycle_count if hasattr(pe, 'cycle_count') else 0,
-                "runtime_seconds": (datetime.now() - pe.start_time).total_seconds() if hasattr(pe, 'start_time') else 0,
-                "capital": {
-                    "starting": Config.STARTING_CAPITAL,
-                    "type_a": Config.TYPE_A_CAPITAL,
-                    "type_b": Config.TYPE_B_CAPITAL,
-                    "current": pe.current_capital if hasattr(pe, 'current_capital') else Config.STARTING_CAPITAL,
-                },
-                "positions": {
-                    "open": len(pe.open_positions) if hasattr(pe, 'open_positions') else 0,
-                    "max": Config.MAX_TOTAL_POSITIONS,
-                },
-                "trades": {
-                    "total": len(pe.trade_history) if hasattr(pe, 'trade_history') else 0,
-                    "wins": sum(1 for t in pe.trade_history if t.get('pnl', 0) > 0) if hasattr(pe, 'trade_history') else 0,
-                    "losses": sum(1 for t in pe.trade_history if t.get('pnl', 0) <= 0) if hasattr(pe, 'trade_history') else 0,
-                },
-                "strategies": {
-                    "total": len(pe.strategies) if hasattr(pe, 'strategies') else 0,
-                    "active": sum(1 for s in pe.strategies.values() if not s.get('paused', False)) if hasattr(pe, 'strategies') else 0,
-                    "ready_for_live": len(self._get_ready_for_live_strategies()),
-                },
-                "dual_mode": Config.ENABLE_DUAL_MODE,
-            }
-            return jsonify(status)
-        
-        @self.app.route('/api/strategies', methods=['GET'])
-        def get_strategies():
-            """All strategies with performance stats"""
-            if not self.trading_engine:
-                return jsonify({"error": "Trading engine not initialized"}), 503
-            
-            pe = self.trading_engine.paper_engine
-            strategies = []
-            
-            for sid, sdata in pe.strategies.items() if hasattr(pe, 'strategies') else []:
-                perf = pe.performance.get(sid, {}) if hasattr(pe, 'performance') else {}
-                params = pe.strategy_params.get(sid, {}) if hasattr(pe, 'strategy_params') else {}
-                
-                strategy_info = {
-                    "id": sid,
-                    "name": sdata.get('name', sid[:50]),
-                    "type": sdata.get('type', 'UNKNOWN'),
-                    "version": sdata.get('version', 1),
-                    "paused": sdata.get('paused', False),
-                    "performance": {
-                        "total_trades": perf.get('total_trades', 0),
-                        "wins": perf.get('wins', 0),
-                        "losses": perf.get('losses', 0),
-                        "win_rate": perf.get('win_rate', 0.0),
-                        "profit_factor": perf.get('profit_factor', 0.0),
-                        "total_pnl": perf.get('total_pnl', 0.0),
-                        "avg_pnl": perf.get('avg_pnl', 0.0),
-                    },
-                    "ready_for_live": self._is_ready_for_live(sid),
-                    "optimization_count": params.get('optimization_count', 0) if isinstance(params, dict) else 0,
-                }
-                strategies.append(strategy_info)
-            
-            return jsonify({"strategies": strategies})
-        
-        @self.app.route('/api/positions', methods=['GET'])
-        def get_positions():
-            """Current open positions"""
-            if not self.trading_engine:
-                return jsonify({"error": "Trading engine not initialized"}), 503
-            
-            pe = self.trading_engine.paper_engine
-            positions = []
-            
-            for pos in pe.open_positions if hasattr(pe, 'open_positions') else []:
-                pos_info = {
-                    "id": pos.id if hasattr(pos, 'id') else str(pos),
-                    "strategy": pos.strategy if hasattr(pos, 'strategy') else "",
-                    "token": pos.token if hasattr(pos, 'token') else "",
-                    "action": pos.action if hasattr(pos, 'action') else "",
-                    "entry_price": pos.entry_price if hasattr(pos, 'entry_price') else 0,
-                    "size": pos.size if hasattr(pos, 'size') else 0,
-                    "target": pos.target if hasattr(pos, 'target') else 0,
-                    "stop": pos.stop if hasattr(pos, 'stop') else 0,
-                    "entry_time": pos.entry_time.isoformat() if hasattr(pos, 'entry_time') else "",
-                    "unrealized_pnl": pos.unrealized_pnl if hasattr(pos, 'unrealized_pnl') else 0,
-                    "unrealized_pct": pos.unrealized_pct if hasattr(pos, 'unrealized_pct') else 0,
-                    "trade_type": pos.trade_type if hasattr(pos, 'trade_type') else "A",
-                }
-                positions.append(pos_info)
-            
-            return jsonify({"positions": positions})
-        
-        @self.app.route('/api/trades', methods=['GET'])
-        def get_trades():
-            """Trade history"""
-            if not self.trading_engine:
-                return jsonify({"error": "Trading engine not initialized"}), 503
-            
-            pe = self.trading_engine.paper_engine
-            limit = request.args.get('limit', 100, type=int)
-            
-            trades = list(pe.trade_history)[-limit:] if hasattr(pe, 'trade_history') else []
-            return jsonify({"trades": trades, "total": len(pe.trade_history) if hasattr(pe, 'trade_history') else 0})
-        
-        @self.app.route('/api/portfolio', methods=['GET'])
-        def get_portfolio():
-            """Portfolio P&L summary"""
-            if not self.trading_engine:
-                return jsonify({"error": "Trading engine not initialized"}), 503
-            
-            pe = self.trading_engine.paper_engine
-            
-            # Calculate unrealized P&L
-            total_unrealized = 0.0
-            type_a_unrealized = 0.0
-            type_b_unrealized = 0.0
-            
-            for pos in pe.open_positions if hasattr(pe, 'open_positions') else []:
-                pnl = pos.unrealized_pnl if hasattr(pos, 'unrealized_pnl') else 0
-                total_unrealized += pnl
-                if hasattr(pos, 'trade_type') and pos.trade_type == 'B':
-                    type_b_unrealized += pnl
-                else:
-                    type_a_unrealized += pnl
-            
-            # Calculate realized P&L
-            total_realized = sum(t.get('pnl', 0) for t in pe.trade_history) if hasattr(pe, 'trade_history') else 0
-            
-            portfolio = {
-                "unrealized_pnl": round(total_unrealized, 2),
-                "realized_pnl": round(total_realized, 2),
-                "total_pnl": round(total_unrealized + total_realized, 2),
-                "type_a": {
-                    "unrealized": round(type_a_unrealized, 2),
-                    "capital": Config.TYPE_A_CAPITAL,
-                    "leverage": Config.TYPE_A_LEVERAGE,
-                },
-                "type_b": {
-                    "unrealized": round(type_b_unrealized, 2),
-                    "capital": Config.TYPE_B_CAPITAL,
-                    "leverage": Config.TYPE_B_LEVERAGE,
-                },
-                "take_profit_threshold": Config.PORTFOLIO_TAKE_PROFIT_THRESHOLD,
-                "distance_to_tp": round(Config.PORTFOLIO_TAKE_PROFIT_THRESHOLD - total_unrealized, 2),
-            }
-            return jsonify(portfolio)
-        
-        @self.app.route('/api/ready-for-live', methods=['GET'])
-        def get_ready_for_live():
-            """Strategies ready for live trading"""
-            return jsonify({
-                "strategies": self._get_ready_for_live_strategies(),
-                "criteria": {
-                    "min_trades": Config.MIN_TRADES_FOR_LIVE,
-                    "min_win_rate": Config.MIN_WIN_RATE_FOR_LIVE,
-                    "min_profit_factor": Config.MIN_PROFIT_FACTOR_FOR_LIVE,
-                    "min_net_profit": Config.MIN_NET_PROFIT_FOR_LIVE,
-                }
-            })
-        
-        @self.app.route('/api/go-live/<strategy_id>', methods=['POST'])
-        def go_live(strategy_id):
-            """Promote strategy to live trading"""
-            if not self.trading_engine:
-                return jsonify({"error": "Trading engine not initialized"}), 503
-            
-            if not self._is_ready_for_live(strategy_id):
-                return jsonify({"error": "Strategy not ready for live trading", "strategy_id": strategy_id}), 400
-            
-            # Mark strategy as live-ready (actual live trading would be separate)
-            pe = self.trading_engine.paper_engine
-            if hasattr(pe, 'strategies') and strategy_id in pe.strategies:
-                pe.strategies[strategy_id]['live_ready'] = True
-                pe.strategies[strategy_id]['promoted_at'] = datetime.now().isoformat()
-                pe.save_state()
-                
-                return jsonify({
-                    "success": True,
-                    "message": f"Strategy {strategy_id[:50]} promoted to live-ready",
-                    "strategy_id": strategy_id,
-                })
-            
-            return jsonify({"error": "Strategy not found"}), 404
-    
-    def _is_ready_for_live(self, strategy_id):
-        """Check if strategy meets live trading criteria"""
-        if not self.trading_engine or not hasattr(self.trading_engine, 'paper_engine'):
-            return False
-        
-        pe = self.trading_engine.paper_engine
-        perf = pe.performance.get(strategy_id, {}) if hasattr(pe, 'performance') else {}
-        
-        total_trades = perf.get('total_trades', 0)
-        win_rate = perf.get('win_rate', 0.0)
-        profit_factor = perf.get('profit_factor', 0.0)
-        total_pnl = perf.get('total_pnl', 0.0)
-        
-        return (
-            total_trades >= Config.MIN_TRADES_FOR_LIVE and
-            win_rate >= Config.MIN_WIN_RATE_FOR_LIVE and
-            profit_factor >= Config.MIN_PROFIT_FACTOR_FOR_LIVE and
-            total_pnl >= Config.MIN_NET_PROFIT_FOR_LIVE
-        )
-    
-    def _get_ready_for_live_strategies(self):
-        """Get all strategies ready for live trading"""
-        ready = []
-        if not self.trading_engine or not hasattr(self.trading_engine, 'paper_engine'):
-            return ready
-        
-        pe = self.trading_engine.paper_engine
-        for sid in pe.strategies.keys() if hasattr(pe, 'strategies') else []:
-            if self._is_ready_for_live(sid):
-                perf = pe.performance.get(sid, {}) if hasattr(pe, 'performance') else {}
-                ready.append({
-                    "id": sid,
-                    "win_rate": perf.get('win_rate', 0),
-                    "profit_factor": perf.get('profit_factor', 0),
-                    "total_pnl": perf.get('total_pnl', 0),
-                    "total_trades": perf.get('total_trades', 0),
-                })
-        return ready
-    
-    def run(self, host='0.0.0.0', port=8000):
-        """Start API server in background thread"""
-        if not self.app:
-            print("⚠️ API server not available (Flask not installed)")
-            return
-        
-        def run_server():
-            self.app.run(host=host, port=port, debug=False, use_reloader=False)
-        
-        thread = threading.Thread(target=run_server, daemon=True)
-        thread.start()
-        print(f"🌐 API Server started at http://{host}:{port}")
-        print("   Endpoints:")
-        print("   - GET  /api/status        - System status")
-        print("   - GET  /api/strategies    - All strategies with performance")
-        print("   - GET  /api/positions     - Current open positions")
-        print("   - GET  /api/trades        - Trade history")
-        print("   - GET  /api/portfolio     - Portfolio P&L summary")
-        print("   - GET  /api/ready-for-live - Strategies ready for live")
-        print("   - POST /api/go-live/<id>  - Promote strategy to live")
-
 # =============================================================================
 # CONFIGURATION - ADAPTIVE TRADING
 # =============================================================================
 
 class Config:
-    # ==========================================================================
-    # 💰 DUAL TRADING SYSTEM - TYPE A (SCALPING) vs TYPE B (BIG TAKES)
-    # ==========================================================================
-    # We run BOTH simultaneously with separate capital pools to see which wins!
-    # TYPE A: 3x leverage, small takes (0.2-0.4%), frequent trades
-    # TYPE B: 8x leverage, big takes (0.5-1%), fewer but larger profits
-    
-    ENABLE_DUAL_MODE = True            # Run both Type A and Type B
-    TYPE_A_CAPITAL = 17000.0           # $17k for Type A (scalping)
-    TYPE_B_CAPITAL = 17000.0           # $17k for Type B (big takes)
-    STARTING_CAPITAL = 34000.0         # Total capital (both types)
-    DEFAULT_LEVERAGE = 8               # Default for backward compat
-    MAX_POSITION_SIZE = 0.15           # 15% per trade
-    
+    # =============================================================================
+    # 🔥 SIMPLE CONFIG - ONE TYPE OF TRADING: BIGGER MOVES WITH 8X LEVERAGE
+    # =============================================================================
+    STARTING_CAPITAL = 17000.0        # $17k capital
+    MAX_POSITION_SIZE = 0.15          # 15% per trade
+    DEFAULT_LEVERAGE = 8              # 8X LEVERAGE! 🎰
     HTX_BASE_URL = "https://api.huobi.pro"
-    
-    # TRADEABLE TOKENS
+
+    # TRADEABLE TOKENS - Can be expanded to scan more of the market
     TRADEABLE_TOKENS = ['BTC', 'ETH', 'SOL', 'XRP', 'ADA', 'DOT', 'LINK', 'AVAX']
 
     STRATEGIES_DIR = Path("./successful_strategies")
     CHECK_INTERVAL = 30  # Seconds between market checks
 
-    # Position Limits (split between both types)
-    MAX_TOTAL_POSITIONS = 40
-    MAX_POSITIONS_PER_STRATEGY = 5
-    MAX_POSITIONS_PER_TOKEN = 10
-    
-    # ==========================================================================
-    # 🔥 TYPE A CONFIG - SCALPING (3x leverage, small takes)
-    # ==========================================================================
-    # Lower leverage allows tighter targets that still profit after costs
-    # Target: More frequent trades, smaller wins, higher win rate
-    
-    TYPE_A_LEVERAGE = 3                # 3x leverage for scalping
-    TYPE_A_POSITION_SIZE = 0.15        # 15% of Type A capital per trade
-    
-    # REALISTIC COSTS FOR TYPE A (3x leverage)
-    # Base costs per side: 0.07% fee + 0.05% spread + 0.03% slippage = 0.15%
-    # Round trip: 0.15% × 2 = 0.30% 
-    # At 3x leverage impact on position: 0.30% × 3 = 0.90% total cost per trade
-    TYPE_A_TAKER_FEE = 0.0007          # 0.07% (conservative)
-    TYPE_A_SPREAD = 0.0005             # 0.05%
-    TYPE_A_SLIPPAGE = 0.0003           # 0.03%
-    TYPE_A_TOTAL_COST_PCT = 0.90       # 0.90% total cost per trade at 3x
-    
-    # TYPE A ENTRY - Need small deviation for frequent entries
-    TYPE_A_MIN_DEVIATION = 0.005       # 0.5% deviation from VWAP to enter
-    TYPE_A_MAX_VOLATILITY = 5.0        # Max 5% 24h volatility
-    
-    # TYPE A TARGETS - Must exceed 0.90% costs!
-    TYPE_A_TP_LEVELS = [0.004, 0.006, 0.008]  # 0.4%, 0.6%, 0.8% price moves
-    TYPE_A_TP_FRACTIONS = [0.5, 0.25, 0.25]   # 50%, 25%, 25%
-    # With 3x: 1.2%, 1.8%, 2.4% gross returns
-    # After 0.90% costs: 0.30%, 0.90%, 1.50% net
-    
-    # TYPE A STOPS - Tight but survivable
-    TYPE_A_MIN_STOP = 0.004            # 0.4% minimum (1.2% loss at 3x)
-    TYPE_A_MAX_STOP = 0.010            # 1.0% maximum (3.0% loss at 3x)
-    TYPE_A_ATR_MULT = 1.2              # 1.2x ATR for stop
-    
-    # ==========================================================================
-    # 🚀 TYPE B CONFIG - BIG TAKES (8x leverage, big moves)
-    # ==========================================================================
-    # Higher leverage REQUIRES bigger moves to overcome costs
-    # Target: Fewer trades, larger wins, target big reversions
-    
-    TYPE_B_LEVERAGE = 8                # 8x leverage for big takes
-    TYPE_B_POSITION_SIZE = 0.12        # 12% of Type B capital per trade
-    
-    # REALISTIC COSTS FOR TYPE B (8x leverage)
-    # Base costs per side: 0.07% fee + 0.05% spread + 0.03% slippage = 0.15%
-    # Round trip: 0.15% × 2 = 0.30%
-    # At 8x leverage impact on position: 0.30% × 8 = 2.40% total cost per trade!
-    TYPE_B_TAKER_FEE = 0.0007          # 0.07% (conservative)
-    TYPE_B_SPREAD = 0.0005             # 0.05%
-    TYPE_B_SLIPPAGE = 0.0003           # 0.03%
-    TYPE_B_TOTAL_COST_PCT = 2.40       # 2.40% total cost per trade at 8x!
-    
-    # TYPE B ENTRY - STRICT! Only big deviations to overcome 2.4% costs
-    TYPE_B_MIN_DEVIATION = 0.015       # 1.5% deviation from VWAP to enter
-    TYPE_B_MAX_VOLATILITY = 8.0        # Allow higher volatility for bigger moves
-    
-    # TYPE B TARGETS - BIG moves that justify 8x leverage and 2.4% costs!
-    TYPE_B_TP_LEVELS = [0.008, 0.012, 0.016]  # 0.8%, 1.2%, 1.6% price moves
-    TYPE_B_TP_FRACTIONS = [0.5, 0.25, 0.25]   # 50%, 25%, 25%
-    # With 8x: 6.4%, 9.6%, 12.8% gross returns
-    # After 2.4% costs: 4.0%, 7.2%, 10.4% net returns ✅
-    
-    # TYPE B STOPS - MUST be wider to survive 8x volatility
-    TYPE_B_MIN_STOP = 0.006            # 0.6% minimum (4.8% loss at 8x)
-    TYPE_B_MAX_STOP = 0.015            # 1.5% maximum (12% loss at 8x)
-    TYPE_B_ATR_MULT = 1.5              # 1.5x ATR for stop
-    
-    # ==========================================================================
-    # 🚨 PORTFOLIO TAKE PROFIT (per trading type)
-    # ==========================================================================
-    ENABLE_PORTFOLIO_TAKE_PROFIT = True
-    PORTFOLIO_TAKE_PROFIT_THRESHOLD = 200.0  # Default for backward compat
-    PORTFOLIO_STOP_LOSS_THRESHOLD = -400.0   # Default for backward compat
-    TYPE_A_PORTFOLIO_TP = 150.0        # Close Type A trades at $150+ profit
-    TYPE_B_PORTFOLIO_TP = 300.0        # Close Type B trades at $300+ profit
-    TYPE_A_PORTFOLIO_SL = -250.0       # Type A stop at $250 loss
-    TYPE_B_PORTFOLIO_SL = -500.0       # Type B stop at $500 loss
-    
-    # ==========================================================================
-    # 🎯 TIME-BASED EXIT
-    # ==========================================================================
-    ENABLE_TIME_BASED_EXIT = True
-    TIME_BASED_EXIT_CYCLES = 50
-    MIN_PROFIT_FOR_TIME_EXIT = 50.0
-    
-    # ==========================================================================
-    # 🔥 TREND FILTER - CRITICAL for both types
-    # ==========================================================================
-    ENABLE_TREND_FILTER = True
-    TREND_PERIOD = 20
-    MIN_TREND_STRENGTH = 0.002
-    
-    # ==========================================================================
-    # 💰 TRADING COSTS - Enable for realistic P&L
-    # ==========================================================================
-    ENABLE_TRADING_COSTS = True
-    TAKER_FEE_PERCENT = 0.07           # 0.07% per trade (conservative)
-    SLIPPAGE_PERCENT = 0.03            # 0.03% estimated slippage
-    SPREAD_PERCENT = 0.05              # 0.05% spread
-    
-    # ==========================================================================
-    # 🎯 PARTIAL EXITS - Use type-specific levels
-    # ==========================================================================
-    ENABLE_PARTIAL_EXITS = True
-    MOVE_STOP_TO_BREAKEVEN_AFTER_TP1 = True
-    # Backward compat defaults (overridden by type-specific)
-    TP1_PERCENT = 0.5                  # 0.5% for backward compat
-    TP2_PERCENT = 0.7                  # 0.7%
-    TP3_PERCENT = 1.0                  # 1.0%
-    TP1_CLOSE_PERCENT = 50
-    TP2_CLOSE_PERCENT = 25
-    TP3_CLOSE_PERCENT = 25
-    
-    # ==========================================================================
-    # 🛑 SAFER STOP-LOSS
-    # ==========================================================================
-    STOP_LOSS_MIN_PERCENT = 0.5        # 0.5% minimum stop
-    STOP_LOSS_MAX_PERCENT = 1.5        # 1.5% maximum stop
-    USE_REGIME_ADJUSTED_STOPS = True
-    
-    # ==========================================================================
-    # ⏰ SOFT TIME-STOP - Kill dead trades
-    # ==========================================================================
-    ENABLE_SOFT_TIME_STOP = True
-    SOFT_TIME_STOP_MINUTES = 60        # 1 hour max for dead trades
-    SOFT_TIME_STOP_MIN_PROFIT = 0.001  # 0.1% minimum to keep open
-    DEAD_TRADE_CYCLES = 20             # 20 cycles with no movement = dead
-    
-    # ==========================================================================
-    # 🔄 AUTO-UNPAUSE - CRITICAL! Strategies MUST resume!
-    # ==========================================================================
-    AUTO_UNPAUSE_AFTER_CYCLES = 10     # Unpause after 10 cycles (5 min)
-    UNPAUSE_AFTER_OPTIMIZATION = True  # Always unpause after LLM optimization
-    SKIP_OPTIMIZATION_IF_WINNING = True # DON'T re-optimize strategies at target
-    MIN_WIN_RATE_TO_SKIP_OPTIMIZATION = 0.71  # 71% win rate = TARGET ACHIEVED!
-    
-    # ==========================================================================
-    # 📊 INDIVIDUAL TRADE STATS
-    # ==========================================================================
-    ENABLE_TRADE_PORTFOLIO = True
-    
-    # ==========================================================================
-    # 🏆 READY FOR LIVE - 71% WIN RATE TARGET! 
-    # ==========================================================================
-    # With infinite self-improvement, we target 71% win rate (0.71)
-    # This is achievable because:
-    # 1. LLM analyzes EVERY losing trade pattern
-    # 2. Each version improves entry precision
-    # 3. Stops widen, targets adjust based on actual data
-    # 4. System keeps iterating until 71% is hit
-    # 5. No strategy goes live until it PROVES 71% over 50 trades
-    
-    MIN_TRADES_FOR_LIVE = 50           # Need 50 trades to prove consistency
-    MIN_WIN_RATE_FOR_LIVE = 0.71       # 71% win rate - THE GOAL!
-    MIN_PROFIT_FACTOR_FOR_LIVE = 1.8   # 1.8 profit factor (higher with 71% WR)
-    MIN_NET_PROFIT_FOR_LIVE = 500.0    # $500+ net profit to prove real edge
-    
-    # Adaptive Optimization Settings - TARGET 71%!
-    MIN_TRADES_FOR_ANALYSIS = 5
-    TARGET_WIN_RATE = 0.71             # 71% target - INFINITE IMPROVEMENT!
-    TARGET_PROFIT_FACTOR = 1.8         # Higher PF with 71% WR
-    OPTIMIZATION_INTERVAL = 10
-    MAX_CONSECUTIVE_LOSSES = 3         # Tighter - pause after 3 losses
-    MAX_OPTIMIZATION_ITERATIONS = 50   # Allow up to 50 iterations to reach 71%
-    USE_IMPROVED_STRATEGIES = True
-    
-    # ==========================================================================
-    # 🔥 AGGRESSIVE OPTIMIZATION FOR 71% WIN RATE
-    # ==========================================================================
-    # The LLM will keep improving until we hit 71%
-    # Key optimizations the LLM will discover:
-    # 1. Only trade with-trend (increases WR by ~15%)
-    # 2. Require higher deviation for entry (better entries)
-    # 3. Use regime-aware stops (tighter in low vol, wider in high vol)
-    # 4. Add RSI confirmation (avoid overbought/oversold traps)
-    # 5. Time-of-day filter (avoid choppy periods)
-    
-    ENABLE_AGGRESSIVE_OPTIMIZATION = True
-    OPTIMIZATION_LEARNING_RATE = 0.15  # How fast to adjust parameters
-    MIN_IMPROVEMENT_TO_KEEP = 0.02     # Need 2% improvement to keep changes
+    # Position Limits - INCREASED for more data collection
+    MAX_TOTAL_POSITIONS = 40          # Was 8, now 40 for all strategies to trade
+    MAX_POSITIONS_PER_STRATEGY = 5    # Was 2, now 5 for faster LLM optimization
+    MAX_POSITIONS_PER_TOKEN = 10      # Allow multiple strategies on same token
+
+    # Adaptive Optimization Settings
+    MIN_TRADES_FOR_ANALYSIS = 5       # Need at least 5 trades before analyzing
+    TARGET_WIN_RATE = 0.71            # Target 71% win rate (THE GOAL!)
+    TARGET_PROFIT_FACTOR = 1.8        # Target profit factor 1.8+
+    OPTIMIZATION_INTERVAL = 10        # Run optimization every 10 cycles (~5 min)
+    MAX_CONSECUTIVE_LOSSES = 3        # Pause strategy after 3 consecutive losses
+    MAX_OPTIMIZATION_ITERATIONS = 10  # Max times to optimize before giving up
+    USE_IMPROVED_STRATEGIES = True    # Automatically use improved strategies (v1, v2, v3...)
 
     # Market Regime Detection Thresholds
-    PERIODS_PER_24H = 96
-    REGIME_HIGH_VOL_THRESHOLD = 8.0
-    REGIME_LOW_VOL_THRESHOLD = 3.0
-    REGIME_VERY_LOW_VOL_THRESHOLD = 2.0
-    REGIME_STRONG_TREND_THRESHOLD = 1.0
-    REGIME_WEAK_TREND_THRESHOLD = 0.5
-    REGIME_RANGING_TREND_THRESHOLD = 0.3
+    PERIODS_PER_24H = 96              # 24h = 96 periods of 15 minutes each
+    REGIME_HIGH_VOL_THRESHOLD = 8.0   # Volatility % above this = high volatility
+    REGIME_LOW_VOL_THRESHOLD = 3.0    # Volatility % below this = low volatility
+    REGIME_VERY_LOW_VOL_THRESHOLD = 2.0  # Volatility % below this = very low volatility
+    REGIME_STRONG_TREND_THRESHOLD = 1.0  # Trend strength above this = strong trend
+    REGIME_WEAK_TREND_THRESHOLD = 0.5    # Trend strength below this = weak/no trend
+    REGIME_RANGING_TREND_THRESHOLD = 0.3 # Trend strength below this = ranging
 
     # Real-Time Performance Monitoring Thresholds
     ALERT_RECENT_WIN_RATE = 0.2       # Alert if win rate below 20%
@@ -586,6 +119,21 @@ class Config:
     # Improved Strategies Folder - WHERE RECODED STRATEGIES ARE SAVED
     IMPROVED_STRATEGIES_DIR = Path("./improved_strategies")  # New folder for improved versions
     IMPROVEMENT_VERSION_PREFIX = "v"  # e.g., original_strategy_v2.py
+
+    # =============================================================================
+    # 🎯 PORTFOLIO TAKE PROFIT - BANK THE PROFIT!
+    # =============================================================================
+    PORTFOLIO_TAKE_PROFIT_THRESHOLD = 200.0   # Close all when $200+ unrealized profit
+    PORTFOLIO_STOP_LOSS_THRESHOLD = -400.0    # Close all when $400+ unrealized loss
+    
+    # =============================================================================
+    # 🔧 BIGGER MOVES CONFIG FOR 8X LEVERAGE
+    # =============================================================================
+    # With 8x leverage, costs are ~1.2% per trade (0.15% base × 8)
+    # So we need targets that are > 1.2% to be profitable!
+    MIN_TARGET_PERCENT = 0.5          # 0.5% price move = 4% at 8x = 2.8% net profit
+    MIN_STOP_PERCENT = 0.5            # 0.5% stop = 4% loss at 8x (survivable)
+    MAX_STOP_PERCENT = 1.5            # 1.5% max stop = 12% loss at 8x
 
     # LLM Configuration for Reasoning-Based Optimization (like APEX RBI)
     # Uses environment variables - same as apex.py
@@ -653,60 +201,17 @@ class StrategyPerformance:
     consecutive_losses: int = 0
     consecutive_wins: int = 0
     is_paused: bool = False
-    
-    # 🔄 PAUSE/UNPAUSE TRACKING
-    paused_at_cycle: int = 0          # Cycle when paused
-    pause_reason: str = ""            # Why was it paused
-    last_optimized_at_cycle: int = 0  # When was LLM optimization last run
-    
-    # 🏆 READY FOR LIVE
-    is_ready_for_live: bool = False   # Has met all criteria
-    ready_for_live_at: str = ""       # When it became ready
-    
+
     # Loss Analysis
     stop_loss_hits: int = 0
     target_hits: int = 0
     avg_holding_time: float = 0.0
-    
-    # 🎯 PARTIAL EXIT TRACKING
-    tp1_hits: int = 0                 # Number of TP1 hits
-    tp2_hits: int = 0                 # Number of TP2 hits
-    tp3_hits: int = 0                 # Number of TP3 hits
-    partial_profit_total: float = 0.0 # Total from partial exits
-    
-    # 💰 TRADING COSTS
-    total_fees_paid: float = 0.0      # Total fees deducted
-    gross_pnl: float = 0.0            # PnL before fees
-    net_pnl: float = 0.0              # PnL after fees
 
     # Common Loss Patterns
     losses_in_uptrend: int = 0
     losses_in_downtrend: int = 0
     losses_low_deviation: int = 0   # Entered with too small deviation
     losses_high_volatility: int = 0
-    
-    def check_ready_for_live(self) -> bool:
-        """Check if strategy meets criteria to go live"""
-        if self.total_trades < Config.MIN_TRADES_FOR_LIVE:
-            return False
-        if self.win_rate < Config.MIN_WIN_RATE_FOR_LIVE:
-            return False
-        if self.profit_factor < Config.MIN_PROFIT_FACTOR_FOR_LIVE:
-            return False
-        if self.total_pnl < Config.MIN_NET_PROFIT_FOR_LIVE:
-            return False
-        
-        # All criteria met!
-        if not self.is_ready_for_live:
-            self.is_ready_for_live = True
-            self.ready_for_live_at = datetime.now().isoformat()
-            print(f"\n🏆🏆🏆 STRATEGY READY FOR LIVE! 🏆🏆🏆")
-            print(f"   Strategy: {self.strategy_id}")
-            print(f"   Win Rate: {self.win_rate:.1%}")
-            print(f"   Profit Factor: {self.profit_factor:.2f}")
-            print(f"   Net PnL: ${self.total_pnl:+.2f}")
-        
-        return True
 
 # =============================================================================
 # ADAPTIVE PARAMETERS - Dynamic Strategy Configuration
@@ -800,34 +305,10 @@ class StrategyRecoder:
             json.dump(self.improvement_history, f, indent=2, default=str)
 
     def get_next_version(self, strategy_id: str) -> int:
-        """Get the next version number for a strategy by scanning actual files"""
-        max_version = 0
-        
-        # Check history first
-        if strategy_id in self.improvement_history:
-            max_version = len(self.improvement_history[strategy_id])
-        
-        # Also scan the improved_strategies folder for BOTH naming conventions
-        if Config.IMPROVED_STRATEGIES_DIR.exists():
-            # Pattern 1: Strategy_v23.py (new naming)
-            for f in Config.IMPROVED_STRATEGIES_DIR.glob(f"{strategy_id}_v*.py"):
-                try:
-                    version = int(f.stem.rsplit("_v", 1)[1])
-                    if version > max_version:
-                        max_version = version
-                except (ValueError, IndexError):
-                    continue
-            
-            # Pattern 2: Strategy_improved_v23.py (old naming)
-            for f in Config.IMPROVED_STRATEGIES_DIR.glob(f"{strategy_id}_improved_v*.py"):
-                try:
-                    version = int(f.stem.rsplit("_v", 1)[1])
-                    if version > max_version:
-                        max_version = version
-                except (ValueError, IndexError):
-                    continue
-        
-        return max_version + 1
+        """Get the next version number for a strategy"""
+        if strategy_id not in self.improvement_history:
+            return 1
+        return len(self.improvement_history[strategy_id]) + 1
 
     def recode_strategy(self, strategy_id: str, params: AdaptiveParameters,
                        performance: 'StrategyPerformance', original_file: Path) -> Optional[Path]:
@@ -838,9 +319,8 @@ class StrategyRecoder:
         version = self.get_next_version(strategy_id)
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
-        # Create new filename with version - USE SAME NAMING AS SERVER!
-        # Server uses: Strategy_v23.py (not Strategy_improved_v23.py)
-        new_filename = f"{strategy_id}_v{version}.py"
+        # Create new filename with version
+        new_filename = f"{strategy_id}_improved_v{version}.py"
         new_filepath = Config.IMPROVED_STRATEGIES_DIR / new_filename
 
         # Generate the improved strategy code
@@ -858,7 +338,7 @@ class StrategyRecoder:
                 f.write(strategy_code)
 
             # Also save a metadata JSON file
-            meta_filepath = Config.IMPROVED_STRATEGIES_DIR / f"{strategy_id}_v{version}_meta.json"
+            meta_filepath = Config.IMPROVED_STRATEGIES_DIR / f"{strategy_id}_improved_v{version}_meta.json"
             meta_data = {
                 'strategy_id': strategy_id,
                 'version': version,
@@ -1236,8 +716,6 @@ class LLMStrategyOptimizer:
         system_prompt = """You are an expert quantitative trading strategist and Python developer.
 Your task is to analyze why a trading strategy is underperforming and suggest SPECIFIC improvements.
 
-🎯 TARGET: 71% WIN RATE! The strategy must achieve 71% win rate to go live.
-
 You must respond in a STRICT JSON format with the following structure:
 {
     "analysis": "Your detailed analysis of why the strategy is failing",
@@ -1251,18 +729,10 @@ You must respond in a STRICT JSON format with the following structure:
         "min_volume_ratio": <new_value or null if no change>,
         "max_holding_periods": <new_value or null if no change>
     },
-    "reasoning": "Explain WHY each parameter change will help REACH 71% WIN RATE",
+    "reasoning": "Explain WHY each parameter change will help",
     "confidence": <0.0 to 1.0>,
     "needs_full_recode": <true/false>
 }
-
-KEY STRATEGIES TO REACH 71% WIN RATE:
-1. STRICTER ENTRY - Only enter on STRONG signals (higher deviation = better entries)
-2. WITH-TREND ONLY - Never counter-trend trade
-3. WIDER STOPS - Give trades room to breathe (reduce stop-outs)
-4. TIGHTER TARGETS - Take profit earlier, more often (higher WR = smaller wins)
-5. TIME FILTER - Avoid choppy low-volume periods
-6. REGIME AWARE - Different params for different volatility
 
 Be specific with numbers. Don't suggest vague changes like "increase slightly" - give exact values."""
 
@@ -1844,13 +1314,7 @@ What conditions trigger BUY and SELL signals? Return JSON only."""
 
     def _generate_mean_reversion_signal(self, df: pd.DataFrame, current_price: float,
                                         context: Dict, params: 'AdaptiveParameters') -> Dict:
-        """Mean reversion: Buy oversold, sell overbought
-        
-        🔥 TREND-BASED TRADING:
-        - Trend DOWN → SELL/SHORT (profit from falling prices!)
-        - Trend UP → BUY/LONG (profit from rising prices!)
-        - Don't fight the trend - trade WITH it!
-        """
+        """Mean reversion: Buy oversold, sell overbought"""
         signal = "HOLD"
         reason = "No signal"
         target_price = 0.0
@@ -1858,54 +1322,24 @@ What conditions trigger BUY and SELL signals? Return JSON only."""
 
         lower_dev = (context['lower_band'] - current_price) / current_price * 100 if context['lower_band'] > 0 else 0
         upper_dev = (current_price - context['upper_band']) / current_price * 100 if context['upper_band'] > 0 else 0
-        
-        # Get trend from context
-        trend = context.get('trend', 'SIDEWAYS')
-        
-        # 🔥 TREND FILTER: Trade WITH the trend, not against it!
-        enable_trend_filter = getattr(Config, 'ENABLE_TREND_FILTER', True)
 
-        # Original mean reversion logic (price below lower band = oversold)
         if current_price < context['lower_band'] and lower_dev > params.min_deviation_percent:
-            if enable_trend_filter and trend == "DOWN":
-                # 🔥 Trend is DOWN - don't BUY into falling knife, SELL instead!
-                signal = "SELL"
-                reason = f"TREND SELL: Price ${current_price:.2f} falling, trend DOWN - SHORT for profit!"
-                target_price = current_price - (context['atr'] * params.take_profit_atr_multiplier)
-                stop_loss = current_price + (context['atr'] * params.stop_loss_atr_multiplier)
-            else:
-                # Trend is UP or SIDEWAYS - safe to BUY the dip
-                signal = "BUY"
-                reason = f"Mean Reversion BUY: Price ${current_price:.2f} below band (trend: {trend})"
-                target_price = current_price + (context['atr'] * params.take_profit_atr_multiplier)
-                stop_loss = current_price - (context['atr'] * params.stop_loss_atr_multiplier)
-                
-        # Original mean reversion logic (price above upper band = overbought)
+            signal = "BUY"
+            reason = f"Mean Reversion: Price ${current_price:.2f} below VWAP band (dev: {lower_dev:.2f}%)"
+            target_price = current_price + (context['atr'] * params.take_profit_atr_multiplier)
+            stop_loss = current_price - (context['atr'] * params.stop_loss_atr_multiplier)
         elif current_price > context['upper_band'] and upper_dev > params.min_deviation_percent:
-            if enable_trend_filter and trend == "UP":
-                # 🔥 Trend is UP - don't SELL into rally, BUY instead!
-                signal = "BUY"
-                reason = f"TREND BUY: Price ${current_price:.2f} rising, trend UP - LONG for profit!"
-                target_price = current_price + (context['atr'] * params.take_profit_atr_multiplier)
-                stop_loss = current_price - (context['atr'] * params.stop_loss_atr_multiplier)
-            else:
-                # Trend is DOWN or SIDEWAYS - safe to SELL the top
-                signal = "SELL"
-                reason = f"Mean Reversion SELL: Price ${current_price:.2f} above band (trend: {trend})"
-                target_price = current_price - (context['atr'] * params.take_profit_atr_multiplier)
-                stop_loss = current_price + (context['atr'] * params.stop_loss_atr_multiplier)
+            signal = "SELL"
+            reason = f"Mean Reversion: Price ${current_price:.2f} above VWAP band (dev: {upper_dev:.2f}%)"
+            target_price = current_price - (context['atr'] * params.take_profit_atr_multiplier)
+            stop_loss = current_price + (context['atr'] * params.stop_loss_atr_multiplier)
 
         return {'signal': signal, 'reason': reason, 'target_price': target_price, 'stop_loss': stop_loss,
                 'current_price': current_price, 'deviation_percent': max(lower_dev, upper_dev), **context}
 
     def _generate_market_making_signal(self, df: pd.DataFrame, current_price: float,
                                        context: Dict, params: 'AdaptiveParameters') -> Dict:
-        """Market making: Trade around mid-price with inventory management
-        
-        🔥 TREND-BASED TRADING:
-        - Trend DOWN → SELL/SHORT
-        - Trend UP → BUY/LONG
-        """
+        """Market making: Trade around mid-price with inventory management"""
         signal = "HOLD"
         reason = "No signal"
         target_price = 0.0
@@ -1915,38 +1349,18 @@ What conditions trigger BUY and SELL signals? Return JSON only."""
         spread = (df['High'].iloc[-1] - df['Low'].iloc[-1]) / current_price * 100
         mid_price = (df['High'].iloc[-1] + df['Low'].iloc[-1]) / 2
         price_vs_mid = (current_price - mid_price) / mid_price * 100
-        
-        # Get trend from context
-        trend = context.get('trend', 'SIDEWAYS')
-        enable_trend_filter = getattr(Config, 'ENABLE_TREND_FILTER', True)
 
-        # Price below mid with good spread
+        # Buy if price is below mid with good spread
         if price_vs_mid < -0.1 and spread > 0.2 and context['volume_ratio'] > 0.5:
-            if enable_trend_filter and trend == "DOWN":
-                # 🔥 Trend DOWN - SELL instead of BUY!
-                signal = "SELL"
-                reason = f"TREND SELL: Price ${current_price:.2f} falling, trend DOWN - SHORT!"
-                target_price = current_price - (context['atr'] * 0.5)
-                stop_loss = current_price + (context['atr'] * params.stop_loss_atr_multiplier)
-            else:
-                signal = "BUY"
-                reason = f"Market Making BUY: Price ${current_price:.2f} below mid (trend: {trend})"
-                target_price = mid_price + (context['atr'] * 0.5)
-                stop_loss = current_price - (context['atr'] * params.stop_loss_atr_multiplier)
-                
-        # Price above mid with good spread
+            signal = "BUY"
+            reason = f"Market Making: Price ${current_price:.2f} below mid ${mid_price:.2f} (spread: {spread:.2f}%)"
+            target_price = mid_price + (context['atr'] * 0.5)
+            stop_loss = current_price - (context['atr'] * params.stop_loss_atr_multiplier)
         elif price_vs_mid > 0.1 and spread > 0.2 and context['volume_ratio'] > 0.5:
-            if enable_trend_filter and trend == "UP":
-                # 🔥 Trend UP - BUY instead of SELL!
-                signal = "BUY"
-                reason = f"TREND BUY: Price ${current_price:.2f} rising, trend UP - LONG!"
-                target_price = current_price + (context['atr'] * 0.5)
-                stop_loss = current_price - (context['atr'] * params.stop_loss_atr_multiplier)
-            else:
-                signal = "SELL"
-                reason = f"Market Making SELL: Price ${current_price:.2f} above mid (trend: {trend})"
-                target_price = mid_price - (context['atr'] * 0.5)
-                stop_loss = current_price + (context['atr'] * params.stop_loss_atr_multiplier)
+            signal = "SELL"
+            reason = f"Market Making: Price ${current_price:.2f} above mid ${mid_price:.2f} (spread: {spread:.2f}%)"
+            target_price = mid_price - (context['atr'] * 0.5)
+            stop_loss = current_price + (context['atr'] * params.stop_loss_atr_multiplier)
 
         return {'signal': signal, 'reason': reason, 'target_price': target_price, 'stop_loss': stop_loss,
                 'current_price': current_price, 'deviation_percent': abs(price_vs_mid), **context}
@@ -2526,14 +1940,10 @@ class TradeAnalyzer:
         holding_times = [t.holding_time_minutes for t in self.trades if t.strategy_id == strategy_id]
         perf.avg_holding_time = np.mean(holding_times) if holding_times else 0
 
-        # Pause strategy if too many consecutive losses - TRACK WHEN PAUSED!
+        # Pause strategy if too many consecutive losses
         if perf.consecutive_losses >= Config.MAX_CONSECUTIVE_LOSSES:
-            if not perf.is_paused:  # Only set if not already paused
-                perf.is_paused = True
-                perf.paused_at_cycle = getattr(self, 'current_cycle', 0)  # Track when paused
-                perf.pause_reason = f"{perf.consecutive_losses} consecutive losses"
-                print(f"⏸️  Strategy {strategy_id} PAUSED after {perf.consecutive_losses} consecutive losses")
-                print(f"   Will AUTO-UNPAUSE after {Config.AUTO_UNPAUSE_AFTER_CYCLES} cycles")
+            perf.is_paused = True
+            print(f"⏸️  Strategy {strategy_id} PAUSED after {perf.consecutive_losses} consecutive losses")
 
     def identify_loss_patterns(self, strategy_id: str) -> List[str]:
         """Identify dominant loss patterns for a strategy"""
@@ -2662,26 +2072,6 @@ class AdaptivePaperTrade:
     trend_direction: str = ""
     market_regime: str = ""  # NEW: CHOPPY_HIGH_VOL, STRONG_TREND, RANGING_LOW_VOL, MIXED
     regime_note: str = ""    # NEW: Human-readable regime adjustment note
-    
-    # 🎯 PARTIAL EXIT TRACKING
-    original_size: float = 0.0       # Original position size
-    remaining_size: float = 0.0      # Size after partial exits
-    tp1_hit: bool = False            # TP1 reached
-    tp2_hit: bool = False            # TP2 reached
-    tp3_hit: bool = False            # TP3 reached
-    partial_pnl: float = 0.0         # Total from partial exits
-    current_stop: float = 0.0        # Current stop (moves to breakeven after TP1)
-    
-    # 💰 TRADING COSTS
-    entry_fee: float = 0.0           # Fee paid on entry
-    exit_fee: float = 0.0            # Fee paid on exit(s)
-    slippage_cost: float = 0.0       # Estimated slippage
-    
-    # ⏰ TIME TRACKING
-    last_price_update: float = 0.0   # Last recorded price
-    cycles_without_movement: int = 0 # Cycles with no significant movement
-    highest_unrealized_pnl: float = 0.0  # Best unrealized PnL (for trailing stop)
-    lowest_unrealized_pnl: float = 0.0   # Worst unrealized PnL
 
 class AdaptivePaperTradingEngine:
     """Paper trading engine with trade analysis and adaptive learning"""
@@ -2711,53 +2101,20 @@ class AdaptivePaperTradingEngine:
         """Register the original strategy file for potential recoding"""
         self.strategy_files[strategy_id] = file_path
 
-    def detect_strategy_type(self, strategy_id: str) -> str:
-        """Detect strategy type from strategy name"""
-        sid_lower = strategy_id.lower()
-        
-        if 'vwap' in sid_lower or 'mean_reversion' in sid_lower:
-            return 'MEAN_REVERSION'
-        elif 'market_maker' in sid_lower or 'stoikov' in sid_lower or 'inventory' in sid_lower:
-            return 'MARKET_MAKING'
-        elif 'neural' in sid_lower or 'ml' in sid_lower or 'machine_learning' in sid_lower or 'ai_' in sid_lower:
-            return 'ML_PREDICTION'
-        elif 'pairs' in sid_lower or 'cointegration' in sid_lower or 'correlation' in sid_lower:
-            return 'PAIRS_TRADING'
-        elif 'momentum' in sid_lower or 'trend' in sid_lower:
-            return 'MOMENTUM'
-        elif 'reversal' in sid_lower or 'earnings' in sid_lower:
-            return 'EVENT_DRIVEN'
-        elif 'seasonality' in sid_lower or 'pattern' in sid_lower:
-            return 'PATTERN_RECOGNITION'
-        else:
-            return 'UNKNOWN'
-
     def get_params(self, strategy_id: str) -> AdaptiveParameters:
         """Get or create adaptive parameters for strategy"""
         if strategy_id not in self.strategy_params:
             self.strategy_params[strategy_id] = AdaptiveParameters()
         return self.strategy_params[strategy_id]
 
-    def can_open_position(self, strategy_id: str, symbol: str, current_cycle: int = 0) -> Tuple[bool, str]:
-        """Check if position can be opened - WITH AUTO-UNPAUSE!"""
+    def can_open_position(self, strategy_id: str, symbol: str) -> Tuple[bool, str]:
+        """Check if position can be opened"""
         open_positions = [p for p in self.positions.values() if p.status == "OPEN"]
 
-        # Check if strategy is paused - WITH AUTO-UNPAUSE LOGIC!
+        # Check if strategy is paused
         if strategy_id in self.analyzer.strategy_performance:
-            perf = self.analyzer.strategy_performance[strategy_id]
-            if perf.is_paused:
-                # 🔄 AUTO-UNPAUSE after N cycles
-                paused_at = getattr(perf, 'paused_at_cycle', 0)
-                cycles_paused = current_cycle - paused_at if current_cycle > 0 else 0
-                
-                if cycles_paused >= Config.AUTO_UNPAUSE_AFTER_CYCLES:
-                    perf.is_paused = False
-                    perf.consecutive_losses = 0  # Reset consecutive losses
-                    print(f"\n🔄 AUTO-UNPAUSE: {strategy_id[:40]} after {cycles_paused} cycles")
-                    print(f"   Was paused for: {getattr(perf, 'pause_reason', 'consecutive losses')}")
-                    print(f"   Now trading again! Watch for improvement.\n")
-                else:
-                    return False, f"Strategy {strategy_id} is PAUSED ({cycles_paused}/{Config.AUTO_UNPAUSE_AFTER_CYCLES} cycles until unpause)"
+            if self.analyzer.strategy_performance[strategy_id].is_paused:
+                return False, f"Strategy {strategy_id} is PAUSED due to consecutive losses"
 
         # Total position limit
         if len(open_positions) >= Config.MAX_TOTAL_POSITIONS:
@@ -2780,12 +2137,12 @@ class AdaptivePaperTradingEngine:
 
         return True, "OK"
 
-    def open_position(self, strategy_id: str, symbol: str, signal: Dict, current_cycle: int = 0) -> Optional[str]:
-        """Open position with full context including market regime, trading costs, and safer stops"""
+    def open_position(self, strategy_id: str, symbol: str, signal: Dict) -> Optional[str]:
+        """Open position with full context including market regime"""
         if signal['signal'] == 'HOLD':
             return None
 
-        can_open, reason = self.can_open_position(strategy_id, symbol, current_cycle)
+        can_open, reason = self.can_open_position(strategy_id, symbol)
         if not can_open:
             print(f"⏸️  BLOCKED: {strategy_id[:30]} {symbol} - {reason}")
             return None
@@ -2794,82 +2151,38 @@ class AdaptivePaperTradingEngine:
         position_id = f"{strategy_id}_{symbol}_{datetime.now().strftime('%H%M%S')}"
         size_usd = self.capital * params.position_size_percent
         leverage_size = size_usd * Config.DEFAULT_LEVERAGE
-        
-        # 💰 CALCULATE TRADING COSTS
-        entry_fee = 0.0
-        if getattr(Config, 'ENABLE_TRADING_COSTS', True):
-            entry_fee = leverage_size * (Config.TAKER_FEE_PERCENT / 100)
-        
-        # 🛑 SAFER STOP-LOSS FOR 8X LEVERAGE
-        raw_stop = signal.get('stop_loss', 0)
-        entry_price = signal['current_price']
-        atr = signal.get('atr', entry_price * 0.01)  # Default 1% ATR
-        
-        if getattr(Config, 'USE_REGIME_ADJUSTED_STOPS', True):
-            # Calculate stop distance as percentage
-            if signal['signal'] == 'BUY':
-                stop_distance_pct = (entry_price - raw_stop) / entry_price * 100
-            else:
-                stop_distance_pct = (raw_stop - entry_price) / entry_price * 100
-            
-            # Enforce min/max stop distance
-            min_stop = getattr(Config, 'STOP_LOSS_MIN_PERCENT', 0.5)
-            max_stop = getattr(Config, 'STOP_LOSS_MAX_PERCENT', 3.0)
-            stop_distance_pct = max(min_stop, min(stop_distance_pct, max_stop))
-            
-            # Recalculate stop with enforced limits
-            if signal['signal'] == 'BUY':
-                safe_stop = entry_price * (1 - stop_distance_pct / 100)
-            else:
-                safe_stop = entry_price * (1 + stop_distance_pct / 100)
-        else:
-            safe_stop = raw_stop
 
         position = AdaptivePaperTrade(
             strategy_id=strategy_id,
             symbol=symbol,
             direction=signal['signal'],
-            entry_price=entry_price,
+            entry_price=signal['current_price'],
             size=leverage_size,
             target_price=signal.get('target_price', 0),
-            stop_loss=safe_stop,
+            stop_loss=signal.get('stop_loss', 0),
             entry_time=datetime.now(),
             vwap=signal.get('vwap', 0),
             upper_band=signal.get('upper_band', 0),
             lower_band=signal.get('lower_band', 0),
-            atr=atr,
+            atr=signal.get('atr', 0),
             deviation_percent=signal.get('deviation_percent', 0),
             volatility_24h=signal.get('volatility_24h', 0),
             volume_ratio=signal.get('volume_ratio', 0),
             trend_direction=signal.get('trend', ''),
-            market_regime=signal.get('market_regime', ''),
-            regime_note=signal.get('regime_note', ''),
-            # 🎯 PARTIAL EXIT TRACKING
-            original_size=leverage_size,
-            remaining_size=leverage_size,
-            current_stop=safe_stop,
-            # 💰 TRADING COSTS
-            entry_fee=entry_fee,
-            # ⏰ TIME TRACKING  
-            last_price_update=entry_price,
+            market_regime=signal.get('market_regime', ''),  # NEW: Market regime
+            regime_note=signal.get('regime_note', '')       # NEW: Regime note
         )
 
         self.positions[position_id] = position
-        
-        # Deduct entry fee from capital
-        if entry_fee > 0:
-            self.capital -= entry_fee
 
-        # Enhanced logging with regime info and fees
+        # Enhanced logging with regime info
         regime = signal.get('market_regime', 'UNKNOWN')
         regime_note = signal.get('regime_note', '')
         print(f"🎯 OPENED: {position_id[:50]}")
-        print(f"   {signal['signal']} {symbol} @ ${entry_price:.2f}")
-        print(f"   Target: ${signal.get('target_price', 0):.2f} | Stop: ${safe_stop:.2f}")
+        print(f"   {signal['signal']} {symbol} @ ${signal['current_price']:.2f}")
+        print(f"   Target: ${signal.get('target_price', 0):.2f} | Stop: ${signal.get('stop_loss', 0):.2f}")
         print(f"   Deviation: {signal.get('deviation_percent', 0):.2f}% | Volatility: {signal.get('volatility_24h', 0):.2f}%")
         print(f"   Regime: {regime} {regime_note}")
-        if entry_fee > 0:
-            print(f"   💰 Entry Fee: ${entry_fee:.2f}")
 
         return position_id
 
@@ -2934,113 +2247,8 @@ class AdaptivePaperTradingEngine:
 
         return alerts
 
-    def check_exits(self, current_prices: Dict, cycle: int = 0):
-        """Check and execute exits
-        
-        🚨 PORTFOLIO TAKE PROFIT - Close ALL when total unrealized hits threshold
-        🎯 TIME-BASED EXIT - Close all every N cycles if profitable
-        🎯 PARTIAL EXITS (TP1/TP2/TP3) - Take partial profits
-        ⏰ SOFT TIME-STOP - Kill dead trades after N minutes
-        """
-        
-        # ==========================================================================
-        # 🚨 PORTFOLIO TAKE PROFIT - Close all when we hit profit threshold!
-        # ==========================================================================
-        if getattr(Config, 'ENABLE_PORTFOLIO_TAKE_PROFIT', True):
-            total_unrealized = 0.0
-            open_positions = [(pid, pos) for pid, pos in self.positions.items() if pos.status == "OPEN"]
-            
-            for position_id, position in open_positions:
-                current_price = current_prices.get(position.symbol)
-                if not current_price:
-                    continue
-                remaining = getattr(position, 'remaining_size', position.size)
-                if position.direction == "BUY":
-                    unrealized = (current_price - position.entry_price) / position.entry_price * remaining
-                else:
-                    unrealized = (position.entry_price - current_price) / position.entry_price * remaining
-                total_unrealized += unrealized
-            
-            # Check TAKE PROFIT threshold
-            take_profit_threshold = getattr(Config, 'PORTFOLIO_TAKE_PROFIT_THRESHOLD', 200.0)
-            if total_unrealized >= take_profit_threshold:
-                print(f"\n{'='*80}")
-                print(f"💰💰💰 PORTFOLIO TAKE PROFIT TRIGGERED! 💰💰💰")
-                print(f"   Unrealized: ${total_unrealized:.2f} >= ${take_profit_threshold:.2f}")
-                print(f"   Closing ALL {len(open_positions)} positions to bank profit!")
-                print(f"{'='*80}")
-                
-                for position_id, position in open_positions:
-                    current_price = current_prices.get(position.symbol)
-                    if current_price:
-                        if position.direction == "BUY":
-                            pnl_pct = (current_price - position.entry_price) / position.entry_price * 100
-                        else:
-                            pnl_pct = (position.entry_price - current_price) / position.entry_price * 100
-                        self.close_position(position_id, current_price, f"PORTFOLIO_TAKE_PROFIT ({pnl_pct:+.2f}%)")
-                return  # Done checking exits
-            
-            # Check STOP LOSS threshold
-            stop_loss_threshold = getattr(Config, 'PORTFOLIO_STOP_LOSS_THRESHOLD', -400.0)
-            if total_unrealized <= stop_loss_threshold:
-                print(f"\n{'='*80}")
-                print(f"🛑 PORTFOLIO STOP LOSS TRIGGERED!")
-                print(f"   Unrealized: ${total_unrealized:.2f} <= ${stop_loss_threshold:.2f}")
-                print(f"   Closing ALL positions to limit losses!")
-                print(f"{'='*80}")
-                
-                for position_id, position in open_positions:
-                    current_price = current_prices.get(position.symbol)
-                    if current_price:
-                        if position.direction == "BUY":
-                            pnl_pct = (current_price - position.entry_price) / position.entry_price * 100
-                        else:
-                            pnl_pct = (position.entry_price - current_price) / position.entry_price * 100
-                        self.close_position(position_id, current_price, f"PORTFOLIO_STOP_LOSS ({pnl_pct:+.2f}%)")
-                return
-        
-        # ==========================================================================
-        # 🎯 TIME-BASED EXIT - Close all every N cycles if profitable
-        # ==========================================================================
-        if getattr(Config, 'ENABLE_TIME_BASED_EXIT', True) and cycle > 0:
-            exit_cycles = getattr(Config, 'TIME_BASED_EXIT_CYCLES', 50)
-            min_profit = getattr(Config, 'MIN_PROFIT_FOR_TIME_EXIT', 50.0)
-            
-            if cycle % exit_cycles == 0:
-                total_unrealized = 0.0
-                open_positions = [(pid, pos) for pid, pos in self.positions.items() if pos.status == "OPEN"]
-                
-                for position_id, position in open_positions:
-                    current_price = current_prices.get(position.symbol)
-                    if not current_price:
-                        continue
-                    remaining = getattr(position, 'remaining_size', position.size)
-                    if position.direction == "BUY":
-                        unrealized = (current_price - position.entry_price) / position.entry_price * remaining
-                    else:
-                        unrealized = (position.entry_price - current_price) / position.entry_price * remaining
-                    total_unrealized += unrealized
-                
-                if total_unrealized >= min_profit:
-                    print(f"\n{'='*80}")
-                    print(f"⏰ TIME-BASED EXIT - Cycle {cycle}")
-                    print(f"   Unrealized: ${total_unrealized:.2f} >= ${min_profit:.2f}")
-                    print(f"   Closing {len(open_positions)} positions")
-                    print(f"{'='*80}")
-                    
-                    for position_id, position in open_positions:
-                        current_price = current_prices.get(position.symbol)
-                        if current_price:
-                            if position.direction == "BUY":
-                                pnl_pct = (current_price - position.entry_price) / position.entry_price * 100
-                            else:
-                                pnl_pct = (position.entry_price - current_price) / position.entry_price * 100
-                            self.close_position(position_id, current_price, f"TIME_EXIT_CYCLE_{cycle} ({pnl_pct:+.2f}%)")
-                    return
-        
-        # ==========================================================================
-        # INDIVIDUAL POSITION CHECKING (with partial exits and soft time-stop)
-        # ==========================================================================
+    def check_exits(self, current_prices: Dict):
+        """Check and execute exits"""
         for position_id, position in list(self.positions.items()):
             if position.status != "OPEN":
                 continue
@@ -3055,123 +2263,25 @@ class AdaptivePaperTradingEngine:
             else:
                 pnl_percent = (position.entry_price - current_price) / position.entry_price * 100
 
-            # Track unrealized P&L extremes
-            if not hasattr(position, 'highest_unrealized_pnl'):
-                position.highest_unrealized_pnl = pnl_percent
-                position.lowest_unrealized_pnl = pnl_percent
-            else:
-                position.highest_unrealized_pnl = max(position.highest_unrealized_pnl, pnl_percent)
-                position.lowest_unrealized_pnl = min(position.lowest_unrealized_pnl, pnl_percent)
-            
-            # Track movement for soft time-stop
-            last_price = getattr(position, 'last_price_update', position.entry_price)
-            price_change = abs(current_price - last_price) / last_price * 100
-            if price_change < 0.05:  # Less than 0.05% movement
-                position.cycles_without_movement = getattr(position, 'cycles_without_movement', 0) + 1
-            else:
-                position.cycles_without_movement = 0
-            position.last_price_update = current_price
-
             exit_reason = None
-            remaining = getattr(position, 'remaining_size', position.size)
-            current_stop = getattr(position, 'current_stop', position.stop_loss)
-            
-            # ==========================================================================
-            # 🎯 PARTIAL EXITS (TP1/TP2/TP3)
-            # ==========================================================================
-            if getattr(Config, 'ENABLE_PARTIAL_EXITS', True):
-                tp1_pct = getattr(Config, 'TP1_PERCENT', 0.26)
-                tp2_pct = getattr(Config, 'TP2_PERCENT', 0.35)
-                tp3_pct = getattr(Config, 'TP3_PERCENT', 0.44)
-                
-                # TP1: Close 50% at small profit
-                if not getattr(position, 'tp1_hit', False) and pnl_percent >= tp1_pct:
-                    position.tp1_hit = True
-                    close_pct = getattr(Config, 'TP1_CLOSE_PERCENT', 50) / 100
-                    close_size = remaining * close_pct
-                    close_pnl = close_size * (pnl_percent / 100)
-                    
-                    position.remaining_size = remaining - close_size
-                    position.partial_pnl = getattr(position, 'partial_pnl', 0) + close_pnl
-                    self.capital += close_pnl
-                    
-                    # Move stop to breakeven
-                    if getattr(Config, 'MOVE_STOP_TO_BREAKEVEN_AFTER_TP1', True):
-                        position.current_stop = position.entry_price
-                    
-                    # Track in strategy performance
-                    if position.strategy_id in self.analyzer.strategy_performance:
-                        self.analyzer.strategy_performance[position.strategy_id].tp1_hits += 1
-                        self.analyzer.strategy_performance[position.strategy_id].partial_profit_total += close_pnl
-                    
-                    print(f"   🎯 TP1 HIT: {position.symbol} +{pnl_percent:.2f}% - Closed {close_pct*100:.0f}% for ${close_pnl:+.2f}")
-                    print(f"      Remaining: ${position.remaining_size:.2f} | Stop moved to breakeven")
-                
-                # TP2: Close 25% more at medium profit
-                elif getattr(position, 'tp1_hit', False) and not getattr(position, 'tp2_hit', False) and pnl_percent >= tp2_pct:
-                    position.tp2_hit = True
-                    close_pct = getattr(Config, 'TP2_CLOSE_PERCENT', 25) / 100
-                    close_size = getattr(position, 'original_size', position.size) * close_pct
-                    close_pnl = close_size * (pnl_percent / 100)
-                    
-                    position.remaining_size = getattr(position, 'remaining_size', position.size) - close_size
-                    position.partial_pnl = getattr(position, 'partial_pnl', 0) + close_pnl
-                    self.capital += close_pnl
-                    
-                    if position.strategy_id in self.analyzer.strategy_performance:
-                        self.analyzer.strategy_performance[position.strategy_id].tp2_hits += 1
-                        self.analyzer.strategy_performance[position.strategy_id].partial_profit_total += close_pnl
-                    
-                    print(f"   🎯 TP2 HIT: {position.symbol} +{pnl_percent:.2f}% - Closed {close_pct*100:.0f}% for ${close_pnl:+.2f}")
-                
-                # TP3: Close final 25% at full target
-                elif getattr(position, 'tp2_hit', False) and not getattr(position, 'tp3_hit', False) and pnl_percent >= tp3_pct:
-                    position.tp3_hit = True
-                    exit_reason = f"TP3_FULL_TARGET (+{pnl_percent:.2f}%)"
-            
-            # Normal target check (if no partial exits)
-            if not exit_reason:
-                if position.direction == "BUY" and current_price >= position.target_price:
-                    exit_reason = f"TARGET_HIT (+{pnl_percent:.2f}%)"
-                elif position.direction == "SELL" and current_price <= position.target_price:
-                    exit_reason = f"TARGET_HIT (+{pnl_percent:.2f}%)"
 
-            # Check stop loss (use current_stop which may have moved to breakeven)
-            if not exit_reason:
-                if position.direction == "BUY" and current_price <= current_stop:
-                    if getattr(position, 'tp1_hit', False):
-                        exit_reason = f"BREAKEVEN_STOP ({pnl_percent:.2f}%)"
-                    else:
-                        exit_reason = f"STOP_LOSS ({pnl_percent:.2f}%)"
-                elif position.direction == "SELL" and current_price >= current_stop:
-                    if getattr(position, 'tp1_hit', False):
-                        exit_reason = f"BREAKEVEN_STOP ({pnl_percent:.2f}%)"
-                    else:
-                        exit_reason = f"STOP_LOSS ({pnl_percent:.2f}%)"
+            # Check target
+            if position.direction == "BUY" and current_price >= position.target_price:
+                exit_reason = f"TARGET_HIT (+{pnl_percent:.2f}%)"
+            elif position.direction == "SELL" and current_price <= position.target_price:
+                exit_reason = f"TARGET_HIT (+{pnl_percent:.2f}%)"
 
-            # ==========================================================================
-            # ⏰ SOFT TIME-STOP - Kill dead trades
-            # ==========================================================================
-            if not exit_reason and getattr(Config, 'ENABLE_SOFT_TIME_STOP', True):
-                holding_minutes = (datetime.now() - position.entry_time).total_seconds() / 60
-                soft_stop_minutes = getattr(Config, 'SOFT_TIME_STOP_MINUTES', 45)
-                min_profit_to_keep = getattr(Config, 'SOFT_TIME_STOP_MIN_PROFIT', 0.05)
-                dead_trade_cycles = getattr(Config, 'DEAD_TRADE_CYCLES', 15)
-                
-                # Close if trade has gone nowhere for too long
-                if holding_minutes > soft_stop_minutes and pnl_percent < min_profit_to_keep:
-                    exit_reason = f"SOFT_TIME_STOP ({pnl_percent:.2f}% after {holding_minutes:.0f}min)"
-                
-                # Close if no movement for too many cycles
-                elif getattr(position, 'cycles_without_movement', 0) >= dead_trade_cycles:
-                    exit_reason = f"DEAD_TRADE ({pnl_percent:.2f}% - no movement for {dead_trade_cycles} cycles)"
+            # Check stop loss
+            elif position.direction == "BUY" and current_price <= position.stop_loss:
+                exit_reason = f"STOP_LOSS ({pnl_percent:.2f}%)"
+            elif position.direction == "SELL" and current_price >= position.stop_loss:
+                exit_reason = f"STOP_LOSS ({pnl_percent:.2f}%)"
 
             # Check max holding time
-            if not exit_reason:
-                params = self.get_params(position.strategy_id)
-                holding_minutes = (datetime.now() - position.entry_time).total_seconds() / 60
-                if holding_minutes > params.max_holding_periods * 15:  # 15 min per period
-                    exit_reason = f"MAX_TIME ({pnl_percent:.2f}%)"
+            params = self.get_params(position.strategy_id)
+            holding_minutes = (datetime.now() - position.entry_time).total_seconds() / 60
+            if holding_minutes > params.max_holding_periods * 15:  # 15 min per period
+                exit_reason = f"MAX_TIME ({pnl_percent:.2f}%)"
 
             if exit_reason:
                 self.close_position(position_id, current_price, exit_reason)
@@ -3230,10 +2340,6 @@ class AdaptivePaperTradingEngine:
         """
         Analyze and optimize strategy parameters using LLM reasoning.
         This is the core of the adaptive system - like APEX RBI but for live trading.
-        
-        🔥 NEW: SKIP optimization if strategy is already winning!
-        - Don't break what's working!
-        - Only optimize underperformers
         """
         if strategy_id not in self.analyzer.strategy_performance:
             return
@@ -3244,21 +2350,6 @@ class AdaptivePaperTradingEngine:
             print(f"⏳ {strategy_id[:30]}: Only {perf.total_trades} trades, need {Config.MIN_TRADES_FOR_ANALYSIS} for analysis")
             return
 
-        # 🔥 SKIP if strategy is already winning! Don't break what works!
-        min_win_rate_to_skip = getattr(Config, 'MIN_WIN_RATE_TO_SKIP_OPTIMIZATION', 0.55)
-        if getattr(Config, 'SKIP_OPTIMIZATION_IF_WINNING', True) and perf.win_rate >= min_win_rate_to_skip:
-            print(f"✅ {strategy_id[:30]}: SKIPPING optimization - already winning!")
-            print(f"   Win Rate: {perf.win_rate:.1%} >= {min_win_rate_to_skip:.0%} threshold")
-            print(f"   Total PnL: ${perf.total_pnl:+.2f}")
-            print(f"   💡 This strategy is performing well - don't change it!")
-            
-            # Still unpause if needed
-            if perf.is_paused:
-                perf.is_paused = False
-                perf.consecutive_losses = 0
-                print(f"   ✅ Strategy UNPAUSED (winning strategy)")
-            return
-
         # Check if optimization needed
         needs_optimization = (
             perf.win_rate < Config.TARGET_WIN_RATE or
@@ -3267,22 +2358,12 @@ class AdaptivePaperTradingEngine:
 
         if not needs_optimization:
             print(f"✅ {strategy_id[:30]}: Performance OK (WR: {perf.win_rate:.0%}, PF: {perf.profit_factor:.2f})")
-            # Still unpause if paused
-            if perf.is_paused:
-                perf.is_paused = False
-                perf.consecutive_losses = 0
-                print(f"   ✅ Strategy UNPAUSED (performance OK)")
             return
 
         # Check if we've exceeded max optimization iterations
         current_params = self.get_params(strategy_id)
         if current_params.optimization_count >= Config.MAX_OPTIMIZATION_ITERATIONS:
             print(f"⚠️  {strategy_id[:30]}: Max optimizations ({Config.MAX_OPTIMIZATION_ITERATIONS}) reached")
-            # Still unpause to give it another chance
-            if perf.is_paused:
-                perf.is_paused = False
-                perf.consecutive_losses = 0
-                print(f"   ✅ Strategy UNPAUSED (max optimizations reached, trying again)")
             return
 
         print(f"\n{'='*60}")
@@ -3494,20 +2575,15 @@ class AdaptiveTradingEngine:
         improved_versions = {}  # Maps original_strategy_id -> (version, filepath)
 
         if Config.USE_IMPROVED_STRATEGIES and Config.IMPROVED_STRATEGIES_DIR.exists():
-            # Look for BOTH naming conventions:
-            # 1. Strategy_improved_v1.py (old naming)
-            # 2. Strategy_v1.py (new naming - what the server has!)
-            improved_files = list(Config.IMPROVED_STRATEGIES_DIR.glob("*_v*.py"))
+            improved_files = list(Config.IMPROVED_STRATEGIES_DIR.glob("*_improved_v*.py"))
             if improved_files:
-                print(f"📁 Found {len(improved_files)} improved strategy files in improved_strategies/")
+                print(f"📁 Found {len(improved_files)} improved strategy files")
 
                 for improved_file in improved_files:
+                    # Parse filename: original_strategy_id_improved_v1.py
                     filename = improved_file.stem
-                    
-                    # Try new naming: Strategy_v23.py
-                    if "_v" in filename and "_improved_v" not in filename:
-                        # Parse: 20251124_061812_Market_Maker_Inventory_Rebalancing_Strategy_v23
-                        parts = filename.rsplit("_v", 1)
+                    if "_improved_v" in filename:
+                        parts = filename.rsplit("_improved_v", 1)
                         if len(parts) == 2:
                             original_id = parts[0]
                             try:
@@ -3515,20 +2591,6 @@ class AdaptiveTradingEngine:
                                 # Keep track of highest version for each original strategy
                                 if original_id not in improved_versions or version > improved_versions[original_id][0]:
                                     improved_versions[original_id] = (version, improved_file)
-                                    print(f"   📌 {original_id[:50]}... → v{version}")
-                            except ValueError:
-                                continue
-                    
-                    # Also try old naming: Strategy_improved_v1.py
-                    elif "_improved_v" in filename:
-                        parts = filename.rsplit("_improved_v", 1)
-                        if len(parts) == 2:
-                            original_id = parts[0]
-                            try:
-                                version = int(parts[1])
-                                if original_id not in improved_versions or version > improved_versions[original_id][0]:
-                                    improved_versions[original_id] = (version, improved_file)
-                                    print(f"   📌 {original_id[:50]}... → v{version}")
                             except ValueError:
                                 continue
 
@@ -3558,23 +2620,6 @@ class AdaptiveTradingEngine:
         # Summary
         improved_count = sum(1 for s in strategies.values() if s.get('is_improved', False))
         print(f"🎯 Total strategies: {len(strategies)} ({improved_count} using improved versions)")
-        
-        # Show strategy types
-        for sid, sinfo in list(strategies.items())[:5]:
-            stype = self.paper_engine.detect_strategy_type(sid)
-            print(f"   📊 {sid[:40]}: Type={stype}")
-        if len(strategies) > 5:
-            print(f"   ... and {len(strategies) - 5} more")
-        
-        print()
-        print("🚀" + "="*78)
-        print("   STARTING LIVE TRADING LOOP - Watching for signals...")
-        print("   • Each cycle: Fetch prices → Check signals → Open/Close trades")
-        print("   • Trades will show with LIVE P&L when positions are open")
-        print("   • Portfolio take profit at $200+ unrealized profit")
-        print("   • Press Ctrl+C to stop and save state")
-        print("="*80)
-        print()
 
         return strategies
 
@@ -3600,13 +2645,9 @@ class AdaptiveTradingEngine:
         if not Config.USE_IMPROVED_STRATEGIES or not Config.IMPROVED_STRATEGIES_DIR.exists():
             return
 
-        # Look for improved versions - BOTH naming conventions!
-        # 1. Strategy_v23.py (new naming - what server has)
-        # 2. Strategy_improved_v23.py (old naming)
-        pattern1 = f"{strategy_id}_v*.py"
-        pattern2 = f"{strategy_id}_improved_v*.py"
-        improved_files = list(Config.IMPROVED_STRATEGIES_DIR.glob(pattern1))
-        improved_files.extend(list(Config.IMPROVED_STRATEGIES_DIR.glob(pattern2)))
+        # Look for improved versions
+        pattern = f"{strategy_id}_improved_v*.py"
+        improved_files = list(Config.IMPROVED_STRATEGIES_DIR.glob(pattern))
 
         if improved_files:
             # Find the highest version
@@ -3659,7 +2700,7 @@ class AdaptiveTradingEngine:
                 strategy_type = executor.strategy_type if hasattr(executor, 'strategy_type') else 'UNKNOWN'
                 print(f"\n🚀 SIGNAL: {strategy_id[:40]} - {signal['signal']} {token}")
                 print(f"   Type: {strategy_type} | Reason: {signal['reason']}")
-                self.paper_engine.open_position(strategy_id, token, signal, self.cycle_count)
+                self.paper_engine.open_position(strategy_id, token, signal)
 
         except Exception as e:
             print(f"❌ Error: {strategy_id[:30]} {token}: {e}")
@@ -3692,44 +2733,25 @@ class AdaptiveTradingEngine:
 
         if open_positions:
             print(f"\n📊 OPEN POSITIONS (waiting to close for analysis):")
-            total_unrealized_pnl = 0.0
-            
             for position in open_positions:
                 current_price = self.htx_client.get_current_price(position.symbol) or position.entry_price
                 if position.direction == "BUY":
                     pnl_percent = (current_price - position.entry_price) / position.entry_price * 100
-                    pnl_usd = (current_price - position.entry_price) / position.entry_price * position.size * Config.DEFAULT_LEVERAGE
                     dist_to_target = (position.target_price - current_price) / current_price * 100
                     dist_to_stop = (current_price - position.stop_loss) / current_price * 100
                 else:
                     pnl_percent = (position.entry_price - current_price) / position.entry_price * 100
-                    pnl_usd = (position.entry_price - current_price) / position.entry_price * position.size * Config.DEFAULT_LEVERAGE
                     dist_to_target = (current_price - position.target_price) / current_price * 100
                     dist_to_stop = (position.stop_loss - current_price) / current_price * 100
-                
-                total_unrealized_pnl += pnl_usd
 
                 # Calculate time in trade
                 time_in_trade = (datetime.now() - position.entry_time).total_seconds() / 60
 
-                # Full details with prices and P&L in dollars
-                emoji = "🟢" if pnl_percent > 0 else "🔴"
+                # Full details with prices
                 print(f"   📍 {position.strategy_id[:35]}")
-                print(f"      {position.direction} {position.symbol} @ ${position.entry_price:.2f} → Now: ${current_price:.2f} ({pnl_percent:+.2f}%) {emoji} ${pnl_usd:+.2f}")
+                print(f"      {position.direction} {position.symbol} @ ${position.entry_price:.2f} → Now: ${current_price:.2f} ({pnl_percent:+.2f}%)")
                 print(f"      🎯 Target: ${position.target_price:.2f} ({dist_to_target:+.2f}% away) | 🛑 Stop: ${position.stop_loss:.2f} ({dist_to_stop:.2f}% away)")
                 print(f"      ⏱️ Time: {time_in_trade:.0f}min | Dev: {position.deviation_percent:.2f}% | Vol: {position.volatility_24h:.2f}%")
-            
-            # Show total portfolio unrealized P&L
-            total_emoji = "🟢" if total_unrealized_pnl > 0 else "🔴"
-            print(f"\n   {total_emoji} TOTAL PORTFOLIO UNREALIZED P&L: ${total_unrealized_pnl:+.2f}")
-            
-            # Check if we're close to take profit threshold
-            if Config.ENABLE_PORTFOLIO_TAKE_PROFIT:
-                if total_unrealized_pnl >= Config.PORTFOLIO_TAKE_PROFIT_THRESHOLD:
-                    print(f"   💰 TAKE PROFIT THRESHOLD HIT! (${total_unrealized_pnl:+.2f} >= ${Config.PORTFOLIO_TAKE_PROFIT_THRESHOLD})")
-                elif total_unrealized_pnl > 0:
-                    distance = Config.PORTFOLIO_TAKE_PROFIT_THRESHOLD - total_unrealized_pnl
-                    print(f"   📈 ${distance:.2f} away from take profit threshold (${Config.PORTFOLIO_TAKE_PROFIT_THRESHOLD})")
 
         print(f"{'='*80}\n")
 
@@ -3740,6 +2762,8 @@ class AdaptiveTradingEngine:
         print(f"💰 Tokens: {Config.TRADEABLE_TOKENS}")
         print(f"⏰ Check interval: {Config.CHECK_INTERVAL}s")
         print(f"🔧 Optimization interval: Every {Config.OPTIMIZATION_INTERVAL} cycles")
+        print(f"💵 Portfolio Take Profit: ${Config.PORTFOLIO_TAKE_PROFIT_THRESHOLD}")
+        print(f"🛑 Portfolio Stop Loss: ${Config.PORTFOLIO_STOP_LOSS_THRESHOLD}")
         print("="*80)
 
         while True:
@@ -3759,6 +2783,61 @@ class AdaptiveTradingEngine:
                 # Check exits first
                 self.paper_engine.check_exits(current_prices)
 
+                # =================================================================
+                # 🎯 PORTFOLIO TAKE PROFIT / STOP LOSS - BANK THE PROFIT!
+                # =================================================================
+                open_positions = [p for p in self.paper_engine.positions.values() if p.status == "OPEN"]
+                if open_positions and current_prices:
+                    total_unrealized = 0.0
+                    print(f"\n📊 OPEN POSITIONS ({len(open_positions)}):")
+                    
+                    for pos in open_positions:
+                        if pos.symbol in current_prices:
+                            current_price = current_prices[pos.symbol]
+                            if pos.direction == "BUY":
+                                pnl_pct = (current_price - pos.entry_price) / pos.entry_price * 100
+                                pnl_usd = pnl_pct / 100 * pos.size * Config.DEFAULT_LEVERAGE
+                            else:
+                                pnl_pct = (pos.entry_price - current_price) / pos.entry_price * 100
+                                pnl_usd = pnl_pct / 100 * pos.size * Config.DEFAULT_LEVERAGE
+                            
+                            total_unrealized += pnl_usd
+                            emoji = "🟢" if pnl_usd >= 0 else "🔴"
+                            print(f"   {emoji} {pos.direction} {pos.symbol} @ ${pos.entry_price:.2f} → ${current_price:.2f} ({pnl_pct:+.2f}%) = ${pnl_usd:+.2f}")
+                    
+                    # Show total
+                    total_emoji = "🟢" if total_unrealized >= 0 else "🔴"
+                    print(f"   {total_emoji} TOTAL UNREALIZED P&L: ${total_unrealized:+.2f}")
+                    
+                    # Portfolio take profit
+                    if total_unrealized >= Config.PORTFOLIO_TAKE_PROFIT_THRESHOLD:
+                        print(f"   💰 TAKE PROFIT THRESHOLD REACHED! (${total_unrealized:+.2f} >= ${Config.PORTFOLIO_TAKE_PROFIT_THRESHOLD})")
+                        print(f"\n💰 PORTFOLIO TAKE PROFIT TRIGGERED! Closing all {len(open_positions)} positions for ${total_unrealized:+.2f}")
+                        for pos in open_positions:
+                            if pos.symbol in current_prices:
+                                self.paper_engine.close_position(pos.position_id, current_prices[pos.symbol], "PORTFOLIO_TAKE_PROFIT")
+                        open_positions = []  # Reset after closing
+                    
+                    # Portfolio stop loss
+                    elif total_unrealized <= Config.PORTFOLIO_STOP_LOSS_THRESHOLD:
+                        print(f"\n🛑 PORTFOLIO STOP LOSS TRIGGERED!")
+                        print(f"   Unrealized: ${total_unrealized:.2f} <= ${Config.PORTFOLIO_STOP_LOSS_THRESHOLD}")
+                        print(f"   Closing ALL positions to limit losses!")
+                        for pos in open_positions:
+                            if pos.symbol in current_prices:
+                                self.paper_engine.close_position(pos.position_id, current_prices[pos.symbol], "PORTFOLIO_STOP_LOSS")
+                        open_positions = []  # Reset after closing
+                    
+                    # Show distance to threshold
+                    else:
+                        if total_unrealized >= 0:
+                            distance = Config.PORTFOLIO_TAKE_PROFIT_THRESHOLD - total_unrealized
+                            print(f"   📈 ${distance:.2f} away from take profit threshold (${Config.PORTFOLIO_TAKE_PROFIT_THRESHOLD})")
+                        else:
+                            distance_to_breakeven = abs(total_unrealized)
+                            distance_to_tp = Config.PORTFOLIO_TAKE_PROFIT_THRESHOLD + distance_to_breakeven
+                            print(f"   📉 ${distance_to_tp:.2f} away from take profit threshold (need +${distance_to_breakeven:.2f} to breakeven, then +${Config.PORTFOLIO_TAKE_PROFIT_THRESHOLD:.2f} more)")
+
                 # NEW: Real-time performance monitoring
                 self.paper_engine.check_real_time_metrics()
 
@@ -3766,43 +2845,6 @@ class AdaptiveTradingEngine:
                 # This ensures we spread positions across different tokens
                 open_positions = [p for p in self.paper_engine.positions.values() if p.status == "OPEN"]
                 position_limit_reached = len(open_positions) >= Config.MAX_TOTAL_POSITIONS
-                
-                # Show live P&L for open positions
-                if open_positions:
-                    total_unrealized = 0
-                    print(f"\n📊 OPEN POSITIONS ({len(open_positions)}):")
-                    for pos in open_positions:
-                        curr_price = current_prices.get(pos.symbol, pos.entry_price)
-                        if pos.direction == "BUY":
-                            pnl_pct = (curr_price - pos.entry_price) / pos.entry_price * 100
-                            pnl_usd = (curr_price - pos.entry_price) / pos.entry_price * pos.size * Config.DEFAULT_LEVERAGE
-                        else:
-                            pnl_pct = (pos.entry_price - curr_price) / pos.entry_price * 100
-                            pnl_usd = (pos.entry_price - curr_price) / pos.entry_price * pos.size * Config.DEFAULT_LEVERAGE
-                        total_unrealized += pnl_usd
-                        emoji = "🟢" if pnl_pct > 0 else "🔴"
-                        print(f"   {emoji} {pos.direction} {pos.symbol} @ ${pos.entry_price:.2f} → ${curr_price:.2f} ({pnl_pct:+.2f}%) = ${pnl_usd:+.2f}")
-                    
-                    total_emoji = "🟢" if total_unrealized > 0 else "🔴"
-                    print(f"   {total_emoji} TOTAL UNREALIZED P&L: ${total_unrealized:+.2f}")
-                    
-                    # Show distance to take profit threshold
-                    if Config.ENABLE_PORTFOLIO_TAKE_PROFIT:
-                        if total_unrealized >= Config.PORTFOLIO_TAKE_PROFIT_THRESHOLD:
-                            print(f"   💰 TAKE PROFIT THRESHOLD REACHED! (${total_unrealized:+.2f} >= ${Config.PORTFOLIO_TAKE_PROFIT_THRESHOLD})")
-                        elif total_unrealized > 0:
-                            distance = Config.PORTFOLIO_TAKE_PROFIT_THRESHOLD - total_unrealized
-                            print(f"   📈 ${distance:.2f} away from take profit threshold (${Config.PORTFOLIO_TAKE_PROFIT_THRESHOLD})")
-                        else:
-                            # When in loss, actual distance = get to breakeven + reach threshold
-                            distance = abs(total_unrealized) + Config.PORTFOLIO_TAKE_PROFIT_THRESHOLD
-                            print(f"   📉 ${distance:.2f} away from take profit threshold (need +${abs(total_unrealized):.2f} to breakeven, then +${Config.PORTFOLIO_TAKE_PROFIT_THRESHOLD:.2f} more)")
-                    
-                    # Check portfolio take profit
-                    if Config.ENABLE_PORTFOLIO_TAKE_PROFIT and total_unrealized >= Config.PORTFOLIO_TAKE_PROFIT_THRESHOLD:
-                        print(f"\n💰 PORTFOLIO TAKE PROFIT TRIGGERED! Closing all {len(open_positions)} positions for ${total_unrealized:+.2f}")
-                else:
-                    print(f"\n📊 No open positions - scanning for signals...")
 
                 if not position_limit_reached:
                     for token in Config.TRADEABLE_TOKENS:
@@ -3884,26 +2926,7 @@ if __name__ == "__main__":
     print("  • Loss pattern recognition and analysis")
     print("  • Dynamic parameter adjustment")
     print("  • Automated optimization until profitability")
-    print("  • REST API on localhost:8000 for frontend integration")
-    print("="*80)
-    
-    # Show live trading criteria
-    print("\n🏆 READY FOR LIVE TRADING CRITERIA:")
-    print(f"   • Minimum trades: {Config.MIN_TRADES_FOR_LIVE}")
-    print(f"   • Minimum win rate: {Config.MIN_WIN_RATE_FOR_LIVE * 100:.0f}%")
-    print(f"   • Minimum profit factor: {Config.MIN_PROFIT_FACTOR_FOR_LIVE}")
-    print(f"   • Minimum net profit: ${Config.MIN_NET_PROFIT_FOR_LIVE:.0f}")
-    print("\n💡 When a strategy meets ALL criteria, it becomes 'READY FOR LIVE'")
-    print("   The perfected .py file has been optimized by LLM to maximize profits")
-    print("   BUT: No strategy is GUARANTEED to always profit!")
-    print("   Markets change, and past performance does not guarantee future results.")
     print("="*80)
 
     engine = AdaptiveTradingEngine()
-    
-    # Start REST API server in background
-    api_server = APIServer(engine)
-    api_server.run(host='0.0.0.0', port=8000)
-    
-    # Run main trading loop
     engine.run_adaptive()
