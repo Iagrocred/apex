@@ -92,9 +92,17 @@ class Config:
     TARGET_WIN_RATE = 0.71            # Target 71% win rate (THE GOAL!)
     TARGET_PROFIT_FACTOR = 1.8        # Target profit factor 1.8+
     OPTIMIZATION_INTERVAL = 10        # Run optimization every 10 cycles (~5 min)
-    MAX_CONSECUTIVE_LOSSES = 3        # Pause strategy after 3 consecutive losses
-    MAX_OPTIMIZATION_ITERATIONS = 10  # Max times to optimize before giving up
+    MAX_CONSECUTIVE_LOSSES = 5        # Warn after 5 consecutive losses (but DON'T PAUSE!)
+    MAX_OPTIMIZATION_ITERATIONS = 999 # NO LIMIT! Keep optimizing FOREVER until profitable!
     USE_IMPROVED_STRATEGIES = True    # Automatically use improved strategies (v1, v2, v3...)
+    
+    # =============================================================================
+    # 🔄 FRESH START MODE - Reset all learning and start from raw 10 strategies
+    # =============================================================================
+    # Set this to True to DELETE all improved strategies and start fresh!
+    # The old improved versions were trained with wrong parameters (no proper TP/SL)
+    FRESH_START = False               # Set to True to reset everything!
+    AUTO_UNPAUSE_CYCLES = 5           # Unpause strategies after N cycles (was stuck forever!)
 
     # Market Regime Detection Thresholds
     PERIODS_PER_24H = 96              # 24h = 96 periods of 15 minutes each
@@ -222,6 +230,7 @@ class StrategyPerformance:
     consecutive_losses: int = 0
     consecutive_wins: int = 0
     is_paused: bool = False
+    paused_since_cycle: int = 0    # Track which cycle it was paused at (for auto-unpause!)
 
     # Loss Analysis
     stop_loss_hits: int = 0
@@ -1962,10 +1971,11 @@ class TradeAnalyzer:
         holding_times = [t.holding_time_minutes for t in self.trades if t.strategy_id == strategy_id]
         perf.avg_holding_time = np.mean(holding_times) if holding_times else 0
 
-        # Pause strategy if too many consecutive losses
+        # DON'T PAUSE! This was the bug killing the system!
+        # Instead, just warn and let LLM optimization fix the strategy
         if perf.consecutive_losses >= Config.MAX_CONSECUTIVE_LOSSES:
-            perf.is_paused = True
-            print(f"⏸️  Strategy {strategy_id} PAUSED after {perf.consecutive_losses} consecutive losses")
+            print(f"⚠️  Strategy {strategy_id[:40]} has {perf.consecutive_losses} consecutive losses - LLM will optimize")
+            # perf.is_paused = True  # DISABLED! Let strategies keep trading!
 
     def identify_loss_patterns(self, strategy_id: str) -> List[str]:
         """Identify dominant loss patterns for a strategy"""
@@ -2051,7 +2061,7 @@ class TradeAnalyzer:
             print(f"   Total PnL: ${perf.total_pnl:+.2f}")
             print(f"   Avg Win: ${perf.avg_win:.2f} | Avg Loss: ${perf.avg_loss:.2f}")
             print(f"   Consecutive Losses: {perf.consecutive_losses}")
-            print(f"   Status: {'⏸️ PAUSED' if perf.is_paused else '✅ ACTIVE'}")
+            print(f"   Status: ✅ ALWAYS TRADING (no pausing!)")  # NO PAUSING like trader6.py!
 
             if patterns:
                 print(f"   📉 Loss Patterns: {', '.join(patterns)}")
@@ -2141,13 +2151,8 @@ class AdaptivePaperTradingEngine:
         return self.strategy_params[strategy_id]
 
     def can_open_position(self, strategy_id: str, symbol: str) -> Tuple[bool, str]:
-        """Check if position can be opened"""
+        """Check if position can be opened - SIMPLIFIED like trader6.py!"""
         open_positions = [p for p in self.positions.values() if p.status == "OPEN"]
-
-        # Check if strategy is paused
-        if strategy_id in self.analyzer.strategy_performance:
-            if self.analyzer.strategy_performance[strategy_id].is_paused:
-                return False, f"Strategy {strategy_id} is PAUSED due to consecutive losses"
 
         # Total position limit
         if len(open_positions) >= Config.MAX_TOTAL_POSITIONS:
@@ -2169,6 +2174,27 @@ class AdaptivePaperTradingEngine:
             return False, f"Already have position on {symbol}"
 
         return True, "OK"
+    
+    def auto_unpause_strategies(self, current_cycle: int):
+        """
+        AUTO-UNPAUSE strategies after N cycles!
+        This was the KEY ISSUE - strategies were stuck paused FOREVER in tradeadapt.py
+        In trader6.py, there was NO pausing logic, so strategies always traded.
+        Now we unpause after AUTO_UNPAUSE_CYCLES to give them another chance.
+        """
+        unpaused_count = 0
+        for strategy_id, perf in self.analyzer.strategy_performance.items():
+            if perf.is_paused:
+                cycles_paused = current_cycle - perf.paused_since_cycle
+                if cycles_paused >= Config.AUTO_UNPAUSE_CYCLES:
+                    perf.is_paused = False
+                    perf.consecutive_losses = 0  # Reset so it gets a fair chance
+                    perf.paused_since_cycle = 0
+                    unpaused_count += 1
+                    print(f"   🔄 AUTO-UNPAUSE: {strategy_id[:40]} after {cycles_paused} cycles")
+        
+        if unpaused_count > 0:
+            print(f"   ✅ Unpaused {unpaused_count} strategies - they will trade again!")
 
     def open_position(self, strategy_id: str, symbol: str, signal: Dict) -> Optional[str]:
         """Open position with full context including market regime and partial TPs"""
@@ -2287,20 +2313,24 @@ class AdaptivePaperTradingEngine:
 
         return position_id
 
-    def check_real_time_metrics(self):
+    def check_real_time_metrics(self, current_cycle: int = 0):
         """
         Real-time performance monitoring and alerts.
         Triggers immediate warnings when strategy performance deteriorates.
+        NOW ACCEPTS current_cycle to track when strategies are paused for auto-unpause!
         """
         alerts = []
 
         for strategy_id, perf in self.analyzer.strategy_performance.items():
-            # Check for consecutive losses
+            # Check for consecutive losses - BUT DON'T PAUSE! Just warn.
+            # The pausing was killing the system in logsv3 - all strategies got stuck!
             if perf.consecutive_losses >= Config.MAX_CONSECUTIVE_LOSSES:
-                alerts.append(f"🚨 ALERT: {strategy_id[:40]} has {perf.consecutive_losses} consecutive losses!")
-                if not perf.is_paused:
-                    perf.is_paused = True
-                    alerts.append(f"   ⏸️  Strategy PAUSED - will resume after optimization")
+                alerts.append(f"⚠️  WARNING: {strategy_id[:40]} has {perf.consecutive_losses} consecutive losses")
+                # DON'T PAUSE! Let the LLM optimization fix the strategy instead
+                # if not perf.is_paused:
+                #     perf.is_paused = True
+                #     perf.paused_since_cycle = current_cycle
+                #     alerts.append(f"   ⏸️  Strategy PAUSED - will auto-unpause after {Config.AUTO_UNPAUSE_CYCLES} cycles")
 
             # Check recent performance (last 5 trades)
             recent_trades = [t for t in self.trade_history if t.strategy_id == strategy_id][-5:]
@@ -2580,11 +2610,8 @@ class AdaptivePaperTradingEngine:
             print(f"✅ {strategy_id[:30]}: Performance OK (WR: {perf.win_rate:.0%}, PF: {perf.profit_factor:.2f})")
             return
 
-        # Check if we've exceeded max optimization iterations
+        # NO LIMIT on optimization iterations! Keep improving forever!
         current_params = self.get_params(strategy_id)
-        if current_params.optimization_count >= Config.MAX_OPTIMIZATION_ITERATIONS:
-            print(f"⚠️  {strategy_id[:30]}: Max optimizations ({Config.MAX_OPTIMIZATION_ITERATIONS}) reached")
-            return
 
         print(f"\n{'='*60}")
         print(f"🔧 LLM OPTIMIZATION: {strategy_id[:50]}")
@@ -2631,11 +2658,9 @@ class AdaptivePaperTradingEngine:
                 if saved_path:
                     print(f"📁 Improved strategy saved to: {saved_path}")
 
-            # Reset consecutive losses to unpause strategy
-            if perf.is_paused:
-                perf.consecutive_losses = 0
-                perf.is_paused = False
-                print(f"   ✅ Strategy UNPAUSED after LLM optimization")
+            # Reset consecutive losses after optimization (give it a fresh chance!)
+            perf.consecutive_losses = 0
+            print(f"   ✅ Consecutive losses reset - strategy gets a fresh start!")
 
             print(f"\n📊 NEW PARAMETERS (v{new_params.version}):")
             print(f"   min_deviation: {new_params.min_deviation_percent:.2f}%")
@@ -2684,6 +2709,32 @@ class AdaptivePaperTradingEngine:
 
     def load_state(self):
         """Load saved state from previous sessions - CRITICAL for learning persistence"""
+        
+        # =============================================================================
+        # 🔄 FRESH START MODE - Delete all saved state and improved strategies!
+        # =============================================================================
+        if Config.FRESH_START:
+            print("\n" + "=" * 80)
+            print("🔄 FRESH START MODE ENABLED!")
+            print("=" * 80)
+            print("Deleting all saved state and improved strategies...")
+            
+            # Delete saved state files
+            for f in [Config.PARAMETER_LOG_FILE, Config.ANALYSIS_LOG_FILE, Config.TRADE_LOG_FILE]:
+                if f.exists():
+                    f.unlink()
+                    print(f"   🗑️ Deleted: {f}")
+            
+            # Delete improved strategies folder
+            if Config.IMPROVED_STRATEGIES_DIR.exists():
+                import shutil
+                shutil.rmtree(Config.IMPROVED_STRATEGIES_DIR)
+                print(f"   🗑️ Deleted: {Config.IMPROVED_STRATEGIES_DIR}/")
+            
+            print("\n✅ Fresh start complete! Loading raw 10 strategies...")
+            print("=" * 80 + "\n")
+            return  # Don't load any state
+        
         loaded_params = False
         loaded_perf = False
         loaded_trades = False
@@ -2714,7 +2765,7 @@ class AdaptivePaperTradingEngine:
                     perf.win_rate = metrics.get('win_rate', 0.0)
                     perf.profit_factor = metrics.get('profit_factor', 0.0)
                     perf.consecutive_losses = metrics.get('consecutive_losses', 0)
-                    perf.is_paused = metrics.get('is_paused', False)
+                    perf.is_paused = False  # NEVER PAUSE! Always trade like trader6.py!
                     perf.stop_loss_hits = metrics.get('stop_loss_hits', 0)
                     perf.target_hits = metrics.get('target_hits', 0)
                     perf.losses_low_deviation = metrics.get('losses_low_deviation', 0)
@@ -2722,6 +2773,7 @@ class AdaptivePaperTradingEngine:
                     self.analyzer.strategy_performance[strategy_id] = perf
                 loaded_perf = True
                 print(f"📂 Loaded performance data for {len(perf_data)} strategies")
+                print(f"   ✅ All strategies set to ACTIVE (no pausing!)")
             except Exception as e:
                 print(f"⚠️  Could not load performance data: {e}")
 
