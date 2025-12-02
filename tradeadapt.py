@@ -367,6 +367,9 @@ class StrategyRecoder:
 
         # Save the new strategy file
         try:
+            # Ensure the folder exists (might have been deleted by fresh start)
+            Config.IMPROVED_STRATEGIES_DIR.mkdir(parents=True, exist_ok=True)
+            
             with open(new_filepath, 'w') as f:
                 f.write(strategy_code)
 
@@ -2722,6 +2725,9 @@ class AdaptivePaperTradingEngine:
                 import shutil
                 shutil.rmtree(Config.IMPROVED_STRATEGIES_DIR)
                 print(f"   🗑️ Deleted: {Config.IMPROVED_STRATEGIES_DIR}/")
+            
+            # Clear in-memory improvement history
+            self.strategy_recoder.improvement_history = {}
             
             print("\n✅ Fresh start complete! Loading raw 10 strategies...")
             print("=" * 80 + "\n")
