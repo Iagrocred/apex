@@ -160,8 +160,9 @@ class Config:
     XAI_API_KEY = os.getenv("XAI_API_KEY", "")
 
     # LLM Model for optimization reasoning (priority order)
-    # Will try: DeepSeek Reasoner -> XAI Grok -> OpenAI GPT-4 -> Anthropic Claude
-    LLM_OPTIMIZE_MODEL = {"type": "deepseek", "name": "deepseek-reasoner"}
+    # Will try: DeepSeek V3.2 Speciale -> XAI Grok -> OpenAI GPT-4 -> Anthropic Claude
+    # DeepSeek-V3.2-Speciale is the new STRONGER reasoning model!
+    LLM_OPTIMIZE_MODEL = {"type": "deepseek", "name": "deepseek-chat"}
 
 # =============================================================================
 # DATA CLASSES FOR TRADE TRACKING
@@ -638,7 +639,7 @@ class LLMStrategyOptimizer:
         return None
 
     def _call_deepseek(self, prompt: str, system_prompt: str, temperature: float) -> str:
-        """Call DeepSeek API (same pattern as apex.py)"""
+        """Call DeepSeek API - Using V3.2 Speciale for stronger reasoning!"""
         if not openai:
             raise ImportError("openai package not installed")
 
@@ -647,8 +648,9 @@ class LLMStrategyOptimizer:
             base_url="https://api.deepseek.com"
         )
 
+        # DeepSeek-V3.2-Speciale - New stronger reasoning model!
         response = client.chat.completions.create(
-            model="deepseek-reasoner",
+            model="deepseek-chat",  # V3.2 Speciale uses deepseek-chat endpoint
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": prompt}
