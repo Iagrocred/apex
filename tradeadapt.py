@@ -99,10 +99,13 @@ class Config:
     # =============================================================================
     # 🔄 FRESH START MODE - Reset all learning and start from raw 10 strategies
     # =============================================================================
-    # Set this to True to DELETE all improved strategies and start fresh!
-    # The old improved versions were trained with wrong parameters (no proper TP/SL)
-    FRESH_START = False               # Set to True to reset everything!
-    AUTO_UNPAUSE_CYCLES = 5           # Unpause strategies after N cycles (was stuck forever!)
+    # USE COMMAND LINE: python3 tradeadapt.py --fresh-start
+    # OR: python3 tradeadapt.py -f
+    # 
+    # This will DELETE all improved strategies and saved state, then load raw 10 strategies.
+    # The system will REMEMBER your trades and improvements - it only fresh starts when you ask!
+    # Normal run (python3 tradeadapt.py) will continue from where you left off.
+    FRESH_START = False               # Controlled by command line, not this setting!
 
     # Market Regime Detection Thresholds
     PERIODS_PER_24H = 96              # 24h = 96 periods of 15 minutes each
@@ -747,6 +750,12 @@ class LLMStrategyOptimizer:
         system_prompt = """You are an expert quantitative trading strategist and Python developer.
 Your task is to analyze why a trading strategy is underperforming and suggest SPECIFIC improvements.
 
+IMPORTANT CONSTRAINTS FOR 8X LEVERAGE:
+- Stop losses are CLAMPED to 0.5%-1.5% distance (4%-12% loss at 8x leverage)
+- Take profit targets are at 0.5%, 0.7%, 1.0% price moves (partial exits: 50%/25%/25%)
+- DO NOT suggest changing these safety limits! Focus on ENTRY conditions instead.
+- You CAN adjust stop_loss_atr_multiplier and take_profit_atr_multiplier within safe ranges.
+
 You must respond in a STRICT JSON format with the following structure:
 {
     "analysis": "Your detailed analysis of why the strategy is failing",
@@ -754,8 +763,8 @@ You must respond in a STRICT JSON format with the following structure:
     "parameter_changes": {
         "min_deviation_percent": <new_value or null if no change>,
         "max_volatility_percent": <new_value or null if no change>,
-        "stop_loss_atr_multiplier": <new_value or null if no change>,
-        "take_profit_atr_multiplier": <new_value or null if no change>,
+        "stop_loss_atr_multiplier": <new_value 1.0-2.5 or null>,
+        "take_profit_atr_multiplier": <new_value 1.0-2.5 or null>,
         "std_dev_multiplier": <new_value or null if no change>,
         "min_volume_ratio": <new_value or null if no change>,
         "max_holding_periods": <new_value or null if no change>
@@ -765,6 +774,7 @@ You must respond in a STRICT JSON format with the following structure:
     "needs_full_recode": <true/false>
 }
 
+FOCUS ON ENTRY CONDITIONS - the key to profitability is entering at the RIGHT time, not adjusting TP/SL.
 Be specific with numbers. Don't suggest vague changes like "increase slightly" - give exact values."""
 
         # Build trade history summary
@@ -774,14 +784,19 @@ Be specific with numbers. Don't suggest vague changes like "increase slightly" -
 
 ## STRATEGY: {strategy_id}
 
-## CURRENT PARAMETERS:
+## CURRENT PARAMETERS (you can adjust these):
 - min_deviation_percent: {params.min_deviation_percent:.4f} (minimum price deviation from band to enter)
 - max_volatility_percent: {params.max_volatility_percent:.4f} (maximum 24h volatility to trade)
-- stop_loss_atr_multiplier: {params.stop_loss_atr_multiplier:.4f} (stop loss = ATR * this)
-- take_profit_atr_multiplier: {params.take_profit_atr_multiplier:.4f} (target = ATR * this)
+- stop_loss_atr_multiplier: {params.stop_loss_atr_multiplier:.4f} (stop loss = ATR * this, range 1.0-2.5)
+- take_profit_atr_multiplier: {params.take_profit_atr_multiplier:.4f} (target = ATR * this, range 1.0-2.5)
 - std_dev_multiplier: {params.std_dev_multiplier:.4f} (for VWAP band calculation)
 - min_volume_ratio: {params.min_volume_ratio:.4f} (minimum volume vs average)
 - max_holding_periods: {params.max_holding_periods} (max 15-min periods before forced exit)
+
+## FIXED RISK LIMITS (DO NOT CHANGE - hardcoded for 8x leverage safety):
+- TP levels: 0.5%, 0.7%, 1.0% (partial exits 50%/25%/25%)
+- Stop loss: clamped to 0.5%-1.5% distance
+- These are SAFETY limits, not strategy parameters!
 
 ## PERFORMANCE METRICS:
 - Total Trades: {performance.total_trades}
@@ -800,8 +815,8 @@ Be specific with numbers. Don't suggest vague changes like "increase slightly" -
 ## YOUR TASK:
 1. Analyze WHY this strategy is losing money
 2. Identify the ROOT CAUSES (not just symptoms)
-3. Suggest SPECIFIC parameter changes with EXACT numbers
-4. Explain your reasoning
+3. Focus on ENTRY CONDITIONS - the key to profitability is entering at the RIGHT time!
+4. Suggest SPECIFIC parameter changes with EXACT numbers
 
 Respond ONLY with valid JSON."""
 
@@ -2175,26 +2190,9 @@ class AdaptivePaperTradingEngine:
 
         return True, "OK"
     
-    def auto_unpause_strategies(self, current_cycle: int):
-        """
-        AUTO-UNPAUSE strategies after N cycles!
-        This was the KEY ISSUE - strategies were stuck paused FOREVER in tradeadapt.py
-        In trader6.py, there was NO pausing logic, so strategies always traded.
-        Now we unpause after AUTO_UNPAUSE_CYCLES to give them another chance.
-        """
-        unpaused_count = 0
-        for strategy_id, perf in self.analyzer.strategy_performance.items():
-            if perf.is_paused:
-                cycles_paused = current_cycle - perf.paused_since_cycle
-                if cycles_paused >= Config.AUTO_UNPAUSE_CYCLES:
-                    perf.is_paused = False
-                    perf.consecutive_losses = 0  # Reset so it gets a fair chance
-                    perf.paused_since_cycle = 0
-                    unpaused_count += 1
-                    print(f"   🔄 AUTO-UNPAUSE: {strategy_id[:40]} after {cycles_paused} cycles")
-        
-        if unpaused_count > 0:
-            print(f"   ✅ Unpaused {unpaused_count} strategies - they will trade again!")
+    # NOTE: No pausing logic! Strategies ALWAYS trade, just like trader6.py
+    # LLM optimization handles improving losing strategies, not pausing them
+
 
     def open_position(self, strategy_id: str, symbol: str, signal: Dict) -> Optional[str]:
         """Open position with full context including market regime and partial TPs"""
@@ -2322,15 +2320,9 @@ class AdaptivePaperTradingEngine:
         alerts = []
 
         for strategy_id, perf in self.analyzer.strategy_performance.items():
-            # Check for consecutive losses - BUT DON'T PAUSE! Just warn.
-            # The pausing was killing the system in logsv3 - all strategies got stuck!
+            # Check for consecutive losses - just warn, DON'T PAUSE!
             if perf.consecutive_losses >= Config.MAX_CONSECUTIVE_LOSSES:
-                alerts.append(f"⚠️  WARNING: {strategy_id[:40]} has {perf.consecutive_losses} consecutive losses")
-                # DON'T PAUSE! Let the LLM optimization fix the strategy instead
-                # if not perf.is_paused:
-                #     perf.is_paused = True
-                #     perf.paused_since_cycle = current_cycle
-                #     alerts.append(f"   ⏸️  Strategy PAUSED - will auto-unpause after {Config.AUTO_UNPAUSE_CYCLES} cycles")
+                alerts.append(f"⚠️  WARNING: {strategy_id[:40]} has {perf.consecutive_losses} consecutive losses - LLM will optimize")
 
             # Check recent performance (last 5 trades)
             recent_trades = [t for t in self.trade_history if t.strategy_id == strategy_id][-5:]
@@ -3216,6 +3208,8 @@ class AdaptiveTradingEngine:
 # =============================================================================
 
 if __name__ == "__main__":
+    import sys
+    
     print("🎯 TRADEPEX ADAPTIVE - Dynamic Live Strategy Analyzer & Optimizer")
     print("="*80)
     print("Features:")
@@ -3223,7 +3217,17 @@ if __name__ == "__main__":
     print("  • Loss pattern recognition and analysis")
     print("  • Dynamic parameter adjustment")
     print("  • Automated optimization until profitability")
+    print("  • NO PAUSING - strategies always trade like trader6.py!")
     print("="*80)
-
+    
+    # Check for --fresh-start command line argument
+    if "--fresh-start" in sys.argv or "-f" in sys.argv:
+        print("\n🔄 FRESH START MODE ACTIVATED via command line!")
+        print("   This will DELETE all improved strategies and saved state.")
+        print("   Loading only the raw 10 original strategies.")
+        Config.FRESH_START = True
+    else:
+        Config.FRESH_START = False  # Normal mode - keep learned state
+    
     engine = AdaptiveTradingEngine()
     engine.run_adaptive()
