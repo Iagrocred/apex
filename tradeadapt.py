@@ -127,13 +127,30 @@ class Config:
     PORTFOLIO_STOP_LOSS_THRESHOLD = -400.0    # Close all when $400+ unrealized loss
     
     # =============================================================================
-    # 🔧 BIGGER MOVES CONFIG FOR 8X LEVERAGE
+    # 🔧 REALISTIC TRADING COSTS FOR 8X LEVERAGE
     # =============================================================================
-    # With 8x leverage, costs are ~1.2% per trade (0.15% base × 8)
-    # So we need targets that are > 1.2% to be profitable!
-    MIN_TARGET_PERCENT = 0.5          # 0.5% price move = 4% at 8x = 2.8% net profit
-    MIN_STOP_PERCENT = 0.5            # 0.5% stop = 4% loss at 8x (survivable)
-    MAX_STOP_PERCENT = 1.5            # 1.5% max stop = 12% loss at 8x
+    FUTURES_TAKER_FEE = 0.0007        # 0.07% taker fee per side
+    ESTIMATED_SPREAD = 0.0005         # 0.05% spread cost
+    EXTRA_SLIPPAGE = 0.0003           # 0.03% slippage on exit
+    # TOTAL COST: ~0.15% per side × 2 × 8x = ~2.4% per round trip at 8x
+    
+    # =============================================================================
+    # 🎯 MULTI-TARGET PARTIAL EXITS (50% / 25% / 25%)
+    # =============================================================================
+    TP_LEVELS = [0.005, 0.007, 0.010]   # 0.5%, 0.7%, 1.0% price moves
+    TP_FRACTIONS = [0.5, 0.25, 0.25]    # Close 50%, then 25%, then 25%
+    
+    # =============================================================================
+    # 🛡️ SAFER STOP LOSS FOR 8X LEVERAGE
+    # =============================================================================
+    MIN_STOP_DISTANCE = 0.005         # 0.5% minimum stop = 4% loss at 8x
+    MAX_STOP_DISTANCE = 0.015         # 1.5% maximum stop = 12% loss at 8x
+    
+    # =============================================================================
+    # ⏰ SOFT TIME-STOP FOR DEAD TRADES
+    # =============================================================================
+    SOFT_TIME_STOP_MINUTES = 60       # After 60 min...
+    SOFT_TIME_STOP_PNL_BAND = 0.3     # ...if P&L is between -0.3% and +0.3%, kill it
 
     # LLM Configuration for Reasoning-Based Optimization (like APEX RBI)
     # Uses environment variables - same as apex.py
@@ -2048,18 +2065,29 @@ class TradeAnalyzer:
 
 @dataclass
 class AdaptivePaperTrade:
-    """Paper trade with full context"""
+    """Paper trade with full context and partial exits support"""
     strategy_id: str
     symbol: str
     direction: str
     entry_price: float
-    size: float
+    size: float                     # total initial notional
     target_price: float
     stop_loss: float
     entry_time: datetime
     status: str = "OPEN"
     exit_price: float = 0.0
-    pnl: float = 0.0
+    pnl: float = 0.0                # total realized PnL over all partials
+    position_id: str = ""           # Unique position ID
+
+    # Position sizing for partial exits
+    open_size: float = 0.0          # remaining notional still open
+    tp_prices: List[float] = field(default_factory=list)     # [tp1, tp2, tp3]
+    tp_fractions: List[float] = field(default_factory=list)  # [0.5, 0.25, 0.25]
+    tp_index: int = 0               # how many TPs have been hit so far
+
+    # Cost tracking
+    entry_cost: float = 0.0         # fees + spread on entry, allocated over partials
+    realized_cost: float = 0.0      # total costs realized so far (for info)
 
     # Market context at entry
     vwap: float = 0.0
@@ -2070,8 +2098,8 @@ class AdaptivePaperTrade:
     volatility_24h: float = 0.0
     volume_ratio: float = 0.0
     trend_direction: str = ""
-    market_regime: str = ""  # NEW: CHOPPY_HIGH_VOL, STRONG_TREND, RANGING_LOW_VOL, MIXED
-    regime_note: str = ""    # NEW: Human-readable regime adjustment note
+    market_regime: str = ""  # CHOPPY_HIGH_VOL, STRONG_TREND, RANGING_LOW_VOL, MIXED
+    regime_note: str = ""
 
 class AdaptivePaperTradingEngine:
     """Paper trading engine with trade analysis and adaptive learning"""
@@ -2138,7 +2166,7 @@ class AdaptivePaperTradingEngine:
         return True, "OK"
 
     def open_position(self, strategy_id: str, symbol: str, signal: Dict) -> Optional[str]:
-        """Open position with full context including market regime"""
+        """Open position with full context including market regime and partial TPs"""
         if signal['signal'] == 'HOLD':
             return None
 
@@ -2149,40 +2177,108 @@ class AdaptivePaperTradingEngine:
 
         params = self.get_params(strategy_id)
         position_id = f"{strategy_id}_{symbol}_{datetime.now().strftime('%H%M%S')}"
+
+        # Position notional (USD)
         size_usd = self.capital * params.position_size_percent
         leverage_size = size_usd * Config.DEFAULT_LEVERAGE
 
+        entry_price = signal['current_price']
+        direction = signal['signal']
+
+        # ---------------------------------------------------------------------
+        # MULTI-TP LEVELS (50% / 25% / 25%)
+        # ---------------------------------------------------------------------
+        tp_prices = []
+        for level in Config.TP_LEVELS:
+            if direction == "BUY":
+                tp_prices.append(entry_price * (1 + level))
+            else:
+                tp_prices.append(entry_price * (1 - level))
+
+        tp_fractions = Config.TP_FRACTIONS[:]  # copy
+
+        # ---------------------------------------------------------------------
+        # SAFER STOP LOSS USING ATR + REGIME + MIN/MAX DISTANCE
+        # ---------------------------------------------------------------------
+        atr = signal.get('atr', 0.0)
+        regime = signal.get('market_regime', 'MIXED')
+
+        # Base multiplier from params
+        stop_mult = params.stop_loss_atr_multiplier
+
+        # Regime adjustments
+        if regime == "CHOPPY_HIGH_VOL":
+            stop_mult *= 1.3
+        elif regime == "RANGING_LOW_VOL":
+            stop_mult *= 0.9
+        elif regime == "STRONG_TREND":
+            trend = signal.get('trend', '')
+            if (trend == "UP" and direction == "SELL") or (trend == "DOWN" and direction == "BUY"):
+                stop_mult *= 0.8   # counter-trend → tighter
+            else:
+                stop_mult *= 1.1   # with trend → a bit wider
+
+        # ATR-based distance
+        if atr > 0:
+            atr_dist = atr * stop_mult
+        else:
+            atr_dist = entry_price * Config.MIN_STOP_DISTANCE  # fallback
+
+        # Clamp using min/max distance as fraction of price
+        min_dist = entry_price * Config.MIN_STOP_DISTANCE
+        max_dist = entry_price * Config.MAX_STOP_DISTANCE
+        stop_dist = max(min(atr_dist, max_dist), min_dist)
+
+        if direction == "BUY":
+            stop_loss = entry_price - stop_dist
+        else:
+            stop_loss = entry_price + stop_dist
+
+        # ---------------------------------------------------------------------
+        # ENTRY COST MODEL (fee + spread on entry)
+        # ---------------------------------------------------------------------
+        fee_open = leverage_size * Config.FUTURES_TAKER_FEE
+        spread_cost = leverage_size * Config.ESTIMATED_SPREAD
+        entry_cost = fee_open + spread_cost
+
+        # ---------------------------------------------------------------------
+        # CREATE POSITION
+        # ---------------------------------------------------------------------
         position = AdaptivePaperTrade(
             strategy_id=strategy_id,
             symbol=symbol,
-            direction=signal['signal'],
-            entry_price=signal['current_price'],
+            direction=direction,
+            entry_price=entry_price,
             size=leverage_size,
-            target_price=signal.get('target_price', 0),
-            stop_loss=signal.get('stop_loss', 0),
+            target_price=signal.get('target_price', 0.0),
+            stop_loss=stop_loss,
             entry_time=datetime.now(),
-            vwap=signal.get('vwap', 0),
-            upper_band=signal.get('upper_band', 0),
-            lower_band=signal.get('lower_band', 0),
-            atr=signal.get('atr', 0),
-            deviation_percent=signal.get('deviation_percent', 0),
-            volatility_24h=signal.get('volatility_24h', 0),
-            volume_ratio=signal.get('volume_ratio', 0),
+            position_id=position_id,
+            open_size=leverage_size,
+            tp_prices=tp_prices,
+            tp_fractions=tp_fractions,
+            entry_cost=entry_cost,
+            vwap=signal.get('vwap', 0.0),
+            upper_band=signal.get('upper_band', 0.0),
+            lower_band=signal.get('lower_band', 0.0),
+            atr=atr,
+            deviation_percent=signal.get('deviation_percent', 0.0),
+            volatility_24h=signal.get('volatility_24h', 0.0),
+            volume_ratio=signal.get('volume_ratio', 0.0),
             trend_direction=signal.get('trend', ''),
-            market_regime=signal.get('market_regime', ''),  # NEW: Market regime
-            regime_note=signal.get('regime_note', '')       # NEW: Regime note
+            market_regime=regime,
+            regime_note=signal.get('regime_note', '')
         )
 
         self.positions[position_id] = position
 
-        # Enhanced logging with regime info
-        regime = signal.get('market_regime', 'UNKNOWN')
-        regime_note = signal.get('regime_note', '')
         print(f"🎯 OPENED: {position_id[:50]}")
-        print(f"   {signal['signal']} {symbol} @ ${signal['current_price']:.2f}")
-        print(f"   Target: ${signal.get('target_price', 0):.2f} | Stop: ${signal.get('stop_loss', 0):.2f}")
-        print(f"   Deviation: {signal.get('deviation_percent', 0):.2f}% | Volatility: {signal.get('volatility_24h', 0):.2f}%")
-        print(f"   Regime: {regime} {regime_note}")
+        print(f"   {direction} {symbol} @ ${entry_price:.2f}")
+        print(f"   TP1/TP2/TP3: {[f'${p:.2f}' for p in tp_prices]}")
+        print(f"   Stop: ${stop_loss:.2f} (dist ~ {stop_dist/entry_price*100:.2f}%)")
+        print(f"   Deviation: {position.deviation_percent:.2f}% | Volatility: {position.volatility_24h:.2f}%")
+        print(f"   Regime: {position.market_regime}")
+        print(f"   💰 Entry Fee: ${entry_cost:.2f}")
 
         return position_id
 
@@ -2248,62 +2344,172 @@ class AdaptivePaperTradingEngine:
         return alerts
 
     def check_exits(self, current_prices: Dict):
-        """Check and execute exits"""
+        """Check and execute exits with partial TPs, trailing SL, and soft time-stop"""
+        
+        # ======================================================================
+        # PER-POSITION EXIT CHECKING (with partial TPs)
+        # ======================================================================
         for position_id, position in list(self.positions.items()):
             if position.status != "OPEN":
+                continue
+            
+            # Handle legacy positions without open_size
+            if not hasattr(position, 'open_size') or position.open_size <= 0:
+                position.open_size = position.size
+            if position.open_size <= 0:
                 continue
 
             current_price = current_prices.get(position.symbol)
             if not current_price:
                 continue
 
-            # Calculate PnL
+            # PnL on the *open* portion
             if position.direction == "BUY":
-                pnl_percent = (current_price - position.entry_price) / position.entry_price * 100
+                pnl_percent_open = (current_price - position.entry_price) / position.entry_price * 100
             else:
-                pnl_percent = (position.entry_price - current_price) / position.entry_price * 100
+                pnl_percent_open = (position.entry_price - current_price) / position.entry_price * 100
 
-            exit_reason = None
-
-            # Check target
-            if position.direction == "BUY" and current_price >= position.target_price:
-                exit_reason = f"TARGET_HIT (+{pnl_percent:.2f}%)"
-            elif position.direction == "SELL" and current_price <= position.target_price:
-                exit_reason = f"TARGET_HIT (+{pnl_percent:.2f}%)"
-
-            # Check stop loss
-            elif position.direction == "BUY" and current_price <= position.stop_loss:
-                exit_reason = f"STOP_LOSS ({pnl_percent:.2f}%)"
-            elif position.direction == "SELL" and current_price >= position.stop_loss:
-                exit_reason = f"STOP_LOSS ({pnl_percent:.2f}%)"
-
-            # Check max holding time
-            params = self.get_params(position.strategy_id)
             holding_minutes = (datetime.now() - position.entry_time).total_seconds() / 60
-            if holding_minutes > params.max_holding_periods * 15:  # 15 min per period
-                exit_reason = f"MAX_TIME ({pnl_percent:.2f}%)"
+            params = self.get_params(position.strategy_id)
 
-            if exit_reason:
-                self.close_position(position_id, current_price, exit_reason)
+            # --------------------------------------------------------------
+            # 1) HARD STOP LOSS
+            # --------------------------------------------------------------
+            stop_hit = False
+            if position.direction == "BUY" and current_price <= position.stop_loss:
+                stop_hit = True
+            elif position.direction == "SELL" and current_price >= position.stop_loss:
+                stop_hit = True
 
-    def close_position(self, position_id: str, exit_price: float, reason: str):
-        """Close position and log for analysis"""
+            if stop_hit:
+                self.close_position(position_id, current_price, f"STOP_LOSS ({pnl_percent_open:.2f}%)", close_fraction=1.0)
+                continue
+
+            # --------------------------------------------------------------
+            # 2) PARTIAL TAKE PROFITS (TP1 / TP2 / TP3)
+            # --------------------------------------------------------------
+            # Handle legacy positions without tp_prices
+            if not hasattr(position, 'tp_prices') or not position.tp_prices:
+                # Fallback to legacy target_price logic
+                if position.direction == "BUY" and current_price >= position.target_price > 0:
+                    self.close_position(position_id, current_price, f"TARGET_HIT (+{pnl_percent_open:.2f}%)", close_fraction=1.0)
+                    continue
+                elif position.direction == "SELL" and current_price <= position.target_price > 0:
+                    self.close_position(position_id, current_price, f"TARGET_HIT (+{pnl_percent_open:.2f}%)", close_fraction=1.0)
+                    continue
+            else:
+                # Modern partial TP logic
+                if not hasattr(position, 'tp_index'):
+                    position.tp_index = 0
+                if not hasattr(position, 'tp_fractions') or not position.tp_fractions:
+                    position.tp_fractions = [0.5, 0.25, 0.25]
+                    
+                tp_hit_this_cycle = False
+                if position.tp_index < len(position.tp_prices):
+                    next_tp_price = position.tp_prices[position.tp_index]
+                    tp_fraction = position.tp_fractions[position.tp_index] if position.tp_index < len(position.tp_fractions) else 1.0
+
+                    if position.direction == "BUY" and current_price >= next_tp_price:
+                        self.close_position(position_id, current_price, f"TP{position.tp_index+1}_HIT", close_fraction=tp_fraction)
+                        tp_hit_this_cycle = True
+                    elif position.direction == "SELL" and current_price <= next_tp_price:
+                        self.close_position(position_id, current_price, f"TP{position.tp_index+1}_HIT", close_fraction=tp_fraction)
+                        tp_hit_this_cycle = True
+
+                    if tp_hit_this_cycle:
+                        position.tp_index += 1
+
+                        # Move stop to breakeven / previous TP to lock profit
+                        if position.tp_index == 1:
+                            # After TP1: SL to breakeven
+                            if position.direction == "BUY":
+                                position.stop_loss = max(position.stop_loss, position.entry_price)
+                            else:
+                                position.stop_loss = min(position.stop_loss, position.entry_price)
+                            print(f"   📈 SL moved to BREAKEVEN @ ${position.stop_loss:.2f}")
+                        elif position.tp_index == 2:
+                            # After TP2: SL to TP1 level
+                            tp1_price = position.tp_prices[0]
+                            if position.direction == "BUY":
+                                position.stop_loss = max(position.stop_loss, tp1_price)
+                            else:
+                                position.stop_loss = min(position.stop_loss, tp1_price)
+                            print(f"   📈 SL moved to TP1 @ ${position.stop_loss:.2f}")
+                        elif position.tp_index >= 3:
+                            # After TP3: SL to TP2 (aggressive lock-in)
+                            tp2_price = position.tp_prices[1]
+                            if position.direction == "BUY":
+                                position.stop_loss = max(position.stop_loss, tp2_price)
+                            else:
+                                position.stop_loss = min(position.stop_loss, tp2_price)
+                            print(f"   📈 SL moved to TP2 @ ${position.stop_loss:.2f}")
+
+                        continue  # Move to next position after partial TP
+
+            # --------------------------------------------------------------
+            # 3) MAX HOLDING TIME (hard time stop)
+            # --------------------------------------------------------------
+            max_minutes = params.max_holding_periods * 15  # 15 min per period
+            if holding_minutes > max_minutes:
+                self.close_position(position_id, current_price, f"MAX_TIME ({pnl_percent_open:.2f}%)", close_fraction=1.0)
+                continue
+
+            # --------------------------------------------------------------
+            # 4) SOFT TIME-STOP FOR DEAD TRADES
+            # --------------------------------------------------------------
+            if holding_minutes >= Config.SOFT_TIME_STOP_MINUTES:
+                if abs(pnl_percent_open) <= Config.SOFT_TIME_STOP_PNL_BAND:
+                    self.close_position(position_id, current_price, f"SOFT_TIME_STOP ({pnl_percent_open:.2f}%)", close_fraction=1.0)
+                    continue
+
+    def close_position(self, position_id: str, exit_price: float, reason: str, close_fraction: float = 1.0):
+        """Close all or part of a position, apply costs, and log trade(s)."""
         position = self.positions[position_id]
 
+        # Handle legacy positions without open_size
+        if not hasattr(position, 'open_size') or position.open_size <= 0:
+            position.open_size = position.size
+
+        if position.open_size <= 0 or position.status != "OPEN":
+            return
+
+        # Clamp fraction to what's actually open
+        close_fraction = max(0.0, min(close_fraction, position.open_size / position.size))
+        if close_fraction <= 0:
+            return
+
+        close_size = position.size * close_fraction
+
+        # Raw price move PnL (before fees & slippage)
         if position.direction == "BUY":
             pnl_percent = (exit_price - position.entry_price) / position.entry_price
         else:
             pnl_percent = (position.entry_price - exit_price) / position.entry_price
 
-        pnl_usd = position.size * pnl_percent
-        holding_minutes = (datetime.now() - position.entry_time).total_seconds() / 60
+        raw_pnl = close_size * pnl_percent
 
-        position.status = "CLOSED"
-        position.exit_price = exit_price
-        position.pnl = pnl_usd
+        # Allocate entry cost proportionally (handle legacy positions)
+        entry_cost_share = 0
+        if hasattr(position, 'entry_cost') and position.entry_cost > 0:
+            entry_cost_share = position.entry_cost * (close_size / position.size)
+
+        # Close-side fee + slippage
+        fee_close = close_size * Config.FUTURES_TAKER_FEE
+        slip_close = close_size * Config.EXTRA_SLIPPAGE
+
+        total_cost = entry_cost_share + fee_close + slip_close
+        pnl_usd = raw_pnl - total_cost
+
+        # Update position state
+        position.open_size -= close_size
+        position.pnl += pnl_usd
+        if hasattr(position, 'realized_cost'):
+            position.realized_cost += total_cost
         self.capital += pnl_usd
 
-        # Create trade context for analysis
+        holding_minutes = (datetime.now() - position.entry_time).total_seconds() / 60
+
+        # Log trade context (one per partial)
         trade_context = TradeContext(
             timestamp=datetime.now().isoformat(),
             position_id=position_id,
@@ -2314,10 +2520,10 @@ class AdaptivePaperTradingEngine:
             exit_price=exit_price,
             target_price=position.target_price,
             stop_loss=position.stop_loss,
-            size_usd=position.size,
+            size_usd=close_size,
             pnl_usd=pnl_usd,
             pnl_percent=pnl_percent * 100,
-            status="CLOSED",
+            status="CLOSED" if position.open_size <= 0 else "PARTIAL",
             exit_reason=reason,
             vwap=position.vwap,
             upper_band=position.upper_band,
@@ -2327,14 +2533,23 @@ class AdaptivePaperTradingEngine:
             volatility_24h=position.volatility_24h,
             volume_ratio=position.volume_ratio,
             trend_direction=position.trend_direction,
+            market_regime=getattr(position, 'market_regime', ''),
             holding_time_minutes=holding_minutes
         )
 
         self.trade_history.append(trade_context)
         self.analyzer.add_trade(trade_context)
 
-        print(f"🔒 CLOSED: {position_id[:50]}")
-        print(f"   PnL: ${pnl_usd:+.2f} ({pnl_percent*100:+.2f}%) - {reason}")
+        # Logging
+        if position.open_size <= position.size * 0.001:
+            position.status = "CLOSED"
+            position.exit_price = exit_price
+            print(f"🔒 CLOSED: {position_id[:50]}")
+            print(f"   PnL: ${position.pnl:+.2f} ({pnl_percent*100:+.2f}%) - {reason}")
+        else:
+            print(f"🔒 PARTIAL CLOSE: {position_id[:50]} ({close_fraction*100:.1f}% size)")
+            print(f"   Realized PnL: ${pnl_usd:+.2f} ({pnl_percent*100:+.2f}%) - {reason}")
+            print(f"   Remaining open size: ${position.open_size:.2f}")
 
     def optimize_strategy(self, strategy_id: str):
         """
@@ -2556,6 +2771,10 @@ class AdaptiveTradingEngine:
         Load strategies from directory.
         If USE_IMPROVED_STRATEGIES is True, will also check improved_strategies/ folder
         and use the LATEST version (v1, v2, v3...) of each strategy automatically.
+        
+        Supports BOTH naming conventions:
+        1. Strategy_v23.py (new naming - what the server has!)
+        2. Strategy_improved_v23.py (old naming)
         """
         strategies = {}
 
@@ -2575,15 +2794,20 @@ class AdaptiveTradingEngine:
         improved_versions = {}  # Maps original_strategy_id -> (version, filepath)
 
         if Config.USE_IMPROVED_STRATEGIES and Config.IMPROVED_STRATEGIES_DIR.exists():
-            improved_files = list(Config.IMPROVED_STRATEGIES_DIR.glob("*_improved_v*.py"))
+            # Look for BOTH naming conventions:
+            # 1. Strategy_improved_v1.py (old naming)
+            # 2. Strategy_v1.py (new naming - what the server has!)
+            improved_files = list(Config.IMPROVED_STRATEGIES_DIR.glob("*_v*.py"))
             if improved_files:
-                print(f"📁 Found {len(improved_files)} improved strategy files")
+                print(f"📁 Found {len(improved_files)} improved strategy files in improved_strategies/")
 
                 for improved_file in improved_files:
-                    # Parse filename: original_strategy_id_improved_v1.py
                     filename = improved_file.stem
-                    if "_improved_v" in filename:
-                        parts = filename.rsplit("_improved_v", 1)
+                    
+                    # Try new naming: Strategy_v23.py
+                    if "_v" in filename and "_improved_v" not in filename:
+                        # Parse: 20251124_061812_Market_Maker_Inventory_Rebalancing_Strategy_v23
+                        parts = filename.rsplit("_v", 1)
                         if len(parts) == 2:
                             original_id = parts[0]
                             try:
@@ -2591,6 +2815,20 @@ class AdaptiveTradingEngine:
                                 # Keep track of highest version for each original strategy
                                 if original_id not in improved_versions or version > improved_versions[original_id][0]:
                                     improved_versions[original_id] = (version, improved_file)
+                                    print(f"   📌 {original_id[:50]}... → v{version}")
+                            except ValueError:
+                                continue
+                    
+                    # Also try old naming: Strategy_improved_v1.py
+                    elif "_improved_v" in filename:
+                        parts = filename.rsplit("_improved_v", 1)
+                        if len(parts) == 2:
+                            original_id = parts[0]
+                            try:
+                                version = int(parts[1])
+                                if original_id not in improved_versions or version > improved_versions[original_id][0]:
+                                    improved_versions[original_id] = (version, improved_file)
+                                    print(f"   📌 {original_id[:50]}... → v{version}")
                             except ValueError:
                                 continue
 
