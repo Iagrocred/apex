@@ -68,71 +68,198 @@ except ImportError:
 # =============================================================================
 
 class Config:
-    STARTING_CAPITAL = 10000.0
-    MAX_POSITION_SIZE = 0.15  # 15% per trade
-    DEFAULT_LEVERAGE = 8  # 8X KINGS! Perfect entry = quick profit before reversal! 8 is the number for prosperity 🎰
+    # ==========================================================================
+    # 💰 DUAL TRADING SYSTEM - TYPE A (SCALPING) vs TYPE B (BIG TAKES)
+    # ==========================================================================
+    # We run BOTH simultaneously with separate capital pools to see which wins!
+    # TYPE A: 3x leverage, small takes (0.2-0.4%), frequent trades
+    # TYPE B: 8x leverage, big takes (0.5-1%), fewer but larger profits
+    
+    ENABLE_DUAL_MODE = True            # Run both Type A and Type B
+    TYPE_A_CAPITAL = 17000.0           # $17k for Type A (scalping)
+    TYPE_B_CAPITAL = 17000.0           # $17k for Type B (big takes)
+    STARTING_CAPITAL = 34000.0         # Total capital (both types)
+    DEFAULT_LEVERAGE = 8               # Default for backward compat
+    MAX_POSITION_SIZE = 0.15           # 15% per trade
+    
     HTX_BASE_URL = "https://api.huobi.pro"
-
-    # TRADEABLE TOKENS - Can be expanded to scan more of the market
-    # Currently using 8 high-volume tokens for focused trading
-    # To scan more: Add tokens like 'DOGE', 'SHIB', 'MATIC', 'UNI', etc.
+    
+    # TRADEABLE TOKENS
     TRADEABLE_TOKENS = ['BTC', 'ETH', 'SOL', 'XRP', 'ADA', 'DOT', 'LINK', 'AVAX']
 
-    STRATEGIES_DIR = Path("./successful_strategies")  # Local path
+    STRATEGIES_DIR = Path("./successful_strategies")
     CHECK_INTERVAL = 30  # Seconds between market checks
 
-    # Position Limits - INCREASED for more data collection!
-    # Previous: 8 total, 2 per strategy = only 4 strategies trading = 6 never got improved!
-    # Now: 40 total, 5 per strategy = ALL 10 strategies can trade and get optimized!
-    MAX_TOTAL_POSITIONS = 40          # Max 40 positions at once (10 strategies × 4 avg)
-    MAX_POSITIONS_PER_STRATEGY = 5    # Max 5 positions per strategy (enough to trigger LLM analysis)
-    MAX_POSITIONS_PER_TOKEN = 10      # Allow all strategies to trade same token if signal is there
-
-    # ==========================================================================
-    # 🚨 PORTFOLIO TAKE PROFIT - THE MISSING DYNAMIC!
-    # ==========================================================================
-    # Analysis of 24-hour logs showed:
-    # - We hit $482 unrealized profit but NEVER TOOK IT
-    # - 0% win rate because individual targets too far (5-7%)
-    # - With $200 take profit: 16 wins, $2,864 NET PROFIT!
-    PORTFOLIO_TAKE_PROFIT_THRESHOLD = 200.0  # Close all when $200+ unrealized profit
-    PORTFOLIO_STOP_LOSS_THRESHOLD = -400.0   # Close all if losing too much
-    ENABLE_PORTFOLIO_TAKE_PROFIT = True      # Enable this feature
+    # Position Limits (split between both types)
+    MAX_TOTAL_POSITIONS = 40
+    MAX_POSITIONS_PER_STRATEGY = 5
+    MAX_POSITIONS_PER_TOKEN = 10
     
     # ==========================================================================
-    # 🎯 TIME-BASED EXIT - Close positions periodically to bank profits
+    # 🔥 TYPE A CONFIG - SCALPING (3x leverage, small takes)
     # ==========================================================================
-    # Analysis showed: Close every 50 cycles = 64% win rate, $1192 profit!
+    # Lower leverage allows tighter targets that still profit after costs
+    # Target: More frequent trades, smaller wins, higher win rate
+    
+    TYPE_A_LEVERAGE = 3                # 3x leverage for scalping
+    TYPE_A_POSITION_SIZE = 0.15        # 15% of Type A capital per trade
+    
+    # REALISTIC COSTS FOR TYPE A (3x leverage)
+    # Fees: 0.07% × 2 × 3x = 0.42% round trip at position level
+    # Spread: 0.05% × 3x = 0.15%
+    # Total: ~0.57% cost per trade
+    TYPE_A_TAKER_FEE = 0.0007          # 0.07% (conservative)
+    TYPE_A_SPREAD = 0.0005             # 0.05%
+    TYPE_A_SLIPPAGE = 0.0003           # 0.03%
+    TYPE_A_TOTAL_COST = 0.0015         # 0.15% per side × 3x = 0.45% effective cost
+    
+    # TYPE A ENTRY - Need small deviation for frequent entries
+    TYPE_A_MIN_DEVIATION = 0.005       # 0.5% deviation from VWAP to enter
+    TYPE_A_MAX_VOLATILITY = 5.0        # Max 5% 24h volatility
+    
+    # TYPE A TARGETS - Small but achievable
+    TYPE_A_TP_LEVELS = [0.002, 0.003, 0.004]  # 0.2%, 0.3%, 0.4% price moves
+    TYPE_A_TP_FRACTIONS = [0.5, 0.25, 0.25]   # 50%, 25%, 25%
+    # With 3x: 0.6%, 0.9%, 1.2% gross returns
+    # After 0.45% costs: 0.15%, 0.45%, 0.75% net
+    
+    # TYPE A STOPS - Tight but survivable
+    TYPE_A_MIN_STOP = 0.003            # 0.3% minimum (0.9% loss at 3x)
+    TYPE_A_MAX_STOP = 0.008            # 0.8% maximum (2.4% loss at 3x)
+    TYPE_A_ATR_MULT = 1.2              # 1.2x ATR for stop
+    
+    # ==========================================================================
+    # 🚀 TYPE B CONFIG - BIG TAKES (8x leverage, big moves)
+    # ==========================================================================
+    # Higher leverage REQUIRES bigger moves to overcome costs
+    # Target: Fewer trades, larger wins, target big reversions
+    
+    TYPE_B_LEVERAGE = 8                # 8x leverage for big takes
+    TYPE_B_POSITION_SIZE = 0.12        # 12% of Type B capital per trade
+    
+    # REALISTIC COSTS FOR TYPE B (8x leverage)
+    # Fees: 0.07% × 2 × 8x = 1.12% round trip at position level
+    # Spread: 0.05% × 8x = 0.40%
+    # Total: ~1.52% cost per trade - MUST target big moves!
+    TYPE_B_TAKER_FEE = 0.0007          # 0.07% (conservative)
+    TYPE_B_SPREAD = 0.0005             # 0.05%
+    TYPE_B_SLIPPAGE = 0.0003           # 0.03%
+    TYPE_B_TOTAL_COST = 0.0015         # 0.15% per side × 8x = 1.2% effective cost
+    
+    # TYPE B ENTRY - STRICT! Only big deviations
+    TYPE_B_MIN_DEVIATION = 0.010       # 1.0% deviation from VWAP to enter
+    TYPE_B_MAX_VOLATILITY = 8.0        # Allow higher volatility for bigger moves
+    
+    # TYPE B TARGETS - BIG moves that justify 8x leverage
+    TYPE_B_TP_LEVELS = [0.005, 0.007, 0.010]  # 0.5%, 0.7%, 1.0% price moves
+    TYPE_B_TP_FRACTIONS = [0.5, 0.25, 0.25]   # 50%, 25%, 25%
+    # With 8x: 4%, 5.6%, 8% gross returns
+    # After 1.2% costs: 2.8%, 4.4%, 6.8% net returns
+    
+    # TYPE B STOPS - MUST be wider to survive 8x volatility
+    TYPE_B_MIN_STOP = 0.005            # 0.5% minimum (4% loss at 8x)
+    TYPE_B_MAX_STOP = 0.015            # 1.5% maximum (12% loss at 8x)
+    TYPE_B_ATR_MULT = 1.5              # 1.5x ATR for stop
+    
+    # ==========================================================================
+    # 🚨 PORTFOLIO TAKE PROFIT (per trading type)
+    # ==========================================================================
+    ENABLE_PORTFOLIO_TAKE_PROFIT = True
+    PORTFOLIO_TAKE_PROFIT_THRESHOLD = 200.0  # Default for backward compat
+    PORTFOLIO_STOP_LOSS_THRESHOLD = -400.0   # Default for backward compat
+    TYPE_A_PORTFOLIO_TP = 150.0        # Close Type A trades at $150+ profit
+    TYPE_B_PORTFOLIO_TP = 300.0        # Close Type B trades at $300+ profit
+    TYPE_A_PORTFOLIO_SL = -250.0       # Type A stop at $250 loss
+    TYPE_B_PORTFOLIO_SL = -500.0       # Type B stop at $500 loss
+    
+    # ==========================================================================
+    # 🎯 TIME-BASED EXIT
+    # ==========================================================================
     ENABLE_TIME_BASED_EXIT = True
-    TIME_BASED_EXIT_CYCLES = 50  # Close all positions every N cycles
-    MIN_PROFIT_FOR_TIME_EXIT = 50.0  # Only time-exit if at least $50 in profit
+    TIME_BASED_EXIT_CYCLES = 50
+    MIN_PROFIT_FOR_TIME_EXIT = 50.0
     
     # ==========================================================================
-    # 🔥 TREND FILTER - Don't buy in falling market!
+    # 🔥 TREND FILTER - CRITICAL for both types
     # ==========================================================================
-    # Analysis showed: 100% LONG in -3.76% falling market = ALL LOSSES!
-    # Only BUY when trend is UP, only SELL when trend is DOWN
     ENABLE_TREND_FILTER = True
-    TREND_PERIOD = 20  # Number of candles to calculate trend
-    MIN_TREND_STRENGTH = 0.002  # 0.2% minimum trend to confirm direction
-
+    TREND_PERIOD = 20
+    MIN_TREND_STRENGTH = 0.002
+    
+    # ==========================================================================
+    # 💰 TRADING COSTS - Enable for realistic P&L
+    # ==========================================================================
+    ENABLE_TRADING_COSTS = True
+    TAKER_FEE_PERCENT = 0.07           # 0.07% per trade (conservative)
+    SLIPPAGE_PERCENT = 0.03            # 0.03% estimated slippage
+    SPREAD_PERCENT = 0.05              # 0.05% spread
+    
+    # ==========================================================================
+    # 🎯 PARTIAL EXITS - Use type-specific levels
+    # ==========================================================================
+    ENABLE_PARTIAL_EXITS = True
+    MOVE_STOP_TO_BREAKEVEN_AFTER_TP1 = True
+    # Backward compat defaults (overridden by type-specific)
+    TP1_PERCENT = 0.5                  # 0.5% for backward compat
+    TP2_PERCENT = 0.7                  # 0.7%
+    TP3_PERCENT = 1.0                  # 1.0%
+    TP1_CLOSE_PERCENT = 50
+    TP2_CLOSE_PERCENT = 25
+    TP3_CLOSE_PERCENT = 25
+    
+    # ==========================================================================
+    # 🛑 SAFER STOP-LOSS
+    # ==========================================================================
+    STOP_LOSS_MIN_PERCENT = 0.5        # 0.5% minimum stop
+    STOP_LOSS_MAX_PERCENT = 1.5        # 1.5% maximum stop
+    USE_REGIME_ADJUSTED_STOPS = True
+    
+    # ==========================================================================
+    # ⏰ SOFT TIME-STOP - Kill dead trades
+    # ==========================================================================
+    ENABLE_SOFT_TIME_STOP = True
+    SOFT_TIME_STOP_MINUTES = 60        # 1 hour max for dead trades
+    SOFT_TIME_STOP_MIN_PROFIT = 0.001  # 0.1% minimum to keep open
+    DEAD_TRADE_CYCLES = 20             # 20 cycles with no movement = dead
+    
+    # ==========================================================================
+    # 🔄 AUTO-UNPAUSE - CRITICAL! Strategies MUST resume!
+    # ==========================================================================
+    AUTO_UNPAUSE_AFTER_CYCLES = 10     # Unpause after 10 cycles (5 min)
+    UNPAUSE_AFTER_OPTIMIZATION = True  # Always unpause after LLM optimization
+    SKIP_OPTIMIZATION_IF_WINNING = True # DON'T re-optimize 55%+ win rate strategies
+    MIN_WIN_RATE_TO_SKIP_OPTIMIZATION = 0.55  # 55% win rate = good enough!
+    
+    # ==========================================================================
+    # 📊 INDIVIDUAL TRADE STATS
+    # ==========================================================================
+    ENABLE_TRADE_PORTFOLIO = True
+    
+    # ==========================================================================
+    # 🏆 READY FOR LIVE - When strategy is proven profitable
+    # ==========================================================================
+    MIN_TRADES_FOR_LIVE = 30
+    MIN_WIN_RATE_FOR_LIVE = 0.55       # 55% win rate (realistic with costs)
+    MIN_PROFIT_FACTOR_FOR_LIVE = 1.3   # 1.3 profit factor
+    MIN_NET_PROFIT_FOR_LIVE = 200.0    # $200+ net profit
+    
     # Adaptive Optimization Settings
-    MIN_TRADES_FOR_ANALYSIS = 5       # Need at least 5 trades before analyzing
-    TARGET_WIN_RATE = 0.55            # Target 55% win rate
-    TARGET_PROFIT_FACTOR = 1.3        # Target profit factor (wins/losses ratio)
-    OPTIMIZATION_INTERVAL = 10        # Run optimization every 10 cycles (~5 min)
-    MAX_CONSECUTIVE_LOSSES = 3        # Pause strategy after 3 consecutive losses
-    MAX_OPTIMIZATION_ITERATIONS = 10  # Max times to optimize before giving up
-    USE_IMPROVED_STRATEGIES = True    # Automatically use improved strategies (v1, v2, v3...)
+    MIN_TRADES_FOR_ANALYSIS = 5
+    TARGET_WIN_RATE = 0.55             # 55% target (realistic with costs)
+    TARGET_PROFIT_FACTOR = 1.3
+    OPTIMIZATION_INTERVAL = 10
+    MAX_CONSECUTIVE_LOSSES = 5
+    MAX_OPTIMIZATION_ITERATIONS = 10
+    USE_IMPROVED_STRATEGIES = True
 
     # Market Regime Detection Thresholds
-    PERIODS_PER_24H = 96              # 24h = 96 periods of 15 minutes each
-    REGIME_HIGH_VOL_THRESHOLD = 8.0   # Volatility % above this = high volatility
-    REGIME_LOW_VOL_THRESHOLD = 3.0    # Volatility % below this = low volatility
-    REGIME_VERY_LOW_VOL_THRESHOLD = 2.0  # Volatility % below this = very low volatility
-    REGIME_STRONG_TREND_THRESHOLD = 1.0  # Trend strength above this = strong trend
-    REGIME_WEAK_TREND_THRESHOLD = 0.5    # Trend strength below this = weak/no trend
-    REGIME_RANGING_TREND_THRESHOLD = 0.3 # Trend strength below this = ranging
+    PERIODS_PER_24H = 96
+    REGIME_HIGH_VOL_THRESHOLD = 8.0
+    REGIME_LOW_VOL_THRESHOLD = 3.0
+    REGIME_VERY_LOW_VOL_THRESHOLD = 2.0
+    REGIME_STRONG_TREND_THRESHOLD = 1.0
+    REGIME_WEAK_TREND_THRESHOLD = 0.5
+    REGIME_RANGING_TREND_THRESHOLD = 0.3
 
     # Real-Time Performance Monitoring Thresholds
     ALERT_RECENT_WIN_RATE = 0.2       # Alert if win rate below 20%
@@ -215,17 +342,60 @@ class StrategyPerformance:
     consecutive_losses: int = 0
     consecutive_wins: int = 0
     is_paused: bool = False
-
+    
+    # 🔄 PAUSE/UNPAUSE TRACKING
+    paused_at_cycle: int = 0          # Cycle when paused
+    pause_reason: str = ""            # Why was it paused
+    last_optimized_at_cycle: int = 0  # When was LLM optimization last run
+    
+    # 🏆 READY FOR LIVE
+    is_ready_for_live: bool = False   # Has met all criteria
+    ready_for_live_at: str = ""       # When it became ready
+    
     # Loss Analysis
     stop_loss_hits: int = 0
     target_hits: int = 0
     avg_holding_time: float = 0.0
+    
+    # 🎯 PARTIAL EXIT TRACKING
+    tp1_hits: int = 0                 # Number of TP1 hits
+    tp2_hits: int = 0                 # Number of TP2 hits
+    tp3_hits: int = 0                 # Number of TP3 hits
+    partial_profit_total: float = 0.0 # Total from partial exits
+    
+    # 💰 TRADING COSTS
+    total_fees_paid: float = 0.0      # Total fees deducted
+    gross_pnl: float = 0.0            # PnL before fees
+    net_pnl: float = 0.0              # PnL after fees
 
     # Common Loss Patterns
     losses_in_uptrend: int = 0
     losses_in_downtrend: int = 0
     losses_low_deviation: int = 0   # Entered with too small deviation
     losses_high_volatility: int = 0
+    
+    def check_ready_for_live(self) -> bool:
+        """Check if strategy meets criteria to go live"""
+        if self.total_trades < Config.MIN_TRADES_FOR_LIVE:
+            return False
+        if self.win_rate < Config.MIN_WIN_RATE_FOR_LIVE:
+            return False
+        if self.profit_factor < Config.MIN_PROFIT_FACTOR_FOR_LIVE:
+            return False
+        if self.total_pnl < Config.MIN_NET_PROFIT_FOR_LIVE:
+            return False
+        
+        # All criteria met!
+        if not self.is_ready_for_live:
+            self.is_ready_for_live = True
+            self.ready_for_live_at = datetime.now().isoformat()
+            print(f"\n🏆🏆🏆 STRATEGY READY FOR LIVE! 🏆🏆🏆")
+            print(f"   Strategy: {self.strategy_id}")
+            print(f"   Win Rate: {self.win_rate:.1%}")
+            print(f"   Profit Factor: {self.profit_factor:.2f}")
+            print(f"   Net PnL: ${self.total_pnl:+.2f}")
+        
+        return True
 
 # =============================================================================
 # ADAPTIVE PARAMETERS - Dynamic Strategy Configuration
@@ -2035,10 +2205,14 @@ class TradeAnalyzer:
         holding_times = [t.holding_time_minutes for t in self.trades if t.strategy_id == strategy_id]
         perf.avg_holding_time = np.mean(holding_times) if holding_times else 0
 
-        # Pause strategy if too many consecutive losses
+        # Pause strategy if too many consecutive losses - TRACK WHEN PAUSED!
         if perf.consecutive_losses >= Config.MAX_CONSECUTIVE_LOSSES:
-            perf.is_paused = True
-            print(f"⏸️  Strategy {strategy_id} PAUSED after {perf.consecutive_losses} consecutive losses")
+            if not perf.is_paused:  # Only set if not already paused
+                perf.is_paused = True
+                perf.paused_at_cycle = getattr(self, 'current_cycle', 0)  # Track when paused
+                perf.pause_reason = f"{perf.consecutive_losses} consecutive losses"
+                print(f"⏸️  Strategy {strategy_id} PAUSED after {perf.consecutive_losses} consecutive losses")
+                print(f"   Will AUTO-UNPAUSE after {Config.AUTO_UNPAUSE_AFTER_CYCLES} cycles")
 
     def identify_loss_patterns(self, strategy_id: str) -> List[str]:
         """Identify dominant loss patterns for a strategy"""
@@ -2167,6 +2341,26 @@ class AdaptivePaperTrade:
     trend_direction: str = ""
     market_regime: str = ""  # NEW: CHOPPY_HIGH_VOL, STRONG_TREND, RANGING_LOW_VOL, MIXED
     regime_note: str = ""    # NEW: Human-readable regime adjustment note
+    
+    # 🎯 PARTIAL EXIT TRACKING
+    original_size: float = 0.0       # Original position size
+    remaining_size: float = 0.0      # Size after partial exits
+    tp1_hit: bool = False            # TP1 reached
+    tp2_hit: bool = False            # TP2 reached
+    tp3_hit: bool = False            # TP3 reached
+    partial_pnl: float = 0.0         # Total from partial exits
+    current_stop: float = 0.0        # Current stop (moves to breakeven after TP1)
+    
+    # 💰 TRADING COSTS
+    entry_fee: float = 0.0           # Fee paid on entry
+    exit_fee: float = 0.0            # Fee paid on exit(s)
+    slippage_cost: float = 0.0       # Estimated slippage
+    
+    # ⏰ TIME TRACKING
+    last_price_update: float = 0.0   # Last recorded price
+    cycles_without_movement: int = 0 # Cycles with no significant movement
+    highest_unrealized_pnl: float = 0.0  # Best unrealized PnL (for trailing stop)
+    lowest_unrealized_pnl: float = 0.0   # Worst unrealized PnL
 
 class AdaptivePaperTradingEngine:
     """Paper trading engine with trade analysis and adaptive learning"""
@@ -2223,14 +2417,26 @@ class AdaptivePaperTradingEngine:
             self.strategy_params[strategy_id] = AdaptiveParameters()
         return self.strategy_params[strategy_id]
 
-    def can_open_position(self, strategy_id: str, symbol: str) -> Tuple[bool, str]:
-        """Check if position can be opened"""
+    def can_open_position(self, strategy_id: str, symbol: str, current_cycle: int = 0) -> Tuple[bool, str]:
+        """Check if position can be opened - WITH AUTO-UNPAUSE!"""
         open_positions = [p for p in self.positions.values() if p.status == "OPEN"]
 
-        # Check if strategy is paused
+        # Check if strategy is paused - WITH AUTO-UNPAUSE LOGIC!
         if strategy_id in self.analyzer.strategy_performance:
-            if self.analyzer.strategy_performance[strategy_id].is_paused:
-                return False, f"Strategy {strategy_id} is PAUSED due to consecutive losses"
+            perf = self.analyzer.strategy_performance[strategy_id]
+            if perf.is_paused:
+                # 🔄 AUTO-UNPAUSE after N cycles
+                paused_at = getattr(perf, 'paused_at_cycle', 0)
+                cycles_paused = current_cycle - paused_at if current_cycle > 0 else 0
+                
+                if cycles_paused >= Config.AUTO_UNPAUSE_AFTER_CYCLES:
+                    perf.is_paused = False
+                    perf.consecutive_losses = 0  # Reset consecutive losses
+                    print(f"\n🔄 AUTO-UNPAUSE: {strategy_id[:40]} after {cycles_paused} cycles")
+                    print(f"   Was paused for: {getattr(perf, 'pause_reason', 'consecutive losses')}")
+                    print(f"   Now trading again! Watch for improvement.\n")
+                else:
+                    return False, f"Strategy {strategy_id} is PAUSED ({cycles_paused}/{Config.AUTO_UNPAUSE_AFTER_CYCLES} cycles until unpause)"
 
         # Total position limit
         if len(open_positions) >= Config.MAX_TOTAL_POSITIONS:
@@ -2253,12 +2459,12 @@ class AdaptivePaperTradingEngine:
 
         return True, "OK"
 
-    def open_position(self, strategy_id: str, symbol: str, signal: Dict) -> Optional[str]:
-        """Open position with full context including market regime"""
+    def open_position(self, strategy_id: str, symbol: str, signal: Dict, current_cycle: int = 0) -> Optional[str]:
+        """Open position with full context including market regime, trading costs, and safer stops"""
         if signal['signal'] == 'HOLD':
             return None
 
-        can_open, reason = self.can_open_position(strategy_id, symbol)
+        can_open, reason = self.can_open_position(strategy_id, symbol, current_cycle)
         if not can_open:
             print(f"⏸️  BLOCKED: {strategy_id[:30]} {symbol} - {reason}")
             return None
@@ -2267,38 +2473,82 @@ class AdaptivePaperTradingEngine:
         position_id = f"{strategy_id}_{symbol}_{datetime.now().strftime('%H%M%S')}"
         size_usd = self.capital * params.position_size_percent
         leverage_size = size_usd * Config.DEFAULT_LEVERAGE
+        
+        # 💰 CALCULATE TRADING COSTS
+        entry_fee = 0.0
+        if getattr(Config, 'ENABLE_TRADING_COSTS', True):
+            entry_fee = leverage_size * (Config.TAKER_FEE_PERCENT / 100)
+        
+        # 🛑 SAFER STOP-LOSS FOR 8X LEVERAGE
+        raw_stop = signal.get('stop_loss', 0)
+        entry_price = signal['current_price']
+        atr = signal.get('atr', entry_price * 0.01)  # Default 1% ATR
+        
+        if getattr(Config, 'USE_REGIME_ADJUSTED_STOPS', True):
+            # Calculate stop distance as percentage
+            if signal['signal'] == 'BUY':
+                stop_distance_pct = (entry_price - raw_stop) / entry_price * 100
+            else:
+                stop_distance_pct = (raw_stop - entry_price) / entry_price * 100
+            
+            # Enforce min/max stop distance
+            min_stop = getattr(Config, 'STOP_LOSS_MIN_PERCENT', 0.5)
+            max_stop = getattr(Config, 'STOP_LOSS_MAX_PERCENT', 3.0)
+            stop_distance_pct = max(min_stop, min(stop_distance_pct, max_stop))
+            
+            # Recalculate stop with enforced limits
+            if signal['signal'] == 'BUY':
+                safe_stop = entry_price * (1 - stop_distance_pct / 100)
+            else:
+                safe_stop = entry_price * (1 + stop_distance_pct / 100)
+        else:
+            safe_stop = raw_stop
 
         position = AdaptivePaperTrade(
             strategy_id=strategy_id,
             symbol=symbol,
             direction=signal['signal'],
-            entry_price=signal['current_price'],
+            entry_price=entry_price,
             size=leverage_size,
             target_price=signal.get('target_price', 0),
-            stop_loss=signal.get('stop_loss', 0),
+            stop_loss=safe_stop,
             entry_time=datetime.now(),
             vwap=signal.get('vwap', 0),
             upper_band=signal.get('upper_band', 0),
             lower_band=signal.get('lower_band', 0),
-            atr=signal.get('atr', 0),
+            atr=atr,
             deviation_percent=signal.get('deviation_percent', 0),
             volatility_24h=signal.get('volatility_24h', 0),
             volume_ratio=signal.get('volume_ratio', 0),
             trend_direction=signal.get('trend', ''),
-            market_regime=signal.get('market_regime', ''),  # NEW: Market regime
-            regime_note=signal.get('regime_note', '')       # NEW: Regime note
+            market_regime=signal.get('market_regime', ''),
+            regime_note=signal.get('regime_note', ''),
+            # 🎯 PARTIAL EXIT TRACKING
+            original_size=leverage_size,
+            remaining_size=leverage_size,
+            current_stop=safe_stop,
+            # 💰 TRADING COSTS
+            entry_fee=entry_fee,
+            # ⏰ TIME TRACKING  
+            last_price_update=entry_price,
         )
 
         self.positions[position_id] = position
+        
+        # Deduct entry fee from capital
+        if entry_fee > 0:
+            self.capital -= entry_fee
 
-        # Enhanced logging with regime info
+        # Enhanced logging with regime info and fees
         regime = signal.get('market_regime', 'UNKNOWN')
         regime_note = signal.get('regime_note', '')
         print(f"🎯 OPENED: {position_id[:50]}")
-        print(f"   {signal['signal']} {symbol} @ ${signal['current_price']:.2f}")
-        print(f"   Target: ${signal.get('target_price', 0):.2f} | Stop: ${signal.get('stop_loss', 0):.2f}")
+        print(f"   {signal['signal']} {symbol} @ ${entry_price:.2f}")
+        print(f"   Target: ${signal.get('target_price', 0):.2f} | Stop: ${safe_stop:.2f}")
         print(f"   Deviation: {signal.get('deviation_percent', 0):.2f}% | Volatility: {signal.get('volatility_24h', 0):.2f}%")
         print(f"   Regime: {regime} {regime_note}")
+        if entry_fee > 0:
+            print(f"   💰 Entry Fee: ${entry_fee:.2f}")
 
         return position_id
 
@@ -2366,12 +2616,10 @@ class AdaptivePaperTradingEngine:
     def check_exits(self, current_prices: Dict, cycle: int = 0):
         """Check and execute exits
         
-        🚨 NEW: PORTFOLIO TAKE PROFIT
-        - Close ALL positions when total unrealized PnL hits threshold
-        - This banks profits before they disappear!
-        
-        🎯 NEW: TIME-BASED EXIT
-        - Close all positions every N cycles if profitable
+        🚨 PORTFOLIO TAKE PROFIT - Close ALL when total unrealized hits threshold
+        🎯 TIME-BASED EXIT - Close all every N cycles if profitable
+        🎯 PARTIAL EXITS (TP1/TP2/TP3) - Take partial profits
+        ⏰ SOFT TIME-STOP - Kill dead trades after N minutes
         """
         
         # ==========================================================================
@@ -2385,11 +2633,11 @@ class AdaptivePaperTradingEngine:
                 current_price = current_prices.get(position.symbol)
                 if not current_price:
                     continue
-                    
+                remaining = getattr(position, 'remaining_size', position.size)
                 if position.direction == "BUY":
-                    unrealized = (current_price - position.entry_price) / position.entry_price * position.size
+                    unrealized = (current_price - position.entry_price) / position.entry_price * remaining
                 else:
-                    unrealized = (position.entry_price - current_price) / position.entry_price * position.size
+                    unrealized = (position.entry_price - current_price) / position.entry_price * remaining
                 total_unrealized += unrealized
             
             # Check TAKE PROFIT threshold
@@ -2445,10 +2693,11 @@ class AdaptivePaperTradingEngine:
                     current_price = current_prices.get(position.symbol)
                     if not current_price:
                         continue
+                    remaining = getattr(position, 'remaining_size', position.size)
                     if position.direction == "BUY":
-                        unrealized = (current_price - position.entry_price) / position.entry_price * position.size
+                        unrealized = (current_price - position.entry_price) / position.entry_price * remaining
                     else:
-                        unrealized = (position.entry_price - current_price) / position.entry_price * position.size
+                        unrealized = (position.entry_price - current_price) / position.entry_price * remaining
                     total_unrealized += unrealized
                 
                 if total_unrealized >= min_profit:
@@ -2469,7 +2718,7 @@ class AdaptivePaperTradingEngine:
                     return
         
         # ==========================================================================
-        # NORMAL EXIT CHECKING (individual positions)
+        # INDIVIDUAL POSITION CHECKING (with partial exits and soft time-stop)
         # ==========================================================================
         for position_id, position in list(self.positions.items()):
             if position.status != "OPEN":
@@ -2485,25 +2734,123 @@ class AdaptivePaperTradingEngine:
             else:
                 pnl_percent = (position.entry_price - current_price) / position.entry_price * 100
 
+            # Track unrealized P&L extremes
+            if not hasattr(position, 'highest_unrealized_pnl'):
+                position.highest_unrealized_pnl = pnl_percent
+                position.lowest_unrealized_pnl = pnl_percent
+            else:
+                position.highest_unrealized_pnl = max(position.highest_unrealized_pnl, pnl_percent)
+                position.lowest_unrealized_pnl = min(position.lowest_unrealized_pnl, pnl_percent)
+            
+            # Track movement for soft time-stop
+            last_price = getattr(position, 'last_price_update', position.entry_price)
+            price_change = abs(current_price - last_price) / last_price * 100
+            if price_change < 0.05:  # Less than 0.05% movement
+                position.cycles_without_movement = getattr(position, 'cycles_without_movement', 0) + 1
+            else:
+                position.cycles_without_movement = 0
+            position.last_price_update = current_price
+
             exit_reason = None
+            remaining = getattr(position, 'remaining_size', position.size)
+            current_stop = getattr(position, 'current_stop', position.stop_loss)
+            
+            # ==========================================================================
+            # 🎯 PARTIAL EXITS (TP1/TP2/TP3)
+            # ==========================================================================
+            if getattr(Config, 'ENABLE_PARTIAL_EXITS', True):
+                tp1_pct = getattr(Config, 'TP1_PERCENT', 0.26)
+                tp2_pct = getattr(Config, 'TP2_PERCENT', 0.35)
+                tp3_pct = getattr(Config, 'TP3_PERCENT', 0.44)
+                
+                # TP1: Close 50% at small profit
+                if not getattr(position, 'tp1_hit', False) and pnl_percent >= tp1_pct:
+                    position.tp1_hit = True
+                    close_pct = getattr(Config, 'TP1_CLOSE_PERCENT', 50) / 100
+                    close_size = remaining * close_pct
+                    close_pnl = close_size * (pnl_percent / 100)
+                    
+                    position.remaining_size = remaining - close_size
+                    position.partial_pnl = getattr(position, 'partial_pnl', 0) + close_pnl
+                    self.capital += close_pnl
+                    
+                    # Move stop to breakeven
+                    if getattr(Config, 'MOVE_STOP_TO_BREAKEVEN_AFTER_TP1', True):
+                        position.current_stop = position.entry_price
+                    
+                    # Track in strategy performance
+                    if position.strategy_id in self.analyzer.strategy_performance:
+                        self.analyzer.strategy_performance[position.strategy_id].tp1_hits += 1
+                        self.analyzer.strategy_performance[position.strategy_id].partial_profit_total += close_pnl
+                    
+                    print(f"   🎯 TP1 HIT: {position.symbol} +{pnl_percent:.2f}% - Closed {close_pct*100:.0f}% for ${close_pnl:+.2f}")
+                    print(f"      Remaining: ${position.remaining_size:.2f} | Stop moved to breakeven")
+                
+                # TP2: Close 25% more at medium profit
+                elif getattr(position, 'tp1_hit', False) and not getattr(position, 'tp2_hit', False) and pnl_percent >= tp2_pct:
+                    position.tp2_hit = True
+                    close_pct = getattr(Config, 'TP2_CLOSE_PERCENT', 25) / 100
+                    close_size = getattr(position, 'original_size', position.size) * close_pct
+                    close_pnl = close_size * (pnl_percent / 100)
+                    
+                    position.remaining_size = getattr(position, 'remaining_size', position.size) - close_size
+                    position.partial_pnl = getattr(position, 'partial_pnl', 0) + close_pnl
+                    self.capital += close_pnl
+                    
+                    if position.strategy_id in self.analyzer.strategy_performance:
+                        self.analyzer.strategy_performance[position.strategy_id].tp2_hits += 1
+                        self.analyzer.strategy_performance[position.strategy_id].partial_profit_total += close_pnl
+                    
+                    print(f"   🎯 TP2 HIT: {position.symbol} +{pnl_percent:.2f}% - Closed {close_pct*100:.0f}% for ${close_pnl:+.2f}")
+                
+                # TP3: Close final 25% at full target
+                elif getattr(position, 'tp2_hit', False) and not getattr(position, 'tp3_hit', False) and pnl_percent >= tp3_pct:
+                    position.tp3_hit = True
+                    exit_reason = f"TP3_FULL_TARGET (+{pnl_percent:.2f}%)"
+            
+            # Normal target check (if no partial exits)
+            if not exit_reason:
+                if position.direction == "BUY" and current_price >= position.target_price:
+                    exit_reason = f"TARGET_HIT (+{pnl_percent:.2f}%)"
+                elif position.direction == "SELL" and current_price <= position.target_price:
+                    exit_reason = f"TARGET_HIT (+{pnl_percent:.2f}%)"
 
-            # Check target
-            if position.direction == "BUY" and current_price >= position.target_price:
-                exit_reason = f"TARGET_HIT (+{pnl_percent:.2f}%)"
-            elif position.direction == "SELL" and current_price <= position.target_price:
-                exit_reason = f"TARGET_HIT (+{pnl_percent:.2f}%)"
+            # Check stop loss (use current_stop which may have moved to breakeven)
+            if not exit_reason:
+                if position.direction == "BUY" and current_price <= current_stop:
+                    if getattr(position, 'tp1_hit', False):
+                        exit_reason = f"BREAKEVEN_STOP ({pnl_percent:.2f}%)"
+                    else:
+                        exit_reason = f"STOP_LOSS ({pnl_percent:.2f}%)"
+                elif position.direction == "SELL" and current_price >= current_stop:
+                    if getattr(position, 'tp1_hit', False):
+                        exit_reason = f"BREAKEVEN_STOP ({pnl_percent:.2f}%)"
+                    else:
+                        exit_reason = f"STOP_LOSS ({pnl_percent:.2f}%)"
 
-            # Check stop loss
-            elif position.direction == "BUY" and current_price <= position.stop_loss:
-                exit_reason = f"STOP_LOSS ({pnl_percent:.2f}%)"
-            elif position.direction == "SELL" and current_price >= position.stop_loss:
-                exit_reason = f"STOP_LOSS ({pnl_percent:.2f}%)"
+            # ==========================================================================
+            # ⏰ SOFT TIME-STOP - Kill dead trades
+            # ==========================================================================
+            if not exit_reason and getattr(Config, 'ENABLE_SOFT_TIME_STOP', True):
+                holding_minutes = (datetime.now() - position.entry_time).total_seconds() / 60
+                soft_stop_minutes = getattr(Config, 'SOFT_TIME_STOP_MINUTES', 45)
+                min_profit_to_keep = getattr(Config, 'SOFT_TIME_STOP_MIN_PROFIT', 0.05)
+                dead_trade_cycles = getattr(Config, 'DEAD_TRADE_CYCLES', 15)
+                
+                # Close if trade has gone nowhere for too long
+                if holding_minutes > soft_stop_minutes and pnl_percent < min_profit_to_keep:
+                    exit_reason = f"SOFT_TIME_STOP ({pnl_percent:.2f}% after {holding_minutes:.0f}min)"
+                
+                # Close if no movement for too many cycles
+                elif getattr(position, 'cycles_without_movement', 0) >= dead_trade_cycles:
+                    exit_reason = f"DEAD_TRADE ({pnl_percent:.2f}% - no movement for {dead_trade_cycles} cycles)"
 
             # Check max holding time
-            params = self.get_params(position.strategy_id)
-            holding_minutes = (datetime.now() - position.entry_time).total_seconds() / 60
-            if holding_minutes > params.max_holding_periods * 15:  # 15 min per period
-                exit_reason = f"MAX_TIME ({pnl_percent:.2f}%)"
+            if not exit_reason:
+                params = self.get_params(position.strategy_id)
+                holding_minutes = (datetime.now() - position.entry_time).total_seconds() / 60
+                if holding_minutes > params.max_holding_periods * 15:  # 15 min per period
+                    exit_reason = f"MAX_TIME ({pnl_percent:.2f}%)"
 
             if exit_reason:
                 self.close_position(position_id, current_price, exit_reason)
@@ -2562,6 +2909,10 @@ class AdaptivePaperTradingEngine:
         """
         Analyze and optimize strategy parameters using LLM reasoning.
         This is the core of the adaptive system - like APEX RBI but for live trading.
+        
+        🔥 NEW: SKIP optimization if strategy is already winning!
+        - Don't break what's working!
+        - Only optimize underperformers
         """
         if strategy_id not in self.analyzer.strategy_performance:
             return
@@ -2572,6 +2923,21 @@ class AdaptivePaperTradingEngine:
             print(f"⏳ {strategy_id[:30]}: Only {perf.total_trades} trades, need {Config.MIN_TRADES_FOR_ANALYSIS} for analysis")
             return
 
+        # 🔥 SKIP if strategy is already winning! Don't break what works!
+        min_win_rate_to_skip = getattr(Config, 'MIN_WIN_RATE_TO_SKIP_OPTIMIZATION', 0.55)
+        if getattr(Config, 'SKIP_OPTIMIZATION_IF_WINNING', True) and perf.win_rate >= min_win_rate_to_skip:
+            print(f"✅ {strategy_id[:30]}: SKIPPING optimization - already winning!")
+            print(f"   Win Rate: {perf.win_rate:.1%} >= {min_win_rate_to_skip:.0%} threshold")
+            print(f"   Total PnL: ${perf.total_pnl:+.2f}")
+            print(f"   💡 This strategy is performing well - don't change it!")
+            
+            # Still unpause if needed
+            if perf.is_paused:
+                perf.is_paused = False
+                perf.consecutive_losses = 0
+                print(f"   ✅ Strategy UNPAUSED (winning strategy)")
+            return
+
         # Check if optimization needed
         needs_optimization = (
             perf.win_rate < Config.TARGET_WIN_RATE or
@@ -2580,12 +2946,22 @@ class AdaptivePaperTradingEngine:
 
         if not needs_optimization:
             print(f"✅ {strategy_id[:30]}: Performance OK (WR: {perf.win_rate:.0%}, PF: {perf.profit_factor:.2f})")
+            # Still unpause if paused
+            if perf.is_paused:
+                perf.is_paused = False
+                perf.consecutive_losses = 0
+                print(f"   ✅ Strategy UNPAUSED (performance OK)")
             return
 
         # Check if we've exceeded max optimization iterations
         current_params = self.get_params(strategy_id)
         if current_params.optimization_count >= Config.MAX_OPTIMIZATION_ITERATIONS:
             print(f"⚠️  {strategy_id[:30]}: Max optimizations ({Config.MAX_OPTIMIZATION_ITERATIONS}) reached")
+            # Still unpause to give it another chance
+            if perf.is_paused:
+                perf.is_paused = False
+                perf.consecutive_losses = 0
+                print(f"   ✅ Strategy UNPAUSED (max optimizations reached, trying again)")
             return
 
         print(f"\n{'='*60}")
@@ -2962,7 +3338,7 @@ class AdaptiveTradingEngine:
                 strategy_type = executor.strategy_type if hasattr(executor, 'strategy_type') else 'UNKNOWN'
                 print(f"\n🚀 SIGNAL: {strategy_id[:40]} - {signal['signal']} {token}")
                 print(f"   Type: {strategy_type} | Reason: {signal['reason']}")
-                self.paper_engine.open_position(strategy_id, token, signal)
+                self.paper_engine.open_position(strategy_id, token, signal, self.cycle_count)
 
         except Exception as e:
             print(f"❌ Error: {strategy_id[:30]} {token}: {e}")
