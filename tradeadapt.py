@@ -63,6 +63,294 @@ try:
 except ImportError:
     anthropic = None
 
+# Flask for REST API
+try:
+    from flask import Flask, jsonify, request
+    from flask_cors import CORS
+    import threading
+    FLASK_AVAILABLE = True
+except ImportError:
+    FLASK_AVAILABLE = False
+    Flask = None
+
+# =============================================================================
+# REST API SERVER - localhost:8000
+# =============================================================================
+# Provides endpoints for frontend:
+#   GET /api/status - Overall system status
+#   GET /api/strategies - List all strategies with performance
+#   GET /api/positions - Current open positions
+#   GET /api/trades - Trade history
+#   GET /api/portfolio - Portfolio P&L summary
+#   GET /api/ready-for-live - Strategies ready for live trading
+#   POST /api/go-live/{strategy_id} - Promote strategy to live trading
+
+class APIServer:
+    """REST API Server for frontend integration"""
+    
+    def __init__(self, trading_engine=None):
+        if not FLASK_AVAILABLE:
+            print("⚠️ Flask not installed. Run: pip install flask flask-cors")
+            self.app = None
+            return
+            
+        self.app = Flask(__name__)
+        CORS(self.app)  # Enable CORS for frontend
+        self.trading_engine = trading_engine
+        self._setup_routes()
+    
+    def _setup_routes(self):
+        """Setup all API endpoints"""
+        
+        @self.app.route('/api/status', methods=['GET'])
+        def get_status():
+            """System status summary"""
+            if not self.trading_engine:
+                return jsonify({"error": "Trading engine not initialized"}), 503
+            
+            pe = self.trading_engine.paper_engine
+            status = {
+                "cycle": pe.cycle_count if hasattr(pe, 'cycle_count') else 0,
+                "runtime_seconds": (datetime.now() - pe.start_time).total_seconds() if hasattr(pe, 'start_time') else 0,
+                "capital": {
+                    "starting": Config.STARTING_CAPITAL,
+                    "type_a": Config.TYPE_A_CAPITAL,
+                    "type_b": Config.TYPE_B_CAPITAL,
+                    "current": pe.current_capital if hasattr(pe, 'current_capital') else Config.STARTING_CAPITAL,
+                },
+                "positions": {
+                    "open": len(pe.open_positions) if hasattr(pe, 'open_positions') else 0,
+                    "max": Config.MAX_TOTAL_POSITIONS,
+                },
+                "trades": {
+                    "total": len(pe.trade_history) if hasattr(pe, 'trade_history') else 0,
+                    "wins": sum(1 for t in pe.trade_history if t.get('pnl', 0) > 0) if hasattr(pe, 'trade_history') else 0,
+                    "losses": sum(1 for t in pe.trade_history if t.get('pnl', 0) <= 0) if hasattr(pe, 'trade_history') else 0,
+                },
+                "strategies": {
+                    "total": len(pe.strategies) if hasattr(pe, 'strategies') else 0,
+                    "active": sum(1 for s in pe.strategies.values() if not s.get('paused', False)) if hasattr(pe, 'strategies') else 0,
+                    "ready_for_live": len(self._get_ready_for_live_strategies()),
+                },
+                "dual_mode": Config.ENABLE_DUAL_MODE,
+            }
+            return jsonify(status)
+        
+        @self.app.route('/api/strategies', methods=['GET'])
+        def get_strategies():
+            """All strategies with performance stats"""
+            if not self.trading_engine:
+                return jsonify({"error": "Trading engine not initialized"}), 503
+            
+            pe = self.trading_engine.paper_engine
+            strategies = []
+            
+            for sid, sdata in pe.strategies.items() if hasattr(pe, 'strategies') else []:
+                perf = pe.performance.get(sid, {}) if hasattr(pe, 'performance') else {}
+                params = pe.strategy_params.get(sid, {}) if hasattr(pe, 'strategy_params') else {}
+                
+                strategy_info = {
+                    "id": sid,
+                    "name": sdata.get('name', sid[:50]),
+                    "type": sdata.get('type', 'UNKNOWN'),
+                    "version": sdata.get('version', 1),
+                    "paused": sdata.get('paused', False),
+                    "performance": {
+                        "total_trades": perf.get('total_trades', 0),
+                        "wins": perf.get('wins', 0),
+                        "losses": perf.get('losses', 0),
+                        "win_rate": perf.get('win_rate', 0.0),
+                        "profit_factor": perf.get('profit_factor', 0.0),
+                        "total_pnl": perf.get('total_pnl', 0.0),
+                        "avg_pnl": perf.get('avg_pnl', 0.0),
+                    },
+                    "ready_for_live": self._is_ready_for_live(sid),
+                    "optimization_count": params.get('optimization_count', 0) if isinstance(params, dict) else 0,
+                }
+                strategies.append(strategy_info)
+            
+            return jsonify({"strategies": strategies})
+        
+        @self.app.route('/api/positions', methods=['GET'])
+        def get_positions():
+            """Current open positions"""
+            if not self.trading_engine:
+                return jsonify({"error": "Trading engine not initialized"}), 503
+            
+            pe = self.trading_engine.paper_engine
+            positions = []
+            
+            for pos in pe.open_positions if hasattr(pe, 'open_positions') else []:
+                pos_info = {
+                    "id": pos.id if hasattr(pos, 'id') else str(pos),
+                    "strategy": pos.strategy if hasattr(pos, 'strategy') else "",
+                    "token": pos.token if hasattr(pos, 'token') else "",
+                    "action": pos.action if hasattr(pos, 'action') else "",
+                    "entry_price": pos.entry_price if hasattr(pos, 'entry_price') else 0,
+                    "size": pos.size if hasattr(pos, 'size') else 0,
+                    "target": pos.target if hasattr(pos, 'target') else 0,
+                    "stop": pos.stop if hasattr(pos, 'stop') else 0,
+                    "entry_time": pos.entry_time.isoformat() if hasattr(pos, 'entry_time') else "",
+                    "unrealized_pnl": pos.unrealized_pnl if hasattr(pos, 'unrealized_pnl') else 0,
+                    "unrealized_pct": pos.unrealized_pct if hasattr(pos, 'unrealized_pct') else 0,
+                    "trade_type": pos.trade_type if hasattr(pos, 'trade_type') else "A",
+                }
+                positions.append(pos_info)
+            
+            return jsonify({"positions": positions})
+        
+        @self.app.route('/api/trades', methods=['GET'])
+        def get_trades():
+            """Trade history"""
+            if not self.trading_engine:
+                return jsonify({"error": "Trading engine not initialized"}), 503
+            
+            pe = self.trading_engine.paper_engine
+            limit = request.args.get('limit', 100, type=int)
+            
+            trades = list(pe.trade_history)[-limit:] if hasattr(pe, 'trade_history') else []
+            return jsonify({"trades": trades, "total": len(pe.trade_history) if hasattr(pe, 'trade_history') else 0})
+        
+        @self.app.route('/api/portfolio', methods=['GET'])
+        def get_portfolio():
+            """Portfolio P&L summary"""
+            if not self.trading_engine:
+                return jsonify({"error": "Trading engine not initialized"}), 503
+            
+            pe = self.trading_engine.paper_engine
+            
+            # Calculate unrealized P&L
+            total_unrealized = 0.0
+            type_a_unrealized = 0.0
+            type_b_unrealized = 0.0
+            
+            for pos in pe.open_positions if hasattr(pe, 'open_positions') else []:
+                pnl = pos.unrealized_pnl if hasattr(pos, 'unrealized_pnl') else 0
+                total_unrealized += pnl
+                if hasattr(pos, 'trade_type') and pos.trade_type == 'B':
+                    type_b_unrealized += pnl
+                else:
+                    type_a_unrealized += pnl
+            
+            # Calculate realized P&L
+            total_realized = sum(t.get('pnl', 0) for t in pe.trade_history) if hasattr(pe, 'trade_history') else 0
+            
+            portfolio = {
+                "unrealized_pnl": round(total_unrealized, 2),
+                "realized_pnl": round(total_realized, 2),
+                "total_pnl": round(total_unrealized + total_realized, 2),
+                "type_a": {
+                    "unrealized": round(type_a_unrealized, 2),
+                    "capital": Config.TYPE_A_CAPITAL,
+                    "leverage": Config.TYPE_A_LEVERAGE,
+                },
+                "type_b": {
+                    "unrealized": round(type_b_unrealized, 2),
+                    "capital": Config.TYPE_B_CAPITAL,
+                    "leverage": Config.TYPE_B_LEVERAGE,
+                },
+                "take_profit_threshold": Config.PORTFOLIO_TAKE_PROFIT_THRESHOLD,
+                "distance_to_tp": round(Config.PORTFOLIO_TAKE_PROFIT_THRESHOLD - total_unrealized, 2),
+            }
+            return jsonify(portfolio)
+        
+        @self.app.route('/api/ready-for-live', methods=['GET'])
+        def get_ready_for_live():
+            """Strategies ready for live trading"""
+            return jsonify({
+                "strategies": self._get_ready_for_live_strategies(),
+                "criteria": {
+                    "min_trades": Config.MIN_TRADES_FOR_LIVE,
+                    "min_win_rate": Config.MIN_WIN_RATE_FOR_LIVE,
+                    "min_profit_factor": Config.MIN_PROFIT_FACTOR_FOR_LIVE,
+                    "min_net_profit": Config.MIN_NET_PROFIT_FOR_LIVE,
+                }
+            })
+        
+        @self.app.route('/api/go-live/<strategy_id>', methods=['POST'])
+        def go_live(strategy_id):
+            """Promote strategy to live trading"""
+            if not self.trading_engine:
+                return jsonify({"error": "Trading engine not initialized"}), 503
+            
+            if not self._is_ready_for_live(strategy_id):
+                return jsonify({"error": "Strategy not ready for live trading", "strategy_id": strategy_id}), 400
+            
+            # Mark strategy as live-ready (actual live trading would be separate)
+            pe = self.trading_engine.paper_engine
+            if hasattr(pe, 'strategies') and strategy_id in pe.strategies:
+                pe.strategies[strategy_id]['live_ready'] = True
+                pe.strategies[strategy_id]['promoted_at'] = datetime.now().isoformat()
+                pe.save_state()
+                
+                return jsonify({
+                    "success": True,
+                    "message": f"Strategy {strategy_id[:50]} promoted to live-ready",
+                    "strategy_id": strategy_id,
+                })
+            
+            return jsonify({"error": "Strategy not found"}), 404
+    
+    def _is_ready_for_live(self, strategy_id):
+        """Check if strategy meets live trading criteria"""
+        if not self.trading_engine or not hasattr(self.trading_engine, 'paper_engine'):
+            return False
+        
+        pe = self.trading_engine.paper_engine
+        perf = pe.performance.get(strategy_id, {}) if hasattr(pe, 'performance') else {}
+        
+        total_trades = perf.get('total_trades', 0)
+        win_rate = perf.get('win_rate', 0.0)
+        profit_factor = perf.get('profit_factor', 0.0)
+        total_pnl = perf.get('total_pnl', 0.0)
+        
+        return (
+            total_trades >= Config.MIN_TRADES_FOR_LIVE and
+            win_rate >= Config.MIN_WIN_RATE_FOR_LIVE and
+            profit_factor >= Config.MIN_PROFIT_FACTOR_FOR_LIVE and
+            total_pnl >= Config.MIN_NET_PROFIT_FOR_LIVE
+        )
+    
+    def _get_ready_for_live_strategies(self):
+        """Get all strategies ready for live trading"""
+        ready = []
+        if not self.trading_engine or not hasattr(self.trading_engine, 'paper_engine'):
+            return ready
+        
+        pe = self.trading_engine.paper_engine
+        for sid in pe.strategies.keys() if hasattr(pe, 'strategies') else []:
+            if self._is_ready_for_live(sid):
+                perf = pe.performance.get(sid, {}) if hasattr(pe, 'performance') else {}
+                ready.append({
+                    "id": sid,
+                    "win_rate": perf.get('win_rate', 0),
+                    "profit_factor": perf.get('profit_factor', 0),
+                    "total_pnl": perf.get('total_pnl', 0),
+                    "total_trades": perf.get('total_trades', 0),
+                })
+        return ready
+    
+    def run(self, host='0.0.0.0', port=8000):
+        """Start API server in background thread"""
+        if not self.app:
+            print("⚠️ API server not available (Flask not installed)")
+            return
+        
+        def run_server():
+            self.app.run(host=host, port=port, debug=False, use_reloader=False)
+        
+        thread = threading.Thread(target=run_server, daemon=True)
+        thread.start()
+        print(f"🌐 API Server started at http://{host}:{port}")
+        print("   Endpoints:")
+        print("   - GET  /api/status        - System status")
+        print("   - GET  /api/strategies    - All strategies with performance")
+        print("   - GET  /api/positions     - Current open positions")
+        print("   - GET  /api/trades        - Trade history")
+        print("   - GET  /api/portfolio     - Portfolio P&L summary")
+        print("   - GET  /api/ready-for-live - Strategies ready for live")
+        print("   - POST /api/go-live/<id>  - Promote strategy to live")
+
 # =============================================================================
 # CONFIGURATION - ADAPTIVE TRADING
 # =============================================================================
@@ -3563,7 +3851,26 @@ if __name__ == "__main__":
     print("  • Loss pattern recognition and analysis")
     print("  • Dynamic parameter adjustment")
     print("  • Automated optimization until profitability")
+    print("  • REST API on localhost:8000 for frontend integration")
+    print("="*80)
+    
+    # Show live trading criteria
+    print("\n🏆 READY FOR LIVE TRADING CRITERIA:")
+    print(f"   • Minimum trades: {Config.MIN_TRADES_FOR_LIVE}")
+    print(f"   • Minimum win rate: {Config.MIN_WIN_RATE_FOR_LIVE * 100:.0f}%")
+    print(f"   • Minimum profit factor: {Config.MIN_PROFIT_FACTOR_FOR_LIVE}")
+    print(f"   • Minimum net profit: ${Config.MIN_NET_PROFIT_FOR_LIVE:.0f}")
+    print("\n💡 When a strategy meets ALL criteria, it becomes 'READY FOR LIVE'")
+    print("   The perfected .py file has been optimized by LLM to maximize profits")
+    print("   BUT: No strategy is GUARANTEED to always profit!")
+    print("   Markets change, and past performance does not guarantee future results.")
     print("="*80)
 
     engine = AdaptiveTradingEngine()
+    
+    # Start REST API server in background
+    api_server = APIServer(engine)
+    api_server.run(host='0.0.0.0', port=8000)
+    
+    # Run main trading loop
     engine.run_adaptive()
