@@ -105,27 +105,27 @@ class Config:
     TYPE_A_POSITION_SIZE = 0.15        # 15% of Type A capital per trade
     
     # REALISTIC COSTS FOR TYPE A (3x leverage)
-    # Fees: 0.07% × 2 × 3x = 0.42% round trip at position level
-    # Spread: 0.05% × 3x = 0.15%
-    # Total: ~0.57% cost per trade
+    # Base costs per side: 0.07% fee + 0.05% spread + 0.03% slippage = 0.15%
+    # Round trip: 0.15% × 2 = 0.30% 
+    # At 3x leverage impact on position: 0.30% × 3 = 0.90% total cost per trade
     TYPE_A_TAKER_FEE = 0.0007          # 0.07% (conservative)
     TYPE_A_SPREAD = 0.0005             # 0.05%
     TYPE_A_SLIPPAGE = 0.0003           # 0.03%
-    TYPE_A_TOTAL_COST = 0.0015         # 0.15% per side × 3x = 0.45% effective cost
+    TYPE_A_TOTAL_COST_PCT = 0.90       # 0.90% total cost per trade at 3x
     
     # TYPE A ENTRY - Need small deviation for frequent entries
     TYPE_A_MIN_DEVIATION = 0.005       # 0.5% deviation from VWAP to enter
     TYPE_A_MAX_VOLATILITY = 5.0        # Max 5% 24h volatility
     
-    # TYPE A TARGETS - Small but achievable
-    TYPE_A_TP_LEVELS = [0.002, 0.003, 0.004]  # 0.2%, 0.3%, 0.4% price moves
+    # TYPE A TARGETS - Must exceed 0.90% costs!
+    TYPE_A_TP_LEVELS = [0.004, 0.006, 0.008]  # 0.4%, 0.6%, 0.8% price moves
     TYPE_A_TP_FRACTIONS = [0.5, 0.25, 0.25]   # 50%, 25%, 25%
-    # With 3x: 0.6%, 0.9%, 1.2% gross returns
-    # After 0.45% costs: 0.15%, 0.45%, 0.75% net
+    # With 3x: 1.2%, 1.8%, 2.4% gross returns
+    # After 0.90% costs: 0.30%, 0.90%, 1.50% net
     
     # TYPE A STOPS - Tight but survivable
-    TYPE_A_MIN_STOP = 0.003            # 0.3% minimum (0.9% loss at 3x)
-    TYPE_A_MAX_STOP = 0.008            # 0.8% maximum (2.4% loss at 3x)
+    TYPE_A_MIN_STOP = 0.004            # 0.4% minimum (1.2% loss at 3x)
+    TYPE_A_MAX_STOP = 0.010            # 1.0% maximum (3.0% loss at 3x)
     TYPE_A_ATR_MULT = 1.2              # 1.2x ATR for stop
     
     # ==========================================================================
@@ -138,26 +138,26 @@ class Config:
     TYPE_B_POSITION_SIZE = 0.12        # 12% of Type B capital per trade
     
     # REALISTIC COSTS FOR TYPE B (8x leverage)
-    # Fees: 0.07% × 2 × 8x = 1.12% round trip at position level
-    # Spread: 0.05% × 8x = 0.40%
-    # Total: ~1.52% cost per trade - MUST target big moves!
+    # Base costs per side: 0.07% fee + 0.05% spread + 0.03% slippage = 0.15%
+    # Round trip: 0.15% × 2 = 0.30%
+    # At 8x leverage impact on position: 0.30% × 8 = 2.40% total cost per trade!
     TYPE_B_TAKER_FEE = 0.0007          # 0.07% (conservative)
     TYPE_B_SPREAD = 0.0005             # 0.05%
     TYPE_B_SLIPPAGE = 0.0003           # 0.03%
-    TYPE_B_TOTAL_COST = 0.0015         # 0.15% per side × 8x = 1.2% effective cost
+    TYPE_B_TOTAL_COST_PCT = 2.40       # 2.40% total cost per trade at 8x!
     
-    # TYPE B ENTRY - STRICT! Only big deviations
-    TYPE_B_MIN_DEVIATION = 0.010       # 1.0% deviation from VWAP to enter
+    # TYPE B ENTRY - STRICT! Only big deviations to overcome 2.4% costs
+    TYPE_B_MIN_DEVIATION = 0.015       # 1.5% deviation from VWAP to enter
     TYPE_B_MAX_VOLATILITY = 8.0        # Allow higher volatility for bigger moves
     
-    # TYPE B TARGETS - BIG moves that justify 8x leverage
-    TYPE_B_TP_LEVELS = [0.005, 0.007, 0.010]  # 0.5%, 0.7%, 1.0% price moves
+    # TYPE B TARGETS - BIG moves that justify 8x leverage and 2.4% costs!
+    TYPE_B_TP_LEVELS = [0.008, 0.012, 0.016]  # 0.8%, 1.2%, 1.6% price moves
     TYPE_B_TP_FRACTIONS = [0.5, 0.25, 0.25]   # 50%, 25%, 25%
-    # With 8x: 4%, 5.6%, 8% gross returns
-    # After 1.2% costs: 2.8%, 4.4%, 6.8% net returns
+    # With 8x: 6.4%, 9.6%, 12.8% gross returns
+    # After 2.4% costs: 4.0%, 7.2%, 10.4% net returns ✅
     
     # TYPE B STOPS - MUST be wider to survive 8x volatility
-    TYPE_B_MIN_STOP = 0.005            # 0.5% minimum (4% loss at 8x)
+    TYPE_B_MIN_STOP = 0.006            # 0.6% minimum (4.8% loss at 8x)
     TYPE_B_MAX_STOP = 0.015            # 1.5% maximum (12% loss at 8x)
     TYPE_B_ATR_MULT = 1.5              # 1.5x ATR for stop
     
