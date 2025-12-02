@@ -1,0 +1,1925 @@
+   DOT: $2.10
+   LINK: $12.25
+   AVAX: $12.93
+
+============================================================
+📊 REAL-TIME PERFORMANCE ALERTS
+============================================================
+🚨 ALERT: 20251124_061812_Market_Maker_Inventory_R rapid loss: $-81.63 in last 5 trades
+🚨 ALERT: 20251124_041055_Stoikov_Market_Making_In rapid loss: $-95.49 in last 5 trades
+🚨 ALERT: 20251124_034046_AI_Neural_Network_Predic recent win rate only 0.0%!
+   Recent PnL: $-284.28
+🚨 ALERT: 20251124_034046_AI_Neural_Network_Predic rapid loss: $-284.28 in last 5 trades
+============================================================
+
+
+📊 OPEN POSITIONS (13):
+   🔴 BUY LINK @ $12.28 → $12.25 (-0.26%) = $-565.42
+   🔴 BUY LINK @ $12.28 → $12.25 (-0.25%) = $-556.09
+   🔴 BUY LINK @ $12.27 → $12.25 (-0.24%) = $-516.66
+   🔴 BUY ETH @ $2830.95 → $2829.35 (-0.06%) = $-123.06
+   🔴 BUY ETH @ $2830.95 → $2829.35 (-0.06%) = $-122.96
+   🔴 BUY ETH @ $2830.95 → $2829.35 (-0.06%) = $-122.86
+   🔴 BUY ADA @ $0.39 → $0.39 (-0.01%) = $-18.73
+   🔴 BUY ADA @ $0.39 → $0.39 (-0.01%) = $-18.71
+   🔴 BUY ADA @ $0.39 → $0.39 (-0.01%) = $-18.70
+   🟢 BUY DOT @ $2.10 → $2.10 (+0.07%) = $+154.58
+   🟢 BUY DOT @ $2.10 → $2.10 (+0.08%) = $+175.06
+   🟢 SELL AVAX @ $12.94 → $12.93 (+0.10%) = $+212.25
+   🟢 SELL AVAX @ $12.94 → $12.93 (+0.10%) = $+212.07
+   🔴 TOTAL UNREALIZED P&L: $-1309.23
+   📉 $1509.23 away from take profit threshold (need +$1309.23 to breakeven, then +$200.00 more)
+
+🚀 SIGNAL: 20251124_061812_Market_Maker_Inventory_R - BUY LINK
+   Type: UNKNOWN | Reason: Market Making BUY: Price $12.24 below mid (trend: UP)
+⏸️   BLOCKED: 20251124_061812_Market_Maker_I LINK - Already have position on LINK
+
+🚀 SIGNAL: 20251124_033154_Market_Maker_Inventory_M - BUY LINK
+   Type: UNKNOWN | Reason: Market Making BUY: Price $12.24 below mid (trend: UP)
+⏸️   BLOCKED: 20251124_033154_Market_Maker_I LINK - Already have position on LINK
+
+🚀 SIGNAL: 20251124_040640_Market_Maker_Inventory_R - BUY LINK
+   Type: UNKNOWN | Reason: Market Making BUY: Price $12.24 below mid (trend: UP)
+⏸️   BLOCKED: 20251124_040640_Market_Maker_I LINK - Strategy has max positions (5)
+
+================================================================================
+🔄 TRADEPEX ADAPTIVE - Dynamic Strategy Optimizer
+================================================================================
+⏰ Cycle: 169 | Runtime: 10:48:38.351770
+💰 Capital: $22491.76 | Total PnL: $-1244.59
+📊 Open: 13/40 | Closed: 436
+🔄 Optimization: ACTIVE (analyzing 436 trades)
+📈 Win Rate: 47.2% (206/436)
+
+📊 OPEN POSITIONS (waiting to close for analysis):
+   📍 20251124_061812_Market_Maker_Invent
+      BUY LINK @ $12.28 → Now: $12.24 (-0.27%) 🔴 $-595.65
+      🎯 Target: $12.31 (+0.52% away) | 🛑 Stop: $12.09 (1.23% away)
+      ⏱️  Time: 7min | Dev: 0.16% | Vol: 3.67%
+   📍 20251124_033154_Market_Maker_Invent
+      BUY LINK @ $12.28 → Now: $12.24 (-0.27%) 🔴 $-586.29
+      🎯 Target: $12.31 (+0.51% away) | 🛑 Stop: $12.09 (1.23% away)
+      ⏱️  Time: 7min | Dev: 0.15% | Vol: 3.67%
+   📍 20251124_040640_Market_Maker_Invent
+      BUY LINK @ $12.27 → Now: $12.24 (-0.25%) 🔴 $-546.84
+      🎯 Target: $12.30 (+0.49% away) | 🛑 Stop: $12.09 (1.25% away)
+      ⏱️  Time: 7min | Dev: 0.13% | Vol: 3.67%
+   📍 20251124_061812_Market_Maker_Invent
+      BUY ETH @ $2830.95 → Now: $2829.35 (-0.06%) 🔴 $-123.06
+      🎯 Target: $2835.92 (+0.23% away) | 🛑 Stop: $2788.49 (1.44% away)
+      ⏱️  Time: 6min | Dev: 0.12% | Vol: 3.65%
+   📍 20251124_033154_Market_Maker_Invent
+      BUY ETH @ $2830.95 → Now: $2829.35 (-0.06%) 🔴 $-122.96
+      🎯 Target: $2835.92 (+0.23% away) | 🛑 Stop: $2788.49 (1.44% away)
+      ⏱️  Time: 6min | Dev: 0.12% | Vol: 3.65%
+   📍 20251124_040640_Market_Maker_Invent
+      BUY ETH @ $2830.95 → Now: $2829.35 (-0.06%) 🔴 $-122.86
+      🎯 Target: $2835.92 (+0.23% away) | 🛑 Stop: $2788.49 (1.44% away)
+      ⏱️  Time: 6min | Dev: 0.12% | Vol: 3.65%
+   📍 20251124_061812_Market_Maker_Invent
+      BUY ADA @ $0.39 → Now: $0.39 (+0.03%) 🟢 $+66.65
+      🎯 Target: $0.40 (+0.21% away) | 🛑 Stop: $0.39 (1.53% away)
+      ⏱️  Time: 6min | Dev: 0.16% | Vol: 4.00%
+   📍 20251124_033154_Market_Maker_Invent
+      BUY ADA @ $0.39 → Now: $0.39 (+0.03%) 🟢 $+66.59
+      🎯 Target: $0.40 (+0.21% away) | 🛑 Stop: $0.39 (1.53% away)
+      ⏱️  Time: 6min | Dev: 0.16% | Vol: 4.00%
+   📍 20251124_040640_Market_Maker_Invent
+      BUY ADA @ $0.39 → Now: $0.39 (+0.03%) 🟢 $+66.53
+      🎯 Target: $0.40 (+0.21% away) | 🛑 Stop: $0.39 (1.53% away)
+      ⏱️  Time: 6min | Dev: 0.16% | Vol: 4.00%
+   📍 20251124_061812_Market_Maker_Invent
+      BUY DOT @ $2.10 → Now: $2.10 (+0.08%) 🟢 $+175.19
+      🎯 Target: $2.11 (+0.37% away) | 🛑 Stop: $2.07 (1.58% away)
+      ⏱️  Time: 4min | Dev: 0.16% | Vol: 4.02%
+   📍 20251124_040640_Market_Maker_Invent
+      BUY DOT @ $2.10 → Now: $2.10 (+0.09%) 🟢 $+195.65
+      🎯 Target: $2.11 (+0.37% away) | 🛑 Stop: $2.07 (1.59% away)
+      ⏱️  Time: 4min | Dev: 0.17% | Vol: 4.02%
+   📍 20251124_033154_Market_Maker_Invent
+      SELL AVAX @ $12.94 → Now: $12.93 (+0.11%) 🟢 $+233.98
+      🎯 Target: $12.89 (+0.31% away) | 🛑 Stop: $13.14 (1.61% away)
+      ⏱️  Time: 4min | Dev: 0.10% | Vol: 3.94%
+   📍 20251124_040640_Market_Maker_Invent
+      SELL AVAX @ $12.94 → Now: $12.93 (+0.11%) 🟢 $+233.78
+      🎯 Target: $12.89 (+0.31% away) | 🛑 Stop: $13.14 (1.61% away)
+      ⏱️  Time: 4min | Dev: 0.10% | Vol: 3.94%
+
+   🔴 TOTAL PORTFOLIO UNREALIZED P&L: $-1059.29
+================================================================================
+
+
+🔄 CYCLE 170 - 13:14:30
+   BTC: $87439.95
+   ETH: $2827.33
+   SOL: $128.53
+   XRP: $2.04
+   ADA: $0.39
+   DOT: $2.10
+   LINK: $12.23
+   AVAX: $12.92
+
+============================================================
+📊 REAL-TIME PERFORMANCE ALERTS
+============================================================
+🚨 ALERT: 20251124_061812_Market_Maker_Inventory_R rapid loss: $-81.63 in last 5 trades
+🚨 ALERT: 20251124_041055_Stoikov_Market_Making_In rapid loss: $-95.49 in last 5 trades
+🚨 ALERT: 20251124_034046_AI_Neural_Network_Predic recent win rate only 0.0%!
+   Recent PnL: $-284.28
+🚨 ALERT: 20251124_034046_AI_Neural_Network_Predic rapid loss: $-284.28 in last 5 trades
+============================================================
+
+
+📊 OPEN POSITIONS (13):
+   🔴 BUY LINK @ $12.28 → $12.23 (-0.36%) = $-787.68
+   🔴 BUY LINK @ $12.28 → $12.23 (-0.36%) = $-778.17
+   🔴 BUY LINK @ $12.27 → $12.23 (-0.34%) = $-738.59
+   🔴 BUY ETH @ $2830.95 → $2827.33 (-0.13%) = $-278.43
+   🔴 BUY ETH @ $2830.95 → $2827.33 (-0.13%) = $-278.20
+   🔴 BUY ETH @ $2830.95 → $2827.33 (-0.13%) = $-277.97
+   🟢 BUY ADA @ $0.39 → $0.39 (+0.03%) = $+66.65
+   🟢 BUY ADA @ $0.39 → $0.39 (+0.03%) = $+66.59
+   🟢 BUY ADA @ $0.39 → $0.39 (+0.03%) = $+66.53
+   🟢 BUY DOT @ $2.10 → $2.10 (+0.08%) = $+164.88
+   🟢 BUY DOT @ $2.10 → $2.10 (+0.09%) = $+185.36
+   🟢 SELL AVAX @ $12.94 → $12.92 (+0.18%) = $+394.42
+   🟢 SELL AVAX @ $12.94 → $12.92 (+0.18%) = $+394.09
+   🔴 TOTAL UNREALIZED P&L: $-1800.52
+   📉 $2000.52 away from take profit threshold (need +$1800.52 to breakeven, then +$200.00 more)
+
+🔧 RUNNING OPTIMIZATION CYCLE...
+   📊 Status: 13 open positions, 436 closed trades
+   📋 Need 5 closed trades per strategy for LLM analysis
+
+============================================================
+🔧 LLM OPTIMIZATION: 20251124_061812_Market_Maker_Inventory_Rebalancing
+============================================================
+   Current Win Rate: 46.5% (target: 71%)
+   Current Profit Factor: 1.00 (target: 1.8)
+   Total PnL: $-137.98
+   Optimization #: 15
+
+🤖 Sending to LLM for analysis...
+   📈 min_deviation: 2.20 → 1.50
+   📉 max_volatility: 0.69 → 2.00
+   🛑 stop_loss_mult: 8.00 → 12.00
+   🎯 take_profit_mult: 0.03 → 0.01
+   📊 std_dev_mult: 4.00 → 6.00
+   📊 min_volume: 3.00 → 5.00
+   ⏱️   max_holding: 20 → 10
+✅ LLM Analysis Complete:
+   The strategy is underperforming with a 46.5% win rate due to several key issues. First, entry signals are weak: the average entry
+deviation is only 0.18%, far below the set min_deviation_percent of 2....
+   Confidence: 70%
+📝 RECODED: 20251124_061812_Market_Maker_Inventory_Rebalancing_Strategy_v38.py
+   Saved to: improved_strategies/20251124_061812_Market_Maker_Inventory_Rebalancing_Strategy_v38.py
+📁 Improved strategy saved to: improved_strategies/20251124_061812_Market_Maker_Inventory_Rebalancing_Strategy_v38.py
+
+📊 NEW PARAMETERS (v16):
+   min_deviation: 1.50%
+   max_volatility: 2.00%
+   stop_loss_mult: 12.00
+   take_profit_mult: 0.01
+   std_dev_mult: 6.00
+============================================================
+
+🆕 Now using improved v38 for: 20251124_061812_Market_Maker_Inventory_R
+🔄 Executor refreshed for: 20251124_061812_Market_Maker_Inventory_R (v16)
+
+============================================================
+🔧 LLM OPTIMIZATION: 20251124_034046_AI_Neural_Network_Predictive_Model
+============================================================
+   Current Win Rate: 50.0% (target: 71%)
+   Current Profit Factor: 1.41 (target: 1.8)
+   Total PnL: $297.00
+   Optimization #: 15
+
+🤖 Sending to LLM for analysis...
+   📈 min_deviation: 10.00 → 15.00
+   📉 max_volatility: 2.00 → 1.50
+   🛑 stop_loss_mult: 20.00 → 25.00
+   🎯 take_profit_mult: 0.01 → 0.01
+   📊 std_dev_mult: 6.00 → 8.00
+   📊 min_volume: 5.00 → 6.00
+✅ LLM Analysis Complete:
+   The strategy is underperforming due to three core issues: 1) entering on weak signals (average entry deviation 0.80% vs. min_devia
+tion_percent 10%, suggesting band miscalculation or enforcement failur...
+   Confidence: 65%
+📝 RECODED: 20251124_034046_AI_Neural_Network_Predictive_Model_for_Forex_Trading_v31.py
+   Saved to: improved_strategies/20251124_034046_AI_Neural_Network_Predictive_Model_for_Forex_Trading_v31.py
+📁 Improved strategy saved to: improved_strategies/20251124_034046_AI_Neural_Network_Predictive_Model_for_Forex_Trading_v31.py
+
+📊 NEW PARAMETERS (v16):
+   min_deviation: 15.00%
+   max_volatility: 1.50%
+   stop_loss_mult: 25.00
+   take_profit_mult: 0.01
+   std_dev_mult: 8.00
+============================================================
+
+🆕 Now using improved v31 for: 20251124_034046_AI_Neural_Network_Predic
+🔄 Executor refreshed for: 20251124_034046_AI_Neural_Network_Predic (v16)
+
+============================================================
+🔧 LLM OPTIMIZATION: 20251124_041055_Stoikov_Market_Making_Inventory_Ma
+============================================================
+   Current Win Rate: 52.0% (target: 71%)
+   Current Profit Factor: 0.87 (target: 1.8)
+   Total PnL: $273.23
+   Optimization #: 17
+
+🤖 Sending to LLM for analysis...
+❌ LLM returned empty response
+📊 Using fallback heuristic optimization...
+   📈 Increased min_deviation (many low deviation losses)
+   📉 Reduced max_volatility (many high volatility losses)
+   🎯 Reduced targets (too few target hits)
+📝 RECODED: 20251124_041055_Stoikov_Market_Making_Inventory_Management_Strategy_v28.py
+   Saved to: improved_strategies/20251124_041055_Stoikov_Market_Making_Inventory_Management_Strategy_v28.py
+📁 Improved strategy saved to: improved_strategies/20251124_041055_Stoikov_Market_Making_Inventory_Management_Strategy_v28.py
+
+📊 NEW PARAMETERS (v18):
+   min_deviation: 3.25%
+   max_volatility: 1.40%
+   stop_loss_mult: 12.00
+   take_profit_mult: 0.06
+   std_dev_mult: 3.00
+============================================================
+
+🆕 Now using improved v28 for: 20251124_041055_Stoikov_Market_Making_In
+🔄 Executor refreshed for: 20251124_041055_Stoikov_Market_Making_In (v18)
+
+============================================================
+🔧 LLM OPTIMIZATION: 20251124_033154_Market_Maker_Inventory_Management_
+============================================================
+   Current Win Rate: 48.4% (target: 71%)
+   Current Profit Factor: 0.90 (target: 1.8)
+   Total PnL: $134.06
+   Optimization #: 16
+
+🤖 Sending to LLM for analysis...
+❌ LLM returned empty response
+📊 Using fallback heuristic optimization...
+   📈 Increased min_deviation (many low deviation losses)
+   📉 Reduced max_volatility (many high volatility losses)
+   🎯 Reduced targets (too few target hits)
+📝 RECODED: 20251124_033154_Market_Maker_Inventory_Management_Strategy_v21.py
+   Saved to: improved_strategies/20251124_033154_Market_Maker_Inventory_Management_Strategy_v21.py
+📁 Improved strategy saved to: improved_strategies/20251124_033154_Market_Maker_Inventory_Management_Strategy_v21.py
+
+📊 NEW PARAMETERS (v17):
+   min_deviation: 5.07%
+   max_volatility: 1.22%
+   stop_loss_mult: 20.00
+   take_profit_mult: 0.01
+   std_dev_mult: 4.00
+============================================================
+
+🆕 Now using improved v21 for: 20251124_033154_Market_Maker_Inventory_M
+🔄 Executor refreshed for: 20251124_033154_Market_Maker_Inventory_M (v17)
+
+============================================================
+🔧 LLM OPTIMIZATION: 20251123_221103_VWAP_Mean_Reversion_Intraday_Strat
+============================================================
+   Current Win Rate: 66.7% (target: 71%)
+   Current Profit Factor: 3.04 (target: 1.8)
+   Total PnL: $383.32
+   Optimization #: 17
+
+🤖 Sending to LLM for analysis...
+   📈 min_deviation: 15.00 → 20.00
+   📉 max_volatility: 0.01 → 0.01
+   🛑 stop_loss_mult: 3.00 → 4.00
+   🎯 take_profit_mult: 0.01 → 0.01
+   📊 std_dev_mult: 5.00 → 6.00
+   📊 min_volume: 3.00 → 5.00
+   ⏱️   max_holding: 12 → 8
+✅ LLM Analysis Complete:
+   The strategy is underperforming in win rate (66.7% vs target 71%) despite a high profit factor (3.04), indicating that winning tra
+des are profitable but not frequent enough. Key issues include: 1) Los...
+   Confidence: 70%
+📝 RECODED: 20251123_221103_VWAP_Mean_Reversion_Intraday_Strategy_v17.py
+   Saved to: improved_strategies/20251123_221103_VWAP_Mean_Reversion_Intraday_Strategy_v17.py
+📁 Improved strategy saved to: improved_strategies/20251123_221103_VWAP_Mean_Reversion_Intraday_Strategy_v17.py
+
+📊 NEW PARAMETERS (v18):
+   min_deviation: 20.00%
+   max_volatility: 0.01%
+   stop_loss_mult: 4.00
+   take_profit_mult: 0.01
+   std_dev_mult: 6.00
+============================================================
+
+🆕 Now using improved v17 for: 20251123_221103_VWAP_Mean_Reversion_Intr
+🔄 Executor refreshed for: 20251123_221103_VWAP_Mean_Reversion_Intr (v18)
+
+============================================================
+🔧 LLM OPTIMIZATION: 20251124_040640_Market_Maker_Inventory_Rebalancing
+============================================================
+   Current Win Rate: 45.5% (target: 71%)
+   Current Profit Factor: 0.82 (target: 1.8)
+   Total PnL: $-721.11
+   Optimization #: 15
+
+🤖 Sending to LLM for analysis...
+❌ LLM returned empty response
+📊 Using fallback heuristic optimization...
+   📈 Increased min_deviation (many low deviation losses)
+   📉 Reduced max_volatility (many high volatility losses)
+   🎯 Reduced targets (too few target hits)
+📝 RECODED: 20251124_040640_Market_Maker_Inventory_Rebalancing_Strategy_with_Adverse_Selection_Modeling_v15.py
+   Saved to: improved_strategies/20251124_040640_Market_Maker_Inventory_Rebalancing_Strategy_with_Adverse_Selection_Modeling_v15.py
+📁 Improved strategy saved to: improved_strategies/20251124_040640_Market_Maker_Inventory_Rebalancing_Strategy_with_Adverse_Selection
+_Modeling_v15.py
+
+📊 NEW PARAMETERS (v16):
+   min_deviation: 111.39%
+   max_volatility: 0.03%
+   stop_loss_mult: 20.00
+   take_profit_mult: 0.01
+   std_dev_mult: 5.00
+============================================================
+
+🆕 Now using improved v15 for: 20251124_040640_Market_Maker_Inventory_R
+🔄 Executor refreshed for: 20251124_040640_Market_Maker_Inventory_R (v16)
+
+============================================================
+🔧 LLM OPTIMIZATION: 20251124_052350_Reversal_During_Earnings_Announcem
+============================================================
+   Current Win Rate: 66.7% (target: 71%)
+   Current Profit Factor: 2.93 (target: 1.8)
+   Total PnL: $369.64
+   Optimization #: 17
+
+🤖 Sending to LLM for analysis...
+   📈 min_deviation: 30.00 → 45.00
+   📉 max_volatility: 0.07 → 0.04
+   🛑 stop_loss_mult: 3.20 → 4.00
+   🎯 take_profit_mult: 0.56 → 0.38
+   📊 std_dev_mult: 5.00 → 6.50
+   📊 min_volume: 8.00 → 10.00
+   ⏱️   max_holding: 8 → 12
+✅ LLM Analysis Complete:
+   The strategy is designed for reversals during earnings announcements but suffers from several critical flaws. Despite achieving a
+66.7% win rate and excellent profit factor (2.93), it fails to reach t...
+   Confidence: 82%
+📝 RECODED: 20251124_052350_Reversal_During_Earnings_Announcements_v17.py
+   Saved to: improved_strategies/20251124_052350_Reversal_During_Earnings_Announcements_v17.py
+📁 Improved strategy saved to: improved_strategies/20251124_052350_Reversal_During_Earnings_Announcements_v17.py
+
+📊 NEW PARAMETERS (v18):
+   min_deviation: 45.00%
+   max_volatility: 0.04%
+   stop_loss_mult: 4.00
+   take_profit_mult: 0.38
+   std_dev_mult: 6.50
+============================================================
+
+🆕 Now using improved v17 for: 20251124_052350_Reversal_During_Earnings
+🔄 Executor refreshed for: 20251124_052350_Reversal_During_Earnings (v18)
+
+============================================================
+🔧 LLM OPTIMIZATION: 20251124_042700_Cryptocurrency_Cointegration_Pairs
+============================================================
+   Current Win Rate: 42.1% (target: 71%)
+   Current Profit Factor: 0.64 (target: 1.8)
+   Total PnL: $-257.45
+   Optimization #: 2
+
+🤖 Sending to LLM for analysis...
+❌ LLM returned empty response
+📊 Using fallback heuristic optimization...
+   📉 Reduced max_volatility (many high volatility losses)
+   🎯 Reduced targets (too few target hits)
+📝 RECODED: 20251124_042700_Cryptocurrency_Cointegration_Pairs_Trading_Strategy_v2.py
+   Saved to: improved_strategies/20251124_042700_Cryptocurrency_Cointegration_Pairs_Trading_Strategy_v2.py
+📁 Improved strategy saved to: improved_strategies/20251124_042700_Cryptocurrency_Cointegration_Pairs_Trading_Strategy_v2.py
+
+📊 NEW PARAMETERS (v3):
+   min_deviation: 3.00%
+   max_volatility: 2.10%
+   stop_loss_mult: 3.00
+   take_profit_mult: 0.80
+   std_dev_mult: 2.50
+============================================================
+
+🆕 Now using improved v2 for: 20251124_042700_Cryptocurrency_Cointegra
+🔄 Executor refreshed for: 20251124_042700_Cryptocurrency_Cointegra (v3)
+⏳ 20251124_043056_Machine_Learni: Only 2 trades, need 5 for analysis
+⏳ 20251124_044515_Correlation_Tr: Only 2 trades, need 5 for analysis
+
+================================================================================
+📊 TRADE ANALYSIS REPORT
+================================================================================
+
+🎯 Strategy: 20251124_061812_Market_Maker_Inventory_Rebalancing
+   Total Trades: 99
+   Win Rate: 46.5%
+   Profit Factor: 1.00
+   Total PnL: $-137.98
+   Avg Win: $56.02 | Avg Loss: $52.74
+   Consecutive Losses: 2
+   Status: ✅ ACTIVE
+   📉 Loss Patterns: LOW_DEVIATION, HIGH_VOLATILITY, FAR_TARGETS
+   💡 Suggestions:
+      - Increase minimum deviation threshold - entries too close to VWAP
+      - Reduce maximum volatility threshold - avoid volatile markets
+      - Reduce take profit multiplier - targets too ambitious
+
+🎯 Strategy: 20251124_041055_Stoikov_Market_Making_Inventory_Ma
+   Total Trades: 125
+   Win Rate: 52.0%
+   Profit Factor: 0.87
+   Total PnL: $+273.23
+   Avg Win: $58.16 | Avg Loss: $64.63
+   Consecutive Losses: 0
+   Status: ✅ ACTIVE
+   📉 Loss Patterns: LOW_DEVIATION, HIGH_VOLATILITY, FAR_TARGETS
+   💡 Suggestions:
+      - Increase minimum deviation threshold - entries too close to VWAP
+      - Reduce maximum volatility threshold - avoid volatile markets
+      - Reduce take profit multiplier - targets too ambitious
+
+🎯 Strategy: 20251124_033154_Market_Maker_Inventory_Management_
+   Total Trades: 95
+   Win Rate: 48.4%
+   Profit Factor: 0.90
+   Total PnL: $+134.06
+   Avg Win: $58.02 | Avg Loss: $55.46
+   Consecutive Losses: 0
+   Status: ✅ ACTIVE
+   📉 Loss Patterns: LOW_DEVIATION, HIGH_VOLATILITY, FAR_TARGETS
+   💡 Suggestions:
+      - Increase minimum deviation threshold - entries too close to VWAP
+      - Reduce maximum volatility threshold - avoid volatile markets
+      - Reduce take profit multiplier - targets too ambitious
+
+🎯 Strategy: 20251123_221103_VWAP_Mean_Reversion_Intraday_Strat
+   Total Trades: 15
+   Win Rate: 66.7%
+   Profit Factor: 3.04
+   Total PnL: $+383.32
+   Avg Win: $0.00 | Avg Loss: $0.00
+   Consecutive Losses: 0
+   Status: ✅ ACTIVE
+   📉 Loss Patterns: HIGH_VOLATILITY, FAR_TARGETS
+   💡 Suggestions:
+      - Reduce maximum volatility threshold - avoid volatile markets
+      - Reduce take profit multiplier - targets too ambitious
+
+🎯 Strategy: 20251124_052350_Reversal_During_Earnings_Announcem
+   Total Trades: 15
+   Win Rate: 66.7%
+   Profit Factor: 2.93
+   Total PnL: $+369.64
+   Avg Win: $0.00 | Avg Loss: $0.00
+   Consecutive Losses: 0
+   Status: ✅ ACTIVE
+   📉 Loss Patterns: HIGH_VOLATILITY, FAR_TARGETS
+   💡 Suggestions:
+      - Reduce maximum volatility threshold - avoid volatile markets
+      - Reduce take profit multiplier - targets too ambitious
+
+🎯 Strategy: 20251124_040640_Market_Maker_Inventory_Rebalancing
+   Total Trades: 110
+   Win Rate: 45.5%
+   Profit Factor: 0.82
+   Total PnL: $-721.11
+   Avg Win: $57.39 | Avg Loss: $61.01
+   Consecutive Losses: 0
+   Status: ✅ ACTIVE
+   📉 Loss Patterns: LOW_DEVIATION, HIGH_VOLATILITY, FAR_TARGETS
+   💡 Suggestions:
+      - Increase minimum deviation threshold - entries too close to VWAP
+      - Reduce maximum volatility threshold - avoid volatile markets
+      - Reduce take profit multiplier - targets too ambitious
+
+🎯 Strategy: 20251124_034046_AI_Neural_Network_Predictive_Model
+   Total Trades: 22
+   Win Rate: 50.0%
+   Profit Factor: 1.41
+   Total PnL: $+297.00
+   Avg Win: $93.38 | Avg Loss: $66.38
+   Consecutive Losses: 1
+   Status: ✅ ACTIVE
+   📉 Loss Patterns: HIGH_VOLATILITY, FAR_TARGETS
+   💡 Suggestions:
+      - Reduce maximum volatility threshold - avoid volatile markets
+      - Reduce take profit multiplier - targets too ambitious
+
+🎯 Strategy: 20251124_042700_Cryptocurrency_Cointegration_Pairs
+   Total Trades: 19
+   Win Rate: 42.1%
+   Profit Factor: 0.64
+   Total PnL: $-257.45
+   Avg Win: $56.97 | Avg Loss: $64.84
+   Consecutive Losses: 1
+   Status: ✅ ACTIVE
+   📉 Loss Patterns: HIGH_VOLATILITY, FAR_TARGETS
+   💡 Suggestions:
+      - Reduce maximum volatility threshold - avoid volatile markets
+      - Reduce take profit multiplier - targets too ambitious
+
+🎯 Strategy: 20251124_043056_Machine_Learning_Seasonality_Patte
+   Total Trades: 2
+   Win Rate: 100.0%
+   Profit Factor: 0.00
+   Total PnL: $+22.10
+   Avg Win: $11.05 | Avg Loss: $0.00
+   Consecutive Losses: 0
+   Status: ✅ ACTIVE
+
+🎯 Strategy: 20251124_044515_Correlation_Trading_Strategy_with_
+   Total Trades: 2
+   Win Rate: 100.0%
+   Profit Factor: 0.00
+   Total PnL: $+22.08
+   Avg Win: $11.04 | Avg Loss: $0.00
+   Consecutive Losses: 0
+   Status: ✅ ACTIVE
+================================================================================
+
+💾 State saved: 436 trades, 10 strategy params
+
+================================================================================
+🔄 TRADEPEX ADAPTIVE - Dynamic Strategy Optimizer
+================================================================================
+⏰ Cycle: 170 | Runtime: 11:08:29.977039
+💰 Capital: $22491.76 | Total PnL: $-1244.59
+📊 Open: 13/40 | Closed: 436
+🔄 Optimization: ACTIVE (analyzing 436 trades)
+📈 Win Rate: 47.2% (206/436)
+
+📊 OPEN POSITIONS (waiting to close for analysis):
+   📍 20251124_061812_Market_Maker_Invent
+      BUY LINK @ $12.28 → Now: $12.21 (-0.52%) 🔴 $-1143.29
+      🎯 Target: $12.31 (+0.77% away) | 🛑 Stop: $12.09 (0.98% away)
+      ⏱️  Time: 27min | Dev: 0.16% | Vol: 3.67%
+   📍 20251124_033154_Market_Maker_Invent
+      BUY LINK @ $12.28 → Now: $12.21 (-0.52%) 🔴 $-1133.50
+      🎯 Target: $12.31 (+0.77% away) | 🛑 Stop: $12.09 (0.99% away)
+      ⏱️  Time: 27min | Dev: 0.15% | Vol: 3.67%
+   📍 20251124_040640_Market_Maker_Invent
+      BUY LINK @ $12.27 → Now: $12.21 (-0.50%) 🔴 $-1093.69
+      🎯 Target: $12.30 (+0.75% away) | 🛑 Stop: $12.09 (1.00% away)
+      ⏱️  Time: 27min | Dev: 0.13% | Vol: 3.67%
+   📍 20251124_061812_Market_Maker_Invent
+      BUY ETH @ $2830.95 → Now: $2821.95 (-0.32%) 🔴 $-692.24
+      🎯 Target: $2835.92 (+0.50% away) | 🛑 Stop: $2788.49 (1.19% away)
+      ⏱️  Time: 26min | Dev: 0.12% | Vol: 3.65%
+   📍 20251124_033154_Market_Maker_Invent
+      BUY ETH @ $2830.95 → Now: $2821.95 (-0.32%) 🔴 $-691.66
+      🎯 Target: $2835.92 (+0.50% away) | 🛑 Stop: $2788.49 (1.19% away)
+      ⏱️  Time: 26min | Dev: 0.12% | Vol: 3.65%
+   📍 20251124_040640_Market_Maker_Invent
+      BUY ETH @ $2830.95 → Now: $2821.95 (-0.32%) 🔴 $-691.07
+      🎯 Target: $2835.92 (+0.50% away) | 🛑 Stop: $2788.49 (1.19% away)
+      ⏱️  Time: 26min | Dev: 0.12% | Vol: 3.65%
+   📍 20251124_061812_Market_Maker_Invent
+      BUY ADA @ $0.39 → Now: $0.39 (-0.11%) 🔴 $-230.23
+      🎯 Target: $0.40 (+0.34% away) | 🛑 Stop: $0.39 (1.40% away)
+      ⏱️  Time: 26min | Dev: 0.16% | Vol: 4.00%
+   📍 20251124_033154_Market_Maker_Invent
+      BUY ADA @ $0.39 → Now: $0.39 (-0.11%) 🔴 $-230.04
+      🎯 Target: $0.40 (+0.34% away) | 🛑 Stop: $0.39 (1.40% away)
+      ⏱️  Time: 26min | Dev: 0.16% | Vol: 4.00%
+   📍 20251124_040640_Market_Maker_Invent
+      BUY ADA @ $0.39 → Now: $0.39 (-0.11%) 🔴 $-229.85
+      🎯 Target: $0.40 (+0.34% away) | 🛑 Stop: $0.39 (1.40% away)
+      ⏱️  Time: 26min | Dev: 0.16% | Vol: 4.00%
+   📍 20251124_061812_Market_Maker_Invent
+      BUY DOT @ $2.10 → Now: $2.09 (-0.35%) 🔴 $-762.59
+      🎯 Target: $2.11 (+0.81% away) | 🛑 Stop: $2.07 (1.15% away)
+      ⏱️  Time: 24min | Dev: 0.16% | Vol: 4.02%
+   📍 20251124_040640_Market_Maker_Invent
+      BUY DOT @ $2.10 → Now: $2.09 (-0.34%) 🔴 $-741.43
+      🎯 Target: $2.11 (+0.81% away) | 🛑 Stop: $2.07 (1.16% away)
+      ⏱️  Time: 24min | Dev: 0.17% | Vol: 4.02%
+   📍 20251124_033154_Market_Maker_Invent
+      SELL AVAX @ $12.94 → Now: $12.92 (+0.18%) 🟢 $+399.43
+      🎯 Target: $12.89 (+0.24% away) | 🛑 Stop: $13.14 (1.69% away)
+      ⏱️  Time: 24min | Dev: 0.10% | Vol: 3.94%
+   📍 20251124_040640_Market_Maker_Invent
+      SELL AVAX @ $12.94 → Now: $12.92 (+0.18%) 🟢 $+399.10
+      🎯 Target: $12.89 (+0.24% away) | 🛑 Stop: $13.14 (1.69% away)
+      ⏱️  Time: 24min | Dev: 0.10% | Vol: 3.94%
+
+   🔴 TOTAL PORTFOLIO UNREALIZED P&L: $-6841.05
+================================================================================
+
+
+🔄 CYCLE 171 - 13:34:21
+   BTC: $87366.53
+   ETH: $2821.33
+   SOL: $128.76
+   XRP: $2.03
+   ADA: $0.39
+   DOT: $2.09
+   LINK: $12.21
+   AVAX: $12.92
+
+================================================================================
+🛑 PORTFOLIO STOP LOSS TRIGGERED!
+   Unrealized: $-865.14 <= $-400.00
+   Closing ALL positions to limit losses!
+================================================================================
+⏸️   Strategy 20251124_061812_Market_Maker_Inventory_Rebalancing_Strategy PAUSED after 3 consecutive losses
+   Will AUTO-UNPAUSE after 10 cycles
+🔒 CLOSED: 20251124_061812_Market_Maker_Inventory_Rebalancing
+   PnL: $-143.36 (-0.53%) - PORTFOLIO_STOP_LOSS (-0.53%)
+🔒 CLOSED: 20251124_033154_Market_Maker_Inventory_Management_
+   PnL: $-142.13 (-0.52%) - PORTFOLIO_STOP_LOSS (-0.52%)
+🔒 CLOSED: 20251124_040640_Market_Maker_Inventory_Rebalancing
+   PnL: $-137.15 (-0.50%) - PORTFOLIO_STOP_LOSS (-0.50%)
+🔒 CLOSED: 20251124_061812_Market_Maker_Inventory_Rebalancing
+   PnL: $-92.49 (-0.34%) - PORTFOLIO_STOP_LOSS (-0.34%)
+🔒 CLOSED: 20251124_033154_Market_Maker_Inventory_Management_
+   PnL: $-92.41 (-0.34%) - PORTFOLIO_STOP_LOSS (-0.34%)
+🔒 CLOSED: 20251124_040640_Market_Maker_Inventory_Rebalancing
+   PnL: $-92.34 (-0.34%) - PORTFOLIO_STOP_LOSS (-0.34%)
+🔒 CLOSED: 20251124_061812_Market_Maker_Inventory_Rebalancing
+   PnL: $-28.78 (-0.11%) - PORTFOLIO_STOP_LOSS (-0.11%)
+⏸️   Strategy 20251124_033154_Market_Maker_Inventory_Management_Strategy PAUSED after 3 consecutive losses
+   Will AUTO-UNPAUSE after 10 cycles
+🔒 CLOSED: 20251124_033154_Market_Maker_Inventory_Management_
+   PnL: $-28.76 (-0.11%) - PORTFOLIO_STOP_LOSS (-0.11%)
+⏸️   Strategy 20251124_040640_Market_Maker_Inventory_Rebalancing_Strategy_with_Adverse_Selection_Modeling PAUSED after 3 consecutive l
+osses
+   Will AUTO-UNPAUSE after 10 cycles
+🔒 CLOSED: 20251124_040640_Market_Maker_Inventory_Rebalancing
+   PnL: $-28.73 (-0.11%) - PORTFOLIO_STOP_LOSS (-0.11%)
+🔒 CLOSED: 20251124_061812_Market_Maker_Inventory_Rebalancing
+   PnL: $-95.32 (-0.35%) - PORTFOLIO_STOP_LOSS (-0.35%)
+🔒 CLOSED: 20251124_040640_Market_Maker_Inventory_Rebalancing
+   PnL: $-92.68 (-0.34%) - PORTFOLIO_STOP_LOSS (-0.34%)
+🔒 CLOSED: 20251124_033154_Market_Maker_Inventory_Management_
+   PnL: $+54.53 (+0.20%) - PORTFOLIO_STOP_LOSS (+0.20%)
+🔒 CLOSED: 20251124_040640_Market_Maker_Inventory_Rebalancing
+   PnL: $+54.48 (+0.20%) - PORTFOLIO_STOP_LOSS (+0.20%)
+
+============================================================
+📊 REAL-TIME PERFORMANCE ALERTS
+============================================================
+🚨 ALERT: 20251124_061812_Market_Maker_Inventory_R has 6 consecutive losses!
+🚨 ALERT: 20251124_061812_Market_Maker_Inventory_R recent win rate only 0.0%!
+   Recent PnL: $-474.88
+🚨 ALERT: 20251124_061812_Market_Maker_Inventory_R rapid loss: $-474.88 in last 5 trades
+🚨 ALERT: 20251124_041055_Stoikov_Market_Making_In rapid loss: $-95.49 in last 5 trades
+🚨 ALERT: 20251124_033154_Market_Maker_Inventory_M rapid loss: $-172.33 in last 5 trades
+🚨 ALERT: 20251124_040640_Market_Maker_Inventory_R rapid loss: $-296.42 in last 5 trades
+🚨 ALERT: 20251124_034046_AI_Neural_Network_Predic recent win rate only 0.0%!
+   Recent PnL: $-284.28
+🚨 ALERT: 20251124_034046_AI_Neural_Network_Predic rapid loss: $-284.28 in last 5 trades
+============================================================
+
+
+📊 No open positions - scanning for signals...
+
+🚀 SIGNAL: 20251124_041055_Stoikov_Market_Making_In - BUY BTC
+   Type: UNKNOWN | Reason: Market Making BUY: Price $87238.56 below mid (trend: SIDEWAYS)
+🎯 OPENED: 20251124_041055_Stoikov_Market_Making_Inventory_Ma
+   BUY BTC @ $87238.56
+   Target: $87528.65 | Stop: $85929.98
+   Deviation: 0.17% | Volatility: 3.20%
+   Regime: UNKNOWN
+   💰 Entry Fee: $18.17
+
+🚀 SIGNAL: 20251124_042700_Cryptocurrency_Cointegra - SELL SOL
+   Type: UNKNOWN | Reason: Pairs/Z-Score: Z=2.46 (overbought, expecting reversion)
+🎯 OPENED: 20251124_042700_Cryptocurrency_Cointegration_Pairs
+   SELL SOL @ $128.80
+   Target: $127.27 | Stop: $130.73
+   Deviation: 2.46% | Volatility: 3.88%
+   Regime: UNKNOWN
+   💰 Entry Fee: $18.15
+
+🚀 SIGNAL: 20251124_042700_Cryptocurrency_Cointegra - SELL ADA
+   Type: UNKNOWN | Reason: Pairs/Z-Score: Z=2.14 (overbought, expecting reversion)
+🎯 OPENED: 20251124_042700_Cryptocurrency_Cointegration_Pairs
+   SELL ADA @ $0.39
+   Target: $0.39 | Stop: $0.40
+   Deviation: 2.14% | Volatility: 3.93%
+   Regime: UNKNOWN
+   💰 Entry Fee: $18.14
+
+🚀 SIGNAL: 20251124_061812_Market_Maker_Inventory_R - BUY DOT
+   Type: UNKNOWN | Reason: Market Making BUY: Price $2.09 below mid (trend: UP)
+
+🔄 AUTO-UNPAUSE: 20251124_061812_Market_Maker_Inventory_R after 171 cycles
+   Was paused for: 3 consecutive losses
+   Now trading again! Watch for improvement.
+
+🎯 OPENED: 20251124_061812_Market_Maker_Inventory_Rebalancing
+   BUY DOT @ $2.09
+   Target: $2.10 | Stop: $2.06
+   Deviation: 0.14% | Volatility: 3.98%
+   Regime: UNKNOWN
+   💰 Entry Fee: $18.12
+
+🚀 SIGNAL: 20251124_041055_Stoikov_Market_Making_In - BUY DOT
+   Type: UNKNOWN | Reason: Market Making BUY: Price $2.09 below mid (trend: UP)
+🎯 OPENED: 20251124_041055_Stoikov_Market_Making_Inventory_Ma
+   BUY DOT @ $2.09
+   Target: $2.10 | Stop: $2.06
+   Deviation: 0.14% | Volatility: 3.98%
+   Regime: UNKNOWN
+   💰 Entry Fee: $18.11
+
+🚀 SIGNAL: 20251124_033154_Market_Maker_Inventory_M - BUY DOT
+   Type: UNKNOWN | Reason: Market Making BUY: Price $2.09 below mid (trend: UP)
+
+🔄 AUTO-UNPAUSE: 20251124_033154_Market_Maker_Inventory_M after 171 cycles
+   Was paused for: 3 consecutive losses
+   Now trading again! Watch for improvement.
+
+🎯 OPENED: 20251124_033154_Market_Maker_Inventory_Management_
+   BUY DOT @ $2.09
+   Target: $2.10 | Stop: $2.06
+   Deviation: 0.14% | Volatility: 3.98%
+   Regime: UNKNOWN
+   💰 Entry Fee: $18.09
+
+🚀 SIGNAL: 20251124_061812_Market_Maker_Inventory_R - BUY LINK
+   Type: UNKNOWN | Reason: TREND BUY: Price $12.24 rising, trend UP - LONG!
+🎯 OPENED: 20251124_061812_Market_Maker_Inventory_Rebalancing
+   BUY LINK @ $12.24
+   Target: $12.26 | Stop: $12.05
+   Deviation: 0.17% | Volatility: 3.66%
+   Regime: UNKNOWN
+   💰 Entry Fee: $18.07
+
+🚀 SIGNAL: 20251124_041055_Stoikov_Market_Making_In - BUY LINK
+   Type: UNKNOWN | Reason: TREND BUY: Price $12.24 rising, trend UP - LONG!
+🎯 OPENED: 20251124_041055_Stoikov_Market_Making_Inventory_Ma
+   BUY LINK @ $12.24
+   Target: $12.26 | Stop: $12.05
+   Deviation: 0.17% | Volatility: 3.66%
+   Regime: UNKNOWN
+   💰 Entry Fee: $18.06
+
+🚀 SIGNAL: 20251124_033154_Market_Maker_Inventory_M - BUY LINK
+   Type: UNKNOWN | Reason: TREND BUY: Price $12.24 rising, trend UP - LONG!
+🎯 OPENED: 20251124_033154_Market_Maker_Inventory_Management_
+   BUY LINK @ $12.24
+   Target: $12.26 | Stop: $12.05
+   Deviation: 0.17% | Volatility: 3.66%
+   Regime: UNKNOWN
+   💰 Entry Fee: $18.04
+
+🚀 SIGNAL: 20251124_042700_Cryptocurrency_Cointegra - SELL LINK
+   Type: UNKNOWN | Reason: Pairs/Z-Score: Z=2.07 (overbought, expecting reversion)
+🎯 OPENED: 20251124_042700_Cryptocurrency_Cointegration_Pairs
+   SELL LINK @ $12.24
+   Target: $12.11 | Stop: $12.42
+   Deviation: 2.07% | Volatility: 3.66%
+   Regime: UNKNOWN
+   💰 Entry Fee: $18.03
+
+================================================================================
+🔄 TRADEPEX ADAPTIVE - Dynamic Strategy Optimizer
+================================================================================
+⏰ Cycle: 171 | Runtime: 11:19:45.643526
+💰 Capital: $21445.64 | Total PnL: $-2109.73
+📊 Open: 10/40 | Closed: 449
+🔄 Optimization: ACTIVE (analyzing 449 trades)
+📈 Win Rate: 46.3% (208/449)
+
+📊 OPEN POSITIONS (waiting to close for analysis):
+   📍 20251124_041055_Stoikov_Market_Maki
+      BUY BTC @ $87238.56 → Now: $87340.21 (+0.12%) 🟢 $+241.91
+      🎯 Target: $87528.65 (+0.22% away) | 🛑 Stop: $85929.98 (1.61% away)
+      ⏱️  Time: 7min | Dev: 0.17% | Vol: 3.20%
+   📍 20251124_042700_Cryptocurrency_Coin
+      SELL SOL @ $128.80 → Now: $128.80 (+0.00%) 🔴 $+0.00
+      🎯 Target: $127.27 (+1.19% away) | 🛑 Stop: $130.73 (1.50% away)
+      ⏱️  Time: 1min | Dev: 2.46% | Vol: 3.88%
+   📍 20251124_042700_Cryptocurrency_Coin
+      SELL ADA @ $0.39 → Now: $0.39 (+0.00%) 🔴 $+0.00
+      🎯 Target: $0.39 (+1.34% away) | 🛑 Stop: $0.40 (1.50% away)
+      ⏱️  Time: 0min | Dev: 2.14% | Vol: 3.93%
+   📍 20251124_061812_Market_Maker_Invent
+      BUY DOT @ $2.09 → Now: $2.09 (+0.00%) 🔴 $+0.00
+      🎯 Target: $2.10 (+0.43% away) | 🛑 Stop: $2.06 (1.50% away)
+      ⏱️  Time: 0min | Dev: 0.14% | Vol: 3.98%
+   📍 20251124_041055_Stoikov_Market_Maki
+      BUY DOT @ $2.09 → Now: $2.09 (+0.00%) 🔴 $+0.00
+      🎯 Target: $2.10 (+0.43% away) | 🛑 Stop: $2.06 (1.50% away)
+      ⏱️  Time: 0min | Dev: 0.14% | Vol: 3.98%
+   📍 20251124_033154_Market_Maker_Invent
+      BUY DOT @ $2.09 → Now: $2.09 (+0.00%) 🔴 $+0.00
+      🎯 Target: $2.10 (+0.43% away) | 🛑 Stop: $2.06 (1.50% away)
+      ⏱️  Time: 0min | Dev: 0.14% | Vol: 3.98%
+   📍 20251124_061812_Market_Maker_Invent
+      BUY LINK @ $12.24 → Now: $12.24 (+0.01%) 🟢 $+16.88
+      🎯 Target: $12.26 (+0.22% away) | 🛑 Stop: $12.05 (1.51% away)
+      ⏱️  Time: 0min | Dev: 0.17% | Vol: 3.66%
+   📍 20251124_041055_Stoikov_Market_Maki
+      BUY LINK @ $12.24 → Now: $12.24 (+0.01%) 🟢 $+16.87
+      🎯 Target: $12.26 (+0.22% away) | 🛑 Stop: $12.05 (1.51% away)
+      ⏱️  Time: 0min | Dev: 0.17% | Vol: 3.66%
+   📍 20251124_033154_Market_Maker_Invent
+      BUY LINK @ $12.24 → Now: $12.24 (+0.01%) 🟢 $+16.85
+      🎯 Target: $12.26 (+0.22% away) | 🛑 Stop: $12.05 (1.51% away)
+      ⏱️  Time: 0min | Dev: 0.17% | Vol: 3.66%
+   📍 20251124_042700_Cryptocurrency_Coin
+      SELL LINK @ $12.24 → Now: $12.24 (-0.00%) 🔴 $-8.42
+      🎯 Target: $12.11 (+1.03% away) | 🛑 Stop: $12.42 (1.50% away)
+      ⏱️  Time: 0min | Dev: 2.07% | Vol: 3.66%
+
+   🟢 TOTAL PORTFOLIO UNREALIZED P&L: $+284.10
+   💰 TAKE PROFIT THRESHOLD HIT! ($+284.10 >= $200.0)
+================================================================================
+
+
+🔄 CYCLE 172 - 13:45:36
+   BTC: $87342.71
+   ETH: $2820.91
+   SOL: $128.82
+   XRP: $2.03
+   ADA: $0.39
+   DOT: $2.09
+   LINK: $12.24
+   AVAX: $12.90
+
+============================================================
+📊 REAL-TIME PERFORMANCE ALERTS
+============================================================
+🚨 ALERT: 20251124_061812_Market_Maker_Inventory_R recent win rate only 0.0%!
+   Recent PnL: $-474.88
+🚨 ALERT: 20251124_061812_Market_Maker_Inventory_R rapid loss: $-474.88 in last 5 trades
+🚨 ALERT: 20251124_041055_Stoikov_Market_Making_In rapid loss: $-95.49 in last 5 trades
+🚨 ALERT: 20251124_033154_Market_Maker_Inventory_M rapid loss: $-172.33 in last 5 trades
+🚨 ALERT: 20251124_040640_Market_Maker_Inventory_R rapid loss: $-296.42 in last 5 trades
+🚨 ALERT: 20251124_034046_AI_Neural_Network_Predic recent win rate only 0.0%!
+   Recent PnL: $-284.28
+🚨 ALERT: 20251124_034046_AI_Neural_Network_Predic rapid loss: $-284.28 in last 5 trades
+============================================================
+
+
+📊 OPEN POSITIONS (10):
+   🟢 BUY BTC @ $87238.56 → $87342.71 (+0.12%) = $+247.86
+   🔴 SELL SOL @ $128.80 → $128.82 (-0.01%) = $-25.12
+   🔴 SELL ADA @ $0.39 → $0.39 (+0.00%) = $+0.00
+   🟢 BUY DOT @ $2.09 → $2.09 (+0.00%) = $+9.90
+   🟢 BUY DOT @ $2.09 → $2.09 (+0.00%) = $+9.89
+   🟢 BUY DOT @ $2.09 → $2.09 (+0.00%) = $+9.88
+   🟢 BUY LINK @ $12.24 → $12.24 (+0.03%) = $+65.84
+   🟢 BUY LINK @ $12.24 → $12.24 (+0.03%) = $+65.79
+   🟢 BUY LINK @ $12.24 → $12.24 (+0.03%) = $+65.73
+   🔴 SELL LINK @ $12.24 → $12.24 (-0.03%) = $-57.26
+   🟢 TOTAL UNREALIZED P&L: $+392.52
+   💰 TAKE PROFIT THRESHOLD REACHED! ($+392.52 >= $200.0)
+
+💰 PORTFOLIO TAKE PROFIT TRIGGERED! Closing all 10 positions for $+392.52
+
+🚀 SIGNAL: 20251124_042700_Cryptocurrency_Cointegra - SELL SOL
+   Type: UNKNOWN | Reason: Pairs/Z-Score: Z=2.23 (overbought, expecting reversion)
+⏸️   BLOCKED: 20251124_042700_Cryptocurrency SOL - Already have position on SOL
+
+🚀 SIGNAL: 20251124_042700_Cryptocurrency_Cointegra - SELL ADA
+   Type: UNKNOWN | Reason: Pairs/Z-Score: Z=2.04 (overbought, expecting reversion)
+⏸️   BLOCKED: 20251124_042700_Cryptocurrency ADA - Already have position on ADA
+
+🚀 SIGNAL: 20251124_042700_Cryptocurrency_Cointegra - SELL LINK
+   Type: UNKNOWN | Reason: Pairs/Z-Score: Z=2.05 (overbought, expecting reversion)
+⏸️   BLOCKED: 20251124_042700_Cryptocurrency LINK - Already have position on LINK
+
+================================================================================
+🔄 TRADEPEX ADAPTIVE - Dynamic Strategy Optimizer
+================================================================================
+⏰ Cycle: 172 | Runtime: 11:21:32.269841
+💰 Capital: $21445.64 | Total PnL: $-2109.73
+📊 Open: 10/40 | Closed: 449
+🔄 Optimization: ACTIVE (analyzing 449 trades)
+📈 Win Rate: 46.3% (208/449)
+
+📊 OPEN POSITIONS (waiting to close for analysis):
+   📍 20251124_041055_Stoikov_Market_Maki
+      BUY BTC @ $87238.56 → Now: $87374.64 (+0.16%) 🟢 $+323.85
+      🎯 Target: $87528.65 (+0.18% away) | 🛑 Stop: $85929.98 (1.65% away)
+      ⏱️  Time: 9min | Dev: 0.17% | Vol: 3.20%
+   📍 20251124_042700_Cryptocurrency_Coin
+      SELL SOL @ $128.80 → Now: $128.83 (-0.03%) 🔴 $-53.63
+      🎯 Target: $127.27 (+1.22% away) | 🛑 Stop: $130.73 (1.47% away)
+      ⏱️  Time: 3min | Dev: 2.46% | Vol: 3.88%
+   📍 20251124_042700_Cryptocurrency_Coin
+      SELL ADA @ $0.39 → Now: $0.39 (+0.03%) 🟢 $+62.97
+      🎯 Target: $0.39 (+1.31% away) | 🛑 Stop: $0.40 (1.53% away)
+      ⏱️  Time: 2min | Dev: 2.14% | Vol: 3.93%
+   📍 20251124_061812_Market_Maker_Invent
+      BUY DOT @ $2.09 → Now: $2.09 (+0.00%) 🟢 $+9.90
+      🎯 Target: $2.10 (+0.43% away) | 🛑 Stop: $2.06 (1.50% away)
+      ⏱️  Time: 2min | Dev: 0.14% | Vol: 3.98%
+   📍 20251124_041055_Stoikov_Market_Maki
+      BUY DOT @ $2.09 → Now: $2.09 (+0.00%) 🟢 $+9.89
+      🎯 Target: $2.10 (+0.43% away) | 🛑 Stop: $2.06 (1.50% away)
+      ⏱️  Time: 2min | Dev: 0.14% | Vol: 3.98%
+   📍 20251124_033154_Market_Maker_Invent
+      BUY DOT @ $2.09 → Now: $2.09 (+0.00%) 🟢 $+9.88
+      🎯 Target: $2.10 (+0.43% away) | 🛑 Stop: $2.06 (1.50% away)
+      ⏱️  Time: 2min | Dev: 0.14% | Vol: 3.98%
+   📍 20251124_061812_Market_Maker_Invent
+      BUY LINK @ $12.24 → Now: $12.24 (+0.06%) 🟢 $+118.18
+      🎯 Target: $12.26 (+0.17% away) | 🛑 Stop: $12.05 (1.56% away)
+      ⏱️  Time: 2min | Dev: 0.17% | Vol: 3.66%
+   📍 20251124_041055_Stoikov_Market_Maki
+      BUY LINK @ $12.24 → Now: $12.24 (+0.05%) 🟢 $+113.02
+      🎯 Target: $12.26 (+0.17% away) | 🛑 Stop: $12.05 (1.55% away)
+      ⏱️  Time: 2min | Dev: 0.17% | Vol: 3.66%
+   📍 20251124_033154_Market_Maker_Invent
+      BUY LINK @ $12.24 → Now: $12.24 (+0.04%) 🟢 $+75.85
+      🎯 Target: $12.26 (+0.19% away) | 🛑 Stop: $12.05 (1.54% away)
+      ⏱️  Time: 2min | Dev: 0.17% | Vol: 3.66%
+   📍 20251124_042700_Cryptocurrency_Coin
+      SELL LINK @ $12.24 → Now: $12.24 (-0.03%) 🔴 $-67.36
+      🎯 Target: $12.11 (+1.06% away) | 🛑 Stop: $12.42 (1.47% away)
+      ⏱️  Time: 2min | Dev: 2.07% | Vol: 3.66%
+
+   🟢 TOTAL PORTFOLIO UNREALIZED P&L: $+602.56
+   💰 TAKE PROFIT THRESHOLD HIT! ($+602.56 >= $200.0)
+================================================================================
+
+
+🔄 CYCLE 173 - 13:47:23
+   BTC: $87332.74
+   ETH: $2820.72
+   SOL: $128.83
+   XRP: $2.03
+   ADA: $0.39
+   DOT: $2.09
+   LINK: $12.23
+   AVAX: $12.90
+
+============================================================
+📊 REAL-TIME PERFORMANCE ALERTS
+============================================================
+🚨 ALERT: 20251124_061812_Market_Maker_Inventory_R recent win rate only 0.0%!
+   Recent PnL: $-474.88
+🚨 ALERT: 20251124_061812_Market_Maker_Inventory_R rapid loss: $-474.88 in last 5 trades
+🚨 ALERT: 20251124_041055_Stoikov_Market_Making_In rapid loss: $-95.49 in last 5 trades
+🚨 ALERT: 20251124_033154_Market_Maker_Inventory_M rapid loss: $-172.33 in last 5 trades
+🚨 ALERT: 20251124_040640_Market_Maker_Inventory_R rapid loss: $-296.42 in last 5 trades
+🚨 ALERT: 20251124_034046_AI_Neural_Network_Predic recent win rate only 0.0%!
+   Recent PnL: $-284.28
+🚨 ALERT: 20251124_034046_AI_Neural_Network_Predic rapid loss: $-284.28 in last 5 trades
+============================================================
+
+
+📊 OPEN POSITIONS (10):
+   🟢 BUY BTC @ $87238.56 → $87332.74 (+0.11%) = $+224.14
+   🔴 SELL SOL @ $128.80 → $128.83 (-0.03%) = $-53.63
+   🟢 SELL ADA @ $0.39 → $0.39 (+0.13%) = $+269.22
+   🔴 BUY DOT @ $2.09 → $2.09 (-0.01%) = $-19.80
+   🔴 BUY DOT @ $2.09 → $2.09 (-0.01%) = $-19.78
+   🔴 BUY DOT @ $2.09 → $2.09 (-0.01%) = $-19.76
+   🔴 BUY LINK @ $12.24 → $12.23 (-0.01%) = $-27.01
+   🔴 BUY LINK @ $12.24 → $12.23 (-0.01%) = $-26.99
+   🔴 BUY LINK @ $12.24 → $12.23 (-0.01%) = $-26.97
+   🟢 SELL LINK @ $12.24 → $12.23 (+0.02%) = $+35.36
+   🟢 TOTAL UNREALIZED P&L: $+334.77
+   💰 TAKE PROFIT THRESHOLD REACHED! ($+334.77 >= $200.0)
+
+💰 PORTFOLIO TAKE PROFIT TRIGGERED! Closing all 10 positions for $+334.77
+
+🚀 SIGNAL: 20251124_042700_Cryptocurrency_Cointegra - SELL SOL
+   Type: UNKNOWN | Reason: Pairs/Z-Score: Z=2.32 (overbought, expecting reversion)
+⏸️   BLOCKED: 20251124_042700_Cryptocurrency SOL - Already have position on SOL
+
+================================================================================
+🔄 TRADEPEX ADAPTIVE - Dynamic Strategy Optimizer
+================================================================================
+⏰ Cycle: 173 | Runtime: 11:23:18.378126
+💰 Capital: $21445.64 | Total PnL: $-2109.73
+📊 Open: 10/40 | Closed: 449
+🔄 Optimization: ACTIVE (analyzing 449 trades)
+📈 Win Rate: 46.3% (208/449)
+
+📊 OPEN POSITIONS (waiting to close for analysis):
+   📍 20251124_041055_Stoikov_Market_Maki
+      BUY BTC @ $87238.56 → Now: $87282.56 (+0.05%) 🟢 $+104.71
+      🎯 Target: $87528.65 (+0.28% away) | 🛑 Stop: $85929.98 (1.55% away)
+      ⏱️  Time: 11min | Dev: 0.17% | Vol: 3.20%
+   📍 20251124_042700_Cryptocurrency_Coin
+      SELL SOL @ $128.80 → Now: $128.60 (+0.16%) 🟢 $+321.95
+      🎯 Target: $127.27 (+1.04% away) | 🛑 Stop: $130.73 (1.66% away)
+      ⏱️  Time: 4min | Dev: 2.46% | Vol: 3.88%
+   📍 20251124_042700_Cryptocurrency_Coin
+      SELL ADA @ $0.39 → Now: $0.39 (+0.21%) 🟢 $+434.53
+      🎯 Target: $0.39 (+1.13% away) | 🛑 Stop: $0.40 (1.71% away)
+      ⏱️  Time: 4min | Dev: 2.14% | Vol: 3.93%
+   📍 20251124_061812_Market_Maker_Invent
+      BUY DOT @ $2.09 → Now: $2.09 (-0.04%) 🔴 $-89.09
+      🎯 Target: $2.10 (+0.48% away) | 🛑 Stop: $2.06 (1.46% away)
+      ⏱️  Time: 4min | Dev: 0.14% | Vol: 3.98%
+   📍 20251124_041055_Stoikov_Market_Maki
+      BUY DOT @ $2.09 → Now: $2.09 (-0.04%) 🔴 $-89.01
+      🎯 Target: $2.10 (+0.48% away) | 🛑 Stop: $2.06 (1.46% away)
+      ⏱️  Time: 4min | Dev: 0.14% | Vol: 3.98%
+   📍 20251124_033154_Market_Maker_Invent
+      BUY DOT @ $2.09 → Now: $2.09 (-0.04%) 🔴 $-88.94
+      🎯 Target: $2.10 (+0.48% away) | 🛑 Stop: $2.06 (1.46% away)
+      ⏱️  Time: 4min | Dev: 0.14% | Vol: 3.98%
+   📍 20251124_061812_Market_Maker_Invent
+      BUY LINK @ $12.24 → Now: $12.24 (+0.03%) 🟢 $+55.71
+      🎯 Target: $12.26 (+0.20% away) | 🛑 Stop: $12.05 (1.53% away)
+      ⏱️  Time: 4min | Dev: 0.17% | Vol: 3.66%
+   📍 20251124_041055_Stoikov_Market_Maki
+      BUY LINK @ $12.24 → Now: $12.24 (+0.04%) 🟢 $+74.22
+      🎯 Target: $12.26 (+0.19% away) | 🛑 Stop: $12.05 (1.54% away)
+      ⏱️  Time: 4min | Dev: 0.17% | Vol: 3.66%
+   📍 20251124_033154_Market_Maker_Invent
+      BUY LINK @ $12.24 → Now: $12.24 (+0.04%) 🟢 $+74.16
+      🎯 Target: $12.26 (+0.19% away) | 🛑 Stop: $12.05 (1.54% away)
+      ⏱️  Time: 4min | Dev: 0.17% | Vol: 3.66%
+   📍 20251124_042700_Cryptocurrency_Coin
+      SELL LINK @ $12.24 → Now: $12.24 (-0.03%) 🔴 $-65.68
+      🎯 Target: $12.11 (+1.06% away) | 🛑 Stop: $12.42 (1.47% away)
+      ⏱️  Time: 4min | Dev: 2.07% | Vol: 3.66%
+
+   🟢 TOTAL PORTFOLIO UNREALIZED P&L: $+732.57
+   💰 TAKE PROFIT THRESHOLD HIT! ($+732.57 >= $200.0)
+================================================================================
+
+
+🔄 CYCLE 174 - 13:49:09
+   BTC: $87310.93
+   ETH: $2821.90
+   SOL: $128.60
+   XRP: $2.03
+   ADA: $0.39
+   DOT: $2.09
+   LINK: $12.24
+   AVAX: $12.90
+
+============================================================
+📊 REAL-TIME PERFORMANCE ALERTS
+============================================================
+🚨 ALERT: 20251124_061812_Market_Maker_Inventory_R recent win rate only 0.0%!
+   Recent PnL: $-474.88
+🚨 ALERT: 20251124_061812_Market_Maker_Inventory_R rapid loss: $-474.88 in last 5 trades
+🚨 ALERT: 20251124_041055_Stoikov_Market_Making_In rapid loss: $-95.49 in last 5 trades
+🚨 ALERT: 20251124_033154_Market_Maker_Inventory_M rapid loss: $-172.33 in last 5 trades
+🚨 ALERT: 20251124_040640_Market_Maker_Inventory_R rapid loss: $-296.42 in last 5 trades
+🚨 ALERT: 20251124_034046_AI_Neural_Network_Predic recent win rate only 0.0%!
+   Recent PnL: $-284.28
+🚨 ALERT: 20251124_034046_AI_Neural_Network_Predic rapid loss: $-284.28 in last 5 trades
+============================================================
+
+
+📊 OPEN POSITIONS (10):
+   🟢 BUY BTC @ $87238.56 → $87310.93 (+0.08%) = $+172.23
+   🟢 SELL SOL @ $128.80 → $128.60 (+0.16%) = $+321.95
+   🟢 SELL ADA @ $0.39 → $0.39 (+0.21%) = $+434.53
+   🔴 BUY DOT @ $2.09 → $2.09 (+0.00%) = $+0.00
+   🔴 BUY DOT @ $2.09 → $2.09 (+0.00%) = $+0.00
+   🔴 BUY DOT @ $2.09 → $2.09 (+0.00%) = $+0.00
+   🟢 BUY LINK @ $12.24 → $12.24 (+0.07%) = $+136.75
+   🟢 BUY LINK @ $12.24 → $12.24 (+0.07%) = $+136.64
+   🟢 BUY LINK @ $12.24 → $12.24 (+0.07%) = $+136.52
+   🔴 SELL LINK @ $12.24 → $12.24 (-0.06%) = $-127.98
+   🟢 TOTAL UNREALIZED P&L: $+1210.64
+   💰 TAKE PROFIT THRESHOLD REACHED! ($+1210.64 >= $200.0)
+
+💰 PORTFOLIO TAKE PROFIT TRIGGERED! Closing all 10 positions for $+1210.64
+
+🚀 SIGNAL: 20251124_042700_Cryptocurrency_Cointegra - SELL SOL
+   Type: UNKNOWN | Reason: Pairs/Z-Score: Z=2.08 (overbought, expecting reversion)
+⏸️   BLOCKED: 20251124_042700_Cryptocurrency SOL - Already have position on SOL
+
+🚀 SIGNAL: 20251124_042700_Cryptocurrency_Cointegra - SELL LINK
+   Type: UNKNOWN | Reason: Pairs/Z-Score: Z=2.09 (overbought, expecting reversion)
+⏸️   BLOCKED: 20251124_042700_Cryptocurrency LINK - Already have position on LINK
+
+================================================================================
+🔄 TRADEPEX ADAPTIVE - Dynamic Strategy Optimizer
+================================================================================
+⏰ Cycle: 174 | Runtime: 11:25:03.966200
+💰 Capital: $21445.64 | Total PnL: $-2109.73
+📊 Open: 10/40 | Closed: 449
+🔄 Optimization: ACTIVE (analyzing 449 trades)
+📈 Win Rate: 46.3% (208/449)
+
+📊 OPEN POSITIONS (waiting to close for analysis):
+   📍 20251124_041055_Stoikov_Market_Maki
+      BUY BTC @ $87238.56 → Now: $87328.85 (+0.10%) 🟢 $+214.88
+      🎯 Target: $87528.65 (+0.23% away) | 🛑 Stop: $85929.98 (1.60% away)
+      ⏱️  Time: 12min | Dev: 0.17% | Vol: 3.20%
+   📍 20251124_042700_Cryptocurrency_Coin
+      SELL SOL @ $128.80 → Now: $128.73 (+0.05%) 🟢 $+111.77
+      🎯 Target: $127.27 (+1.14% away) | 🛑 Stop: $130.73 (1.55% away)
+      ⏱️  Time: 6min | Dev: 2.46% | Vol: 3.88%
+   📍 20251124_042700_Cryptocurrency_Coin
+      SELL ADA @ $0.39 → Now: $0.39 (+0.06%) 🟢 $+124.90
+      🎯 Target: $0.39 (+1.28% away) | 🛑 Stop: $0.40 (1.56% away)
+      ⏱️  Time: 6min | Dev: 2.14% | Vol: 3.93%
+   📍 20251124_061812_Market_Maker_Invent
+      BUY DOT @ $2.09 → Now: $2.09 (+0.08%) 🟢 $+158.38
+      🎯 Target: $2.10 (+0.36% away) | 🛑 Stop: $2.06 (1.58% away)
+      ⏱️  Time: 6min | Dev: 0.14% | Vol: 3.98%
+   📍 20251124_041055_Stoikov_Market_Maki
+      BUY DOT @ $2.09 → Now: $2.09 (+0.08%) 🟢 $+158.25
+      🎯 Target: $2.10 (+0.36% away) | 🛑 Stop: $2.06 (1.58% away)
+      ⏱️  Time: 6min | Dev: 0.14% | Vol: 3.98%
+   📍 20251124_033154_Market_Maker_Invent
+      BUY DOT @ $2.09 → Now: $2.09 (+0.08%) 🟢 $+158.11
+      🎯 Target: $2.10 (+0.36% away) | 🛑 Stop: $2.06 (1.58% away)
+      ⏱️  Time: 6min | Dev: 0.14% | Vol: 3.98%
+   📍 20251124_061812_Market_Maker_Invent
+      BUY LINK @ $12.24 → Now: $12.25 (+0.11%) 🟢 $+236.36
+      🎯 Target: $12.26 (+0.11% away) | 🛑 Stop: $12.05 (1.61% away)
+      ⏱️  Time: 6min | Dev: 0.17% | Vol: 3.66%
+   📍 20251124_041055_Stoikov_Market_Maki
+      BUY LINK @ $12.24 → Now: $12.25 (+0.11%) 🟢 $+236.16
+      🎯 Target: $12.26 (+0.11% away) | 🛑 Stop: $12.05 (1.61% away)
+      ⏱️  Time: 6min | Dev: 0.17% | Vol: 3.66%
+   📍 20251124_033154_Market_Maker_Invent
+      BUY LINK @ $12.24 → Now: $12.25 (+0.11%) 🟢 $+235.97
+      🎯 Target: $12.26 (+0.11% away) | 🛑 Stop: $12.05 (1.61% away)
+      ⏱️  Time: 6min | Dev: 0.17% | Vol: 3.66%
+   📍 20251124_042700_Cryptocurrency_Coin
+      SELL LINK @ $12.24 → Now: $12.25 (-0.11%) 🔴 $-227.34
+      🎯 Target: $12.11 (+1.14% away) | 🛑 Stop: $12.42 (1.39% away)
+      ⏱️  Time: 6min | Dev: 2.07% | Vol: 3.66%
+
+   🟢 TOTAL PORTFOLIO UNREALIZED P&L: $+1407.45
+   💰 TAKE PROFIT THRESHOLD HIT! ($+1407.45 >= $200.0)
+================================================================================
+
+
+🔄 CYCLE 175 - 13:50:54
+   BTC: $87328.85
+   ETH: $2824.21
+   SOL: $128.73
+   XRP: $2.03
+   ADA: $0.39
+   DOT: $2.10
+   LINK: $12.25
+   AVAX: $12.91
+
+================================================================================
+💰💰💰 PORTFOLIO TAKE PROFIT TRIGGERED! 💰💰💰
+   Unrealized: $250.11 >= $200.00
+   Closing ALL 10 positions to bank profit!
+================================================================================
+🔒 CLOSED: 20251124_041055_Stoikov_Market_Making_Inventory_Ma
+   PnL: $+26.86 (+0.10%) - PORTFOLIO_TAKE_PROFIT (+0.10%)
+🔒 CLOSED: 20251124_042700_Cryptocurrency_Cointegration_Pairs
+   PnL: $+13.97 (+0.05%) - PORTFOLIO_TAKE_PROFIT (+0.05%)
+🔒 CLOSED: 20251124_042700_Cryptocurrency_Cointegration_Pairs
+   PnL: $+15.61 (+0.06%) - PORTFOLIO_TAKE_PROFIT (+0.06%)
+🔒 CLOSED: 20251124_061812_Market_Maker_Inventory_Rebalancing
+   PnL: $+44.54 (+0.17%) - PORTFOLIO_TAKE_PROFIT (+0.17%)
+🔒 CLOSED: 20251124_041055_Stoikov_Market_Making_Inventory_Ma
+   PnL: $+44.51 (+0.17%) - PORTFOLIO_TAKE_PROFIT (+0.17%)
+🔒 CLOSED: 20251124_033154_Market_Maker_Inventory_Management_
+   PnL: $+44.47 (+0.17%) - PORTFOLIO_TAKE_PROFIT (+0.17%)
+🔒 CLOSED: 20251124_061812_Market_Maker_Inventory_Rebalancing
+   PnL: $+29.55 (+0.11%) - PORTFOLIO_TAKE_PROFIT (+0.11%)
+🔒 CLOSED: 20251124_041055_Stoikov_Market_Making_Inventory_Ma
+   PnL: $+29.52 (+0.11%) - PORTFOLIO_TAKE_PROFIT (+0.11%)
+🔒 CLOSED: 20251124_033154_Market_Maker_Inventory_Management_
+   PnL: $+29.50 (+0.11%) - PORTFOLIO_TAKE_PROFIT (+0.11%)
+🔒 CLOSED: 20251124_042700_Cryptocurrency_Cointegration_Pairs
+   PnL: $-28.42 (-0.11%) - PORTFOLIO_TAKE_PROFIT (-0.11%)
+
+============================================================
+📊 REAL-TIME PERFORMANCE ALERTS
+============================================================
+🚨 ALERT: 20251124_061812_Market_Maker_Inventory_R rapid loss: $-142.50 in last 5 trades
+🚨 ALERT: 20251124_040640_Market_Maker_Inventory_R rapid loss: $-296.42 in last 5 trades
+🚨 ALERT: 20251124_034046_AI_Neural_Network_Predic recent win rate only 0.0%!
+   Recent PnL: $-284.28
+🚨 ALERT: 20251124_034046_AI_Neural_Network_Predic rapid loss: $-284.28 in last 5 trades
+============================================================
+
+
+📊 No open positions - scanning for signals...
+
+🚀 SIGNAL: 20251124_042700_Cryptocurrency_Cointegra - SELL SOL
+   Type: UNKNOWN | Reason: Pairs/Z-Score: Z=2.23 (overbought, expecting reversion)
+🎯 OPENED: 20251124_042700_Cryptocurrency_Cointegration_Pairs
+   SELL SOL @ $128.77
+   Target: $127.30 | Stop: $130.70
+   Deviation: 2.23% | Volatility: 3.86%
+   Regime: UNKNOWN
+   💰 Entry Fee: $18.22
+
+================================================================================
+🔄 TRADEPEX ADAPTIVE - Dynamic Strategy Optimizer
+================================================================================
+⏰ Cycle: 175 | Runtime: 11:26:50.076470
+💰 Capital: $21677.52 | Total PnL: $-1859.62
+📊 Open: 1/40 | Closed: 459
+🔄 Optimization: ACTIVE (analyzing 459 trades)
+📈 Win Rate: 47.3% (217/459)
+
+📊 OPEN POSITIONS (waiting to close for analysis):
+   📍 20251124_042700_Cryptocurrency_Coin
+      SELL SOL @ $128.77 → Now: $128.64 (+0.10%) 🟢 $+212.37
+      🎯 Target: $127.30 (+1.04% away) | 🛑 Stop: $130.70 (1.60% away)
+      ⏱️  Time: 1min | Dev: 2.23% | Vol: 3.86%
+
+   🟢 TOTAL PORTFOLIO UNREALIZED P&L: $+212.37
+   💰 TAKE PROFIT THRESHOLD HIT! ($+212.37 >= $200.0)
+================================================================================
+
+
+🔄 CYCLE 176 - 13:52:38
+   BTC: $87291.46
+   ETH: $2823.08
+   SOL: $128.64
+   XRP: $2.03
+   ADA: $0.39
+   DOT: $2.10
+   LINK: $12.24
+   AVAX: $12.91
+
+============================================================
+📊 REAL-TIME PERFORMANCE ALERTS
+============================================================
+🚨 ALERT: 20251124_061812_Market_Maker_Inventory_R rapid loss: $-142.50 in last 5 trades
+🚨 ALERT: 20251124_040640_Market_Maker_Inventory_R rapid loss: $-296.42 in last 5 trades
+🚨 ALERT: 20251124_034046_AI_Neural_Network_Predic recent win rate only 0.0%!
+   Recent PnL: $-284.28
+🚨 ALERT: 20251124_034046_AI_Neural_Network_Predic rapid loss: $-284.28 in last 5 trades
+============================================================
+
+
+📊 OPEN POSITIONS (1):
+   🟢 SELL SOL @ $128.77 → $128.64 (+0.10%) = $+204.13
+   🟢 TOTAL UNREALIZED P&L: $+204.13
+   💰 TAKE PROFIT THRESHOLD REACHED! ($+204.13 >= $200.0)
+
+💰 PORTFOLIO TAKE PROFIT TRIGGERED! Closing all 1 positions for $+204.13
+
+🚀 SIGNAL: 20251124_042700_Cryptocurrency_Cointegra - SELL SOL
+   Type: UNKNOWN | Reason: Pairs/Z-Score: Z=2.09 (overbought, expecting reversion)
+⏸️   BLOCKED: 20251124_042700_Cryptocurrency SOL - Already have position on SOL
+
+🚀 SIGNAL: 20251124_061812_Market_Maker_Inventory_R - BUY XRP
+   Type: UNKNOWN | Reason: TREND BUY: Price $2.03 rising, trend UP - LONG!
+🎯 OPENED: 20251124_061812_Market_Maker_Inventory_Rebalancing
+   BUY XRP @ $2.03
+   Target: $2.04 | Stop: $2.00
+   Deviation: 0.10% | Volatility: 3.50%
+   Regime: UNKNOWN
+   💰 Entry Fee: $18.21
+
+🚀 SIGNAL: 20251124_061812_Market_Maker_Inventory_R - BUY DOT
+   Type: UNKNOWN | Reason: TREND BUY: Price $2.10 rising, trend UP - LONG!
+🎯 OPENED: 20251124_061812_Market_Maker_Inventory_Rebalancing
+   BUY DOT @ $2.10
+   Target: $2.10 | Stop: $2.06
+   Deviation: 0.18% | Volatility: 3.91%
+   Regime: UNKNOWN
+   💰 Entry Fee: $18.19
+
+🚀 SIGNAL: 20251124_041055_Stoikov_Market_Making_In - BUY DOT
+   Type: UNKNOWN | Reason: TREND BUY: Price $2.10 rising, trend UP - LONG!
+🎯 OPENED: 20251124_041055_Stoikov_Market_Making_Inventory_Ma
+   BUY DOT @ $2.10
+   Target: $2.10 | Stop: $2.06
+   Deviation: 0.18% | Volatility: 3.91%
+   Regime: UNKNOWN
+   💰 Entry Fee: $18.18
+
+🚀 SIGNAL: 20251124_033154_Market_Maker_Inventory_M - BUY DOT
+   Type: UNKNOWN | Reason: TREND BUY: Price $2.10 rising, trend UP - LONG!
+🎯 OPENED: 20251124_033154_Market_Maker_Inventory_Management_
+   BUY DOT @ $2.10
+   Target: $2.10 | Stop: $2.06
+   Deviation: 0.18% | Volatility: 3.91%
+   Regime: UNKNOWN
+   💰 Entry Fee: $18.16
+
+================================================================================
+🔄 TRADEPEX ADAPTIVE - Dynamic Strategy Optimizer
+================================================================================
+⏰ Cycle: 176 | Runtime: 11:28:33.348104
+💰 Capital: $21604.78 | Total PnL: $-1859.62
+📊 Open: 5/40 | Closed: 459
+🔄 Optimization: ACTIVE (analyzing 459 trades)
+📈 Win Rate: 47.3% (217/459)
+
+📊 OPEN POSITIONS (waiting to close for analysis):
+   📍 20251124_042700_Cryptocurrency_Coin
+      SELL SOL @ $128.77 → Now: $128.66 (+0.08%) 🟢 $+169.51
+      🎯 Target: $127.30 (+1.06% away) | 🛑 Stop: $130.70 (1.58% away)
+      ⏱️  Time: 2min | Dev: 2.23% | Vol: 3.86%
+   📍 20251124_061812_Market_Maker_Invent
+      BUY XRP @ $2.03 → Now: $2.04 (+0.15%) 🟢 $+321.25
+      🎯 Target: $2.04 (+0.04% away) | 🛑 Stop: $2.00 (1.65% away)
+      ⏱️  Time: 1min | Dev: 0.10% | Vol: 3.50%
+   📍 20251124_061812_Market_Maker_Invent
+      BUY DOT @ $2.10 → Now: $2.10 (-0.01%) 🔴 $-29.76
+      🎯 Target: $2.10 (+0.29% away) | 🛑 Stop: $2.06 (1.49% away)
+      ⏱️  Time: 0min | Dev: 0.18% | Vol: 3.91%
+   📍 20251124_041055_Stoikov_Market_Maki
+      BUY DOT @ $2.10 → Now: $2.10 (-0.02%) 🔴 $-39.65
+      🎯 Target: $2.10 (+0.30% away) | 🛑 Stop: $2.06 (1.48% away)
+      ⏱️  Time: 0min | Dev: 0.18% | Vol: 3.91%
+   📍 20251124_033154_Market_Maker_Invent
+      BUY DOT @ $2.10 → Now: $2.10 (-0.01%) 🔴 $-29.71
+      🎯 Target: $2.10 (+0.29% away) | 🛑 Stop: $2.06 (1.49% away)
+      ⏱️  Time: 0min | Dev: 0.18% | Vol: 3.91%
+
+   🟢 TOTAL PORTFOLIO UNREALIZED P&L: $+391.64
+   💰 TAKE PROFIT THRESHOLD HIT! ($+391.64 >= $200.0)
+================================================================================
+
+
+🔄 CYCLE 177 - 13:54:23
+   BTC: $87288.28
+   ETH: $2825.21
+   SOL: $128.69
+   XRP: $2.04
+   ADA: $0.39
+   DOT: $2.10
+   LINK: $12.23
+   AVAX: $12.91
+
+============================================================
+📊 REAL-TIME PERFORMANCE ALERTS
+============================================================
+🚨 ALERT: 20251124_061812_Market_Maker_Inventory_R rapid loss: $-142.50 in last 5 trades
+🚨 ALERT: 20251124_040640_Market_Maker_Inventory_R rapid loss: $-296.42 in last 5 trades
+🚨 ALERT: 20251124_034046_AI_Neural_Network_Predic recent win rate only 0.0%!
+   Recent PnL: $-284.28
+🚨 ALERT: 20251124_034046_AI_Neural_Network_Predic rapid loss: $-284.28 in last 5 trades
+============================================================
+
+
+📊 OPEN POSITIONS (5):
+   🟢 SELL SOL @ $128.77 → $128.69 (+0.06%) = $+132.31
+   🟢 BUY XRP @ $2.03 → $2.04 (+0.12%) = $+240.43
+   🟢 BUY DOT @ $2.10 → $2.10 (+0.02%) = $+49.60
+   🟢 BUY DOT @ $2.10 → $2.10 (+0.02%) = $+39.65
+   🟢 BUY DOT @ $2.10 → $2.10 (+0.02%) = $+49.52
+   🟢 TOTAL UNREALIZED P&L: $+511.51
+   💰 TAKE PROFIT THRESHOLD REACHED! ($+511.51 >= $200.0)
+
+💰 PORTFOLIO TAKE PROFIT TRIGGERED! Closing all 5 positions for $+511.51
+
+🚀 SIGNAL: 20251124_042700_Cryptocurrency_Cointegra - SELL SOL
+   Type: UNKNOWN | Reason: Pairs/Z-Score: Z=2.16 (overbought, expecting reversion)
+⏸️   BLOCKED: 20251124_042700_Cryptocurrency SOL - Already have position on SOL
+
+🚀 SIGNAL: 20251124_061812_Market_Maker_Inventory_R - BUY XRP
+   Type: UNKNOWN | Reason: TREND BUY: Price $2.04 rising, trend UP - LONG!
+⏸️   BLOCKED: 20251124_061812_Market_Maker_I XRP - Already have position on XRP
+
+🚀 SIGNAL: 20251124_041055_Stoikov_Market_Making_In - BUY XRP
+   Type: UNKNOWN | Reason: TREND BUY: Price $2.04 rising, trend UP - LONG!
+🎯 OPENED: 20251124_041055_Stoikov_Market_Making_Inventory_Ma
+   BUY XRP @ $2.04
+   Target: $2.04 | Stop: $2.01
+   Deviation: 0.16% | Volatility: 3.50%
+   Regime: UNKNOWN
+   💰 Entry Fee: $18.15
+
+🚀 SIGNAL: 20251124_033154_Market_Maker_Inventory_M - BUY XRP
+   Type: UNKNOWN | Reason: TREND BUY: Price $2.04 rising, trend UP - LONG!
+🎯 OPENED: 20251124_033154_Market_Maker_Inventory_Management_
+   BUY XRP @ $2.04
+   Target: $2.04 | Stop: $2.01
+   Deviation: 0.16% | Volatility: 3.50%
+   Regime: UNKNOWN
+   💰 Entry Fee: $18.13
+
+🚀 SIGNAL: 20251124_061812_Market_Maker_Inventory_R - BUY DOT
+   Type: UNKNOWN | Reason: TREND BUY: Price $2.09 rising, trend UP - LONG!
+⏸️   BLOCKED: 20251124_061812_Market_Maker_I DOT - Already have position on DOT
+
+🚀 SIGNAL: 20251124_041055_Stoikov_Market_Making_In - BUY DOT
+   Type: UNKNOWN | Reason: TREND BUY: Price $2.09 rising, trend UP - LONG!
+⏸️   BLOCKED: 20251124_041055_Stoikov_Market DOT - Already have position on DOT
+
+🚀 SIGNAL: 20251124_033154_Market_Maker_Inventory_M - BUY DOT
+   Type: UNKNOWN | Reason: TREND BUY: Price $2.09 rising, trend UP - LONG!
+⏸️   BLOCKED: 20251124_033154_Market_Maker_I DOT - Already have position on DOT
+
+================================================================================
+🔄 TRADEPEX ADAPTIVE - Dynamic Strategy Optimizer
+================================================================================
+⏰ Cycle: 177 | Runtime: 11:30:18.415758
+💰 Capital: $21568.50 | Total PnL: $-1859.62
+📊 Open: 7/40 | Closed: 459
+🔄 Optimization: ACTIVE (analyzing 459 trades)
+📈 Win Rate: 47.3% (217/459)
+
+📊 OPEN POSITIONS (waiting to close for analysis):
+   📍 20251124_042700_Cryptocurrency_Coin
+      SELL SOL @ $128.77 → Now: $128.91 (-0.11%) 🔴 $-235.50
+      🎯 Target: $127.30 (+1.25% away) | 🛑 Stop: $130.70 (1.39% away)
+      ⏱️  Time: 4min | Dev: 2.23% | Vol: 3.86%
+   📍 20251124_061812_Market_Maker_Invent
+      BUY XRP @ $2.03 → Now: $2.04 (+0.12%) 🟢 $+247.59
+      🎯 Target: $2.04 (+0.07% away) | 🛑 Stop: $2.00 (1.62% away)
+      ⏱️  Time: 2min | Dev: 0.10% | Vol: 3.50%
+   📍 20251124_061812_Market_Maker_Invent
+      BUY DOT @ $2.10 → Now: $2.10 (+0.02%) 🟢 $+39.68
+      🎯 Target: $2.10 (+0.26% away) | 🛑 Stop: $2.06 (1.52% away)
+      ⏱️  Time: 2min | Dev: 0.18% | Vol: 3.91%
+   📍 20251124_041055_Stoikov_Market_Maki
+      BUY DOT @ $2.10 → Now: $2.10 (+0.01%) 🟢 $+29.74
+      🎯 Target: $2.10 (+0.27% away) | 🛑 Stop: $2.06 (1.51% away)
+      ⏱️  Time: 2min | Dev: 0.18% | Vol: 3.91%
+   📍 20251124_033154_Market_Maker_Invent
+      BUY DOT @ $2.10 → Now: $2.10 (+0.02%) 🟢 $+39.62
+      🎯 Target: $2.10 (+0.26% away) | 🛑 Stop: $2.06 (1.52% away)
+      ⏱️  Time: 2min | Dev: 0.18% | Vol: 3.91%
+   📍 20251124_041055_Stoikov_Market_Maki
+      BUY XRP @ $2.04 → Now: $2.04 (+0.03%) 🟢 $+57.05
+      🎯 Target: $2.04 (+0.16% away) | 🛑 Stop: $2.01 (1.53% away)
+      ⏱️  Time: 1min | Dev: 0.16% | Vol: 3.50%
+   📍 20251124_033154_Market_Maker_Invent
+      BUY XRP @ $2.04 → Now: $2.04 (+0.03%) 🟢 $+57.00
+      🎯 Target: $2.04 (+0.16% away) | 🛑 Stop: $2.01 (1.53% away)
+      ⏱️  Time: 1min | Dev: 0.16% | Vol: 3.50%
+
+   🟢 TOTAL PORTFOLIO UNREALIZED P&L: $+235.17
+   💰 TAKE PROFIT THRESHOLD HIT! ($+235.17 >= $200.0)
+================================================================================
+
+
+🔄 CYCLE 178 - 13:56:08
+   BTC: $87323.19
+   ETH: $2825.84
+   SOL: $128.90
+   XRP: $2.04
+   ADA: $0.39
+   DOT: $2.09
+   LINK: $12.23
+   AVAX: $12.91
+
+============================================================
+📊 REAL-TIME PERFORMANCE ALERTS
+============================================================
+🚨 ALERT: 20251124_061812_Market_Maker_Inventory_R rapid loss: $-142.50 in last 5 trades
+🚨 ALERT: 20251124_040640_Market_Maker_Inventory_R rapid loss: $-296.42 in last 5 trades
+🚨 ALERT: 20251124_034046_AI_Neural_Network_Predic recent win rate only 0.0%!
+   Recent PnL: $-284.28
+🚨 ALERT: 20251124_034046_AI_Neural_Network_Predic rapid loss: $-284.28 in last 5 trades
+============================================================
+
+
+📊 OPEN POSITIONS (7):
+   🔴 SELL SOL @ $128.77 → $128.90 (-0.10%) = $-215.12
+   🟢 BUY XRP @ $2.03 → $2.04 (+0.13%) = $+262.94
+   🔴 BUY DOT @ $2.10 → $2.09 (-0.05%) = $-99.21
+   🔴 BUY DOT @ $2.10 → $2.09 (-0.05%) = $-109.03
+   🔴 BUY DOT @ $2.10 → $2.09 (-0.05%) = $-99.04
+   🟢 BUY XRP @ $2.04 → $2.04 (+0.03%) = $+69.27
+   🟢 BUY XRP @ $2.04 → $2.04 (+0.03%) = $+69.21
+   🔴 TOTAL UNREALIZED P&L: $-120.98
+   📉 $320.98 away from take profit threshold (need +$120.98 to breakeven, then +$200.00 more)
+
+🚀 SIGNAL: 20251124_061812_Market_Maker_Inventory_R - BUY SOL
+   Type: UNKNOWN | Reason: TREND BUY: Price $128.90 rising, trend UP - LONG!
+🎯 OPENED: 20251124_061812_Market_Maker_Inventory_Rebalancing
+   BUY SOL @ $128.90
+   Target: $129.15 | Stop: $126.97
+   Deviation: 0.12% | Volatility: 3.86%
+   Regime: UNKNOWN
+   💰 Entry Fee: $18.12
+
+🚀 SIGNAL: 20251124_041055_Stoikov_Market_Making_In - BUY SOL
+   Type: UNKNOWN | Reason: TREND BUY: Price $128.91 rising, trend UP - LONG!
+🎯 OPENED: 20251124_041055_Stoikov_Market_Making_Inventory_Ma
+   BUY SOL @ $128.91
+   Target: $129.16 | Stop: $126.98
+   Deviation: 0.13% | Volatility: 3.86%
+   Regime: UNKNOWN
+   💰 Entry Fee: $18.10
+
+🚀 SIGNAL: 20251124_033154_Market_Maker_Inventory_M - BUY SOL
+   Type: UNKNOWN | Reason: TREND BUY: Price $128.91 rising, trend UP - LONG!
+🎯 OPENED: 20251124_033154_Market_Maker_Inventory_Management_
+   BUY SOL @ $128.91
+   Target: $129.16 | Stop: $126.98
+   Deviation: 0.13% | Volatility: 3.86%
+   Regime: UNKNOWN
+   💰 Entry Fee: $18.09
+
+🚀 SIGNAL: 20251124_042700_Cryptocurrency_Cointegra - SELL SOL
+   Type: UNKNOWN | Reason: Pairs/Z-Score: Z=2.42 (overbought, expecting reversion)
+⏸️   BLOCKED: 20251124_042700_Cryptocurrency SOL - Already have position on SOL
+
+🚀 SIGNAL: 20251124_061812_Market_Maker_Inventory_R - BUY XRP
+   Type: UNKNOWN | Reason: TREND BUY: Price $2.04 rising, trend UP - LONG!
+⏸️   BLOCKED: 20251124_061812_Market_Maker_I XRP - Already have position on XRP
+
+🚀 SIGNAL: 20251124_041055_Stoikov_Market_Making_In - BUY XRP
+   Type: UNKNOWN | Reason: TREND BUY: Price $2.04 rising, trend UP - LONG!
+⏸️   BLOCKED: 20251124_041055_Stoikov_Market XRP - Already have position on XRP
+
+🚀 SIGNAL: 20251124_033154_Market_Maker_Inventory_M - BUY XRP
+   Type: UNKNOWN | Reason: TREND BUY: Price $2.04 rising, trend UP - LONG!
+⏸️   BLOCKED: 20251124_033154_Market_Maker_I XRP - Already have position on XRP
+
+🚀 SIGNAL: 20251124_061812_Market_Maker_Inventory_R - BUY DOT
+   Type: UNKNOWN | Reason: TREND BUY: Price $2.09 rising, trend UP - LONG!
+⏸️   BLOCKED: 20251124_061812_Market_Maker_I DOT - Already have position on DOT
+
+🚀 SIGNAL: 20251124_041055_Stoikov_Market_Making_In - BUY DOT
+   Type: UNKNOWN | Reason: TREND BUY: Price $2.09 rising, trend UP - LONG!
+⏸️   BLOCKED: 20251124_041055_Stoikov_Market DOT - Already have position on DOT
+
+🚀 SIGNAL: 20251124_033154_Market_Maker_Inventory_M - BUY DOT
+   Type: UNKNOWN | Reason: TREND BUY: Price $2.09 rising, trend UP - LONG!
+⏸️   BLOCKED: 20251124_033154_Market_Maker_I DOT - Already have position on DOT
+
+🚀 SIGNAL: 20251124_061812_Market_Maker_Inventory_R - BUY LINK
+   Type: UNKNOWN | Reason: Market Making BUY: Price $12.22 below mid (trend: UP)
+🎯 OPENED: 20251124_061812_Market_Maker_Inventory_Rebalancing
+   BUY LINK @ $12.22
+   Target: $12.26 | Stop: $12.03
+   Deviation: 0.13% | Volatility: 3.63%
+   Regime: UNKNOWN
+   💰 Entry Fee: $18.07
+
+🚀 SIGNAL: 20251124_041055_Stoikov_Market_Making_In - BUY LINK
+   Type: UNKNOWN | Reason: Market Making BUY: Price $12.22 below mid (trend: UP)
+🎯 OPENED: 20251124_041055_Stoikov_Market_Making_Inventory_Ma
+   BUY LINK @ $12.22
+   Target: $12.26 | Stop: $12.03
+   Deviation: 0.13% | Volatility: 3.63%
+   Regime: UNKNOWN
+   💰 Entry Fee: $18.06
+
+🚀 SIGNAL: 20251124_033154_Market_Maker_Inventory_M - BUY LINK
+   Type: UNKNOWN | Reason: Market Making BUY: Price $12.22 below mid (trend: UP)
+🎯 OPENED: 20251124_033154_Market_Maker_Inventory_Management_
+   BUY LINK @ $12.22
+   Target: $12.26 | Stop: $12.03
+   Deviation: 0.12% | Volatility: 3.63%
+   Regime: UNKNOWN
+   💰 Entry Fee: $18.04
+
+================================================================================
+🔄 TRADEPEX ADAPTIVE - Dynamic Strategy Optimizer
+================================================================================
+⏰ Cycle: 178 | Runtime: 11:32:06.384892
+💰 Capital: $21460.02 | Total PnL: $-1859.62
+📊 Open: 13/40 | Closed: 459
+🔄 Optimization: ACTIVE (analyzing 459 trades)
+📈 Win Rate: 47.3% (217/459)
+
+📊 OPEN POSITIONS (waiting to close for analysis):
+   📍 20251124_042700_Cryptocurrency_Coin
+      SELL SOL @ $128.77 → Now: $128.83 (-0.05%) 🔴 $-98.99
+      🎯 Target: $127.30 (+1.19% away) | 🛑 Stop: $130.70 (1.45% away)
+      ⏱️  Time: 6min | Dev: 2.23% | Vol: 3.86%
+   📍 20251124_061812_Market_Maker_Invent
+      BUY XRP @ $2.03 → Now: $2.04 (+0.09%) 🟢 $+194.39
+      🎯 Target: $2.04 (+0.10% away) | 🛑 Stop: $2.00 (1.59% away)
+      ⏱️  Time: 4min | Dev: 0.10% | Vol: 3.50%
+   📍 20251124_061812_Market_Maker_Invent
+      BUY DOT @ $2.10 → Now: $2.09 (-0.05%) 🔴 $-109.13
+      🎯 Target: $2.10 (+0.33% away) | 🛑 Stop: $2.06 (1.45% away)
+      ⏱️  Time: 4min | Dev: 0.18% | Vol: 3.91%
+   📍 20251124_041055_Stoikov_Market_Maki
+      BUY DOT @ $2.10 → Now: $2.09 (-0.06%) 🔴 $-118.94
+      🎯 Target: $2.10 (+0.34% away) | 🛑 Stop: $2.06 (1.44% away)
+      ⏱️  Time: 4min | Dev: 0.18% | Vol: 3.91%
+   📍 20251124_033154_Market_Maker_Invent
+      BUY DOT @ $2.10 → Now: $2.09 (-0.05%) 🔴 $-108.95
+      🎯 Target: $2.10 (+0.33% away) | 🛑 Stop: $2.06 (1.45% away)
+      ⏱️  Time: 4min | Dev: 0.18% | Vol: 3.91%
+   📍 20251124_041055_Stoikov_Market_Maki
+      BUY XRP @ $2.04 → Now: $2.04 (+0.00%) 🟢 $+1.02
+      🎯 Target: $2.04 (+0.19% away) | 🛑 Stop: $2.01 (1.50% away)
+      ⏱️  Time: 2min | Dev: 0.16% | Vol: 3.50%
+   📍 20251124_033154_Market_Maker_Invent
+      BUY XRP @ $2.04 → Now: $2.04 (+0.00%) 🟢 $+1.02
+      🎯 Target: $2.04 (+0.19% away) | 🛑 Stop: $2.01 (1.50% away)
+      ⏱️  Time: 2min | Dev: 0.16% | Vol: 3.50%
+   📍 20251124_061812_Market_Maker_Invent
+      BUY SOL @ $128.90 → Now: $128.83 (-0.06%) 🔴 $-115.33
+      🎯 Target: $129.15 (+0.25% away) | 🛑 Stop: $126.97 (1.45% away)
+      ⏱️  Time: 1min | Dev: 0.12% | Vol: 3.86%
+   📍 20251124_041055_Stoikov_Market_Maki
+      BUY SOL @ $128.91 → Now: $128.83 (-0.07%) 🔴 $-135.93
+      🎯 Target: $129.16 (+0.26% away) | 🛑 Stop: $126.98 (1.44% away)
+      ⏱️  Time: 1min | Dev: 0.13% | Vol: 3.86%
+   📍 20251124_033154_Market_Maker_Invent
+      BUY SOL @ $128.91 → Now: $128.83 (-0.07%) 🔴 $-135.81
+      🎯 Target: $129.16 (+0.26% away) | 🛑 Stop: $126.98 (1.44% away)
+      ⏱️  Time: 1min | Dev: 0.13% | Vol: 3.86%
+   📍 20251124_061812_Market_Maker_Invent
+      BUY LINK @ $12.22 → Now: $12.22 (+0.01%) 🟢 $+13.53
+      🎯 Target: $12.26 (+0.34% away) | 🛑 Stop: $12.03 (1.51% away)
+      ⏱️  Time: 0min | Dev: 0.13% | Vol: 3.63%
+   📍 20251124_041055_Stoikov_Market_Maki
+      BUY LINK @ $12.22 → Now: $12.22 (+0.01%) 🟢 $+13.51
+      🎯 Target: $12.26 (+0.34% away) | 🛑 Stop: $12.03 (1.51% away)
+      ⏱️  Time: 0min | Dev: 0.13% | Vol: 3.63%
+   📍 20251124_033154_Market_Maker_Invent
+      BUY LINK @ $12.22 → Now: $12.22 (+0.00%) 🟢 $+10.13
+      🎯 Target: $12.26 (+0.34% away) | 🛑 Stop: $12.03 (1.50% away)
+      ⏱️  Time: 0min | Dev: 0.12% | Vol: 3.63%
+
+   🔴 TOTAL PORTFOLIO UNREALIZED P&L: $-589.49
+================================================================================
+
+
+🔄 CYCLE 179 - 13:57:58
+   BTC: $87247.90
+   ETH: $2824.76
+   SOL: $128.83
+   XRP: $2.04
+   ADA: $0.39
+   DOT: $2.09
+   LINK: $12.22
+   AVAX: $12.91
+
+============================================================
+📊 REAL-TIME PERFORMANCE ALERTS
+============================================================
+🚨 ALERT: 20251124_061812_Market_Maker_Inventory_R rapid loss: $-142.50 in last 5 trades
+🚨 ALERT: 20251124_040640_Market_Maker_Inventory_R rapid loss: $-296.42 in last 5 trades
+🚨 ALERT: 20251124_034046_AI_Neural_Network_Predic recent win rate only 0.0%!
+   Recent PnL: $-284.28
+🚨 ALERT: 20251124_034046_AI_Neural_Network_Predic rapid loss: $-284.28 in last 5 trades
+============================================================
+
+
+📊 OPEN POSITIONS (13):
+   🔴 SELL SOL @ $128.77 → $128.83 (-0.05%) = $-98.99
+   🟢 BUY XRP @ $2.03 → $2.04 (+0.06%) = $+133.00
+   🔴 BUY DOT @ $2.10 → $2.09 (-0.05%) = $-109.13
+   🔴 BUY DOT @ $2.10 → $2.09 (-0.06%) = $-118.94
+   🔴 BUY DOT @ $2.10 → $2.09 (-0.05%) = $-108.95
+   🔴 BUY XRP @ $2.04 → $2.04 (-0.03%) = $-60.10
+   🔴 BUY XRP @ $2.04 → $2.04 (-0.03%) = $-60.05
+   🔴 BUY SOL @ $128.90 → $128.83 (-0.06%) = $-115.33
+   🔴 BUY SOL @ $128.91 → $128.83 (-0.07%) = $-135.93
+   🔴 BUY SOL @ $128.91 → $128.83 (-0.07%) = $-135.81
+   🔴 BUY LINK @ $12.22 → $12.22 (-0.01%) = $-11.83
+   🔴 BUY LINK @ $12.22 → $12.22 (-0.01%) = $-11.82
+   🔴 BUY LINK @ $12.22 → $12.22 (-0.01%) = $-15.19
+   🔴 TOTAL UNREALIZED P&L: $-849.09
+   📉 $1049.09 away from take profit threshold (need +$849.09 to breakeven, then +$200.00 more)
+
+🚀 SIGNAL: 20251124_042700_Cryptocurrency_Cointegra - SELL SOL
+   Type: UNKNOWN | Reason: Pairs/Z-Score: Z=2.39 (overbought, expecting reversion)
+⏸️   BLOCKED: 20251124_042700_Cryptocurrency SOL - Already have position on SOL
+
+🚀 SIGNAL: 20251124_061812_Market_Maker_Inventory_R - BUY XRP
+   Type: UNKNOWN | Reason: TREND BUY: Price $2.04 rising, trend UP - LONG!
+⏸️   BLOCKED: 20251124_061812_Market_Maker_I XRP - Already have position on XRP
+
+🚀 SIGNAL: 20251124_041055_Stoikov_Market_Making_In - BUY XRP
+   Type: UNKNOWN | Reason: TREND BUY: Price $2.04 rising, trend UP - LONG!
+⏸️   BLOCKED: 20251124_041055_Stoikov_Market XRP - Already have position on XRP
+
+🚀 SIGNAL: 20251124_033154_Market_Maker_Inventory_M - BUY XRP
+   Type: UNKNOWN | Reason: TREND BUY: Price $2.04 rising, trend UP - LONG!
+⏸️   BLOCKED: 20251124_033154_Market_Maker_I XRP - Already have position on XRP
+
+🚀 SIGNAL: 20251124_061812_Market_Maker_Inventory_R - BUY DOT
+   Type: UNKNOWN | Reason: TREND BUY: Price $2.09 rising, trend UP - LONG!
+⏸️   BLOCKED: 20251124_061812_Market_Maker_I DOT - Already have position on DOT
+
+================================================================================
+🔄 TRADEPEX ADAPTIVE - Dynamic Strategy Optimizer
+================================================================================
+⏰ Cycle: 179 | Runtime: 11:33:53.614899
+💰 Capital: $21460.02 | Total PnL: $-1859.62
+📊 Open: 13/40 | Closed: 459
+🔄 Optimization: ACTIVE (analyzing 459 trades)
+📈 Win Rate: 47.3% (217/459)
+
+📊 OPEN POSITIONS (waiting to close for analysis):
+   📍 20251124_042700_Cryptocurrency_Coin
+      SELL SOL @ $128.77 → Now: $128.78 (-0.01%) 🔴 $-17.95
+      🎯 Target: $127.30 (+1.15% away) | 🛑 Stop: $130.70 (1.49% away)
+      ⏱️  Time: 8min | Dev: 2.23% | Vol: 3.86%
+   📍 20251124_061812_Market_Maker_Invent
+      BUY XRP @ $2.03 → Now: $2.04 (+0.07%) 🟢 $+149.37
+      🎯 Target: $2.04 (+0.12% away) | 🛑 Stop: $2.00 (1.57% away)
+      ⏱️  Time: 6min | Dev: 0.10% | Vol: 3.50%
+   📍 20251124_061812_Market_Maker_Invent
+      BUY DOT @ $2.10 → Now: $2.09 (-0.05%) 🔴 $-109.13
+      🎯 Target: $2.10 (+0.33% away) | 🛑 Stop: $2.06 (1.45% away)
+      ⏱️  Time: 6min | Dev: 0.18% | Vol: 3.91%
+   📍 20251124_041055_Stoikov_Market_Maki
+      BUY DOT @ $2.10 → Now: $2.09 (-0.06%) 🔴 $-118.94
+      🎯 Target: $2.10 (+0.34% away) | 🛑 Stop: $2.06 (1.44% away)
+      ⏱️  Time: 6min | Dev: 0.18% | Vol: 3.91%
+   📍 20251124_033154_Market_Maker_Invent
+      BUY DOT @ $2.10 → Now: $2.09 (-0.05%) 🔴 $-108.95
+      🎯 Target: $2.10 (+0.33% away) | 🛑 Stop: $2.06 (1.45% away)
+      ⏱️  Time: 6min | Dev: 0.18% | Vol: 3.91%
+   📍 20251124_041055_Stoikov_Market_Maki
+      BUY XRP @ $2.04 → Now: $2.04 (-0.02%) 🔴 $-43.81
+      🎯 Target: $2.04 (+0.21% away) | 🛑 Stop: $2.01 (1.48% away)
+      ⏱️  Time: 4min | Dev: 0.16% | Vol: 3.50%
+   📍 20251124_033154_Market_Maker_Invent
+      BUY XRP @ $2.04 → Now: $2.04 (-0.02%) 🔴 $-43.77
+      🎯 Target: $2.04 (+0.21% away) | 🛑 Stop: $2.01 (1.48% away)
+      ⏱️  Time: 4min | Dev: 0.16% | Vol: 3.50%
+   📍 20251124_061812_Market_Maker_Invent
+      BUY SOL @ $128.90 → Now: $128.78 (-0.09%) 🔴 $-195.81
+      🎯 Target: $129.15 (+0.29% away) | 🛑 Stop: $126.97 (1.41% away)
+      ⏱️  Time: 3min | Dev: 0.12% | Vol: 3.86%
+   📍 20251124_041055_Stoikov_Market_Maki
+      BUY SOL @ $128.91 → Now: $128.78 (-0.10%) 🔴 $-216.33
+      🎯 Target: $129.16 (+0.30% away) | 🛑 Stop: $126.98 (1.40% away)
+      ⏱️  Time: 3min | Dev: 0.13% | Vol: 3.86%
+   📍 20251124_033154_Market_Maker_Invent
+      BUY SOL @ $128.91 → Now: $128.78 (-0.10%) 🔴 $-216.15
+      🎯 Target: $129.16 (+0.30% away) | 🛑 Stop: $126.98 (1.40% away)
+      ⏱️  Time: 3min | Dev: 0.13% | Vol: 3.86%
+   📍 20251124_061812_Market_Maker_Invent
+      BUY LINK @ $12.22 → Now: $12.22 (+0.00%) 🟢 $+3.38
+      🎯 Target: $12.26 (+0.34% away) | 🛑 Stop: $12.03 (1.50% away)
+      ⏱️  Time: 2min | Dev: 0.13% | Vol: 3.63%
+   📍 20251124_041055_Stoikov_Market_Maki
+      BUY LINK @ $12.22 → Now: $12.22 (+0.00%) 🟢 $+3.38
+      🎯 Target: $12.26 (+0.34% away) | 🛑 Stop: $12.03 (1.50% away)
+      ⏱️  Time: 2min | Dev: 0.13% | Vol: 3.63%
+   📍 20251124_033154_Market_Maker_Invent
+      BUY LINK @ $12.22 → Now: $12.22 (+0.00%) 🔴 $+0.00
+      🎯 Target: $12.26 (+0.34% away) | 🛑 Stop: $12.03 (1.50% away)
+      ⏱️  Time: 2min | Dev: 0.12% | Vol: 3.63%
+
+   🔴 TOTAL PORTFOLIO UNREALIZED P&L: $-914.70
+================================================================================
+
+
+🔄 CYCLE 180 - 13:59:45
+   BTC: $87269.96
+   ETH: $2826.53
+   SOL: $128.78
+   XRP: $2.04
+   ADA: $0.40
+   DOT: $2.09
+   LINK: $12.23
+   AVAX: $12.91
+
+============================================================
+📊 REAL-TIME PERFORMANCE ALERTS
+============================================================
+🚨 ALERT: 20251124_061812_Market_Maker_Inventory_R rapid loss: $-142.50 in last 5 trades
+🚨 ALERT: 20251124_040640_Market_Maker_Inventory_R rapid loss: $-296.42 in last 5 trades
+🚨 ALERT: 20251124_034046_AI_Neural_Network_Predic recent win rate only 0.0%!
+   Recent PnL: $-284.28
+🚨 ALERT: 20251124_034046_AI_Neural_Network_Predic rapid loss: $-284.28 in last 5 trades
+============================================================
+
+
+📊 OPEN POSITIONS (13):
+   🔴 SELL SOL @ $128.77 → $128.78 (-0.01%) = $-17.95
+   🟢 BUY XRP @ $2.03 → $2.04 (+0.18%) = $+373.43
+   🔴 BUY DOT @ $2.10 → $2.09 (-0.05%) = $-109.13
+   🔴 BUY DOT @ $2.10 → $2.09 (-0.06%) = $-118.94
+   🔴 BUY DOT @ $2.10 → $2.09 (-0.05%) = $-108.95
+   🟢 BUY XRP @ $2.04 → $2.04 (+0.09%) = $+179.30
+   🟢 BUY XRP @ $2.04 → $2.04 (+0.09%) = $+179.14
+   🔴 BUY SOL @ $128.90 → $128.78 (-0.09%) = $-195.81
+   🔴 BUY SOL @ $128.91 → $128.78 (-0.10%) = $-216.33
+   🔴 BUY SOL @ $128.91 → $128.78 (-0.10%) = $-216.15
+   🟢 BUY LINK @ $12.22 → $12.23 (+0.09%) = $+182.59
+   🟢 BUY LINK @ $12.22 → $12.23 (+0.09%) = $+182.44
+   🟢 BUY LINK @ $12.22 → $12.23 (+0.09%) = $+178.90
+   🟢 TOTAL UNREALIZED P&L: $+292.54
+   💰 TAKE PROFIT THRESHOLD REACHED! ($+292.54 >= $200.0)
+
+💰 PORTFOLIO TAKE PROFIT TRIGGERED! Closing all 13 positions for $+292.54
+
+🚀 SIGNAL: 20251124_042700_Cryptocurrency_Cointegra - SELL SOL
+   Type: UNKNOWN | Reason: Pairs/Z-Score: Z=2.18 (overbought, expecting reversion)
+⏸️   BLOCKED: 20251124_042700_Cryptocurrency SOL - Already have position on SOL
+
+🚀 SIGNAL: 20251124_042700_Cryptocurrency_Cointegra - SELL XRP
+   Type: UNKNOWN | Reason: Pairs/Z-Score: Z=2.16 (overbought, expecting reversion)
+🎯 OPENED: 20251124_042700_Cryptocurrency_Cointegration_Pairs
+   SELL XRP @ $2.04
+   Target: $2.02 | Stop: $2.07
+   Deviation: 2.16% | Volatility: 3.51%
+   Regime: UNKNOWN
+   💰 Entry Fee: $18.03
+34.187.250.3 - - [02/Dec/2025 14:00:27] "GET /api/strategies HTTP/1.1" 200 -
+[2025-12-02 14:00:27,921] ERROR in app: Exception on /api/portfolio [GET]
+Traceback (most recent call last):
+  File "/root/miniconda/lib/python3.13/site-packages/flask/app.py", line 1511, in wsgi_app
+    response = self.full_dispatch_request()
+  File "/root/miniconda/lib/python3.13/site-packages/flask/app.py", line 919, in full_dispatch_request
+    rv = self.handle_user_exception(e)
+  File "/root/miniconda/lib/python3.13/site-packages/flask_cors/extension.py", line 176, in wrapped_function
+    return cors_after_request(app.make_response(f(*args, **kwargs)))
+                                                ~^^^^^^^^^^^^^^^^^
+  File "/root/miniconda/lib/python3.13/site-packages/flask/app.py", line 917, in full_dispatch_request
+    rv = self.dispatch_request()
+  File "/root/miniconda/lib/python3.13/site-packages/flask/app.py", line 902, in dispatch_request
+    return self.ensure_sync(self.view_functions[rule.endpoint])(**view_args)  # type: ignore[no-any-return]
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^
+  File "/root/KEEP_SAFE/v1/APEX/trade11.py", line 236, in get_portfolio
+    total_realized = sum(t.get('pnl', 0) for t in pe.trade_history) if hasattr(pe, 'trade_history') else 0
+                     ~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/KEEP_SAFE/v1/APEX/trade11.py", line 236, in <genexpr>
+    total_realized = sum(t.get('pnl', 0) for t in pe.trade_history) if hasattr(pe, 'trade_history') else 0
+                         ^^^^^
+AttributeError: 'TradeContext' object has no attribute 'get'
+34.187.250.3 - - [02/Dec/2025 14:00:27] "GET /api/portfolio HTTP/1.1" 500 -
+[2025-12-02 14:00:27,922] ERROR in app: Exception on /api/status [GET]
+Traceback (most recent call last):
+  File "/root/miniconda/lib/python3.13/site-packages/flask/app.py", line 1511, in wsgi_app
+    response = self.full_dispatch_request()
+  File "/root/miniconda/lib/python3.13/site-packages/flask/app.py", line 919, in full_dispatch_request
+    rv = self.handle_user_exception(e)
+  File "/root/miniconda/lib/python3.13/site-packages/flask_cors/extension.py", line 176, in wrapped_function
+    return cors_after_request(app.make_response(f(*args, **kwargs)))
+                                                ~^^^^^^^^^^^^^^^^^
+  File "/root/miniconda/lib/python3.13/site-packages/flask/app.py", line 917, in full_dispatch_request
+    rv = self.dispatch_request()
+  File "/root/miniconda/lib/python3.13/site-packages/flask/app.py", line 902, in dispatch_request
+    return self.ensure_sync(self.view_functions[rule.endpoint])(**view_args)  # type: ignore[no-any-return]
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^
+  File "/root/KEEP_SAFE/v1/APEX/trade11.py", line 127, in get_status
+    "wins": sum(1 for t in pe.trade_history if t.get('pnl', 0) > 0) if hasattr(pe, 'trade_history') else 0,
+            ~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/KEEP_SAFE/v1/APEX/trade11.py", line 127, in <genexpr>
+    "wins": sum(1 for t in pe.trade_history if t.get('pnl', 0) > 0) if hasattr(pe, 'trade_history') else 0,
+                                               ^^^^^
+AttributeError: 'TradeContext' object has no attribute 'get'
+34.187.250.3 - - [02/Dec/2025 14:00:27] "GET /api/status HTTP/1.1" 500 -
+
+🚀 SIGNAL: 20251124_042700_Cryptocurrency_Cointegra - SELL ADA
+   Type: UNKNOWN | Reason: Pairs/Z-Score: Z=2.00 (overbought, expecting reversion)
+🎯 OPENED: 20251124_042700_Cryptocurrency_Cointegration_Pairs
+   SELL ADA @ $0.40
+   Target: $0.39 | Stop: $0.40
+   Deviation: 2.00% | Volatility: 3.90%
+   Regime: UNKNOWN
+   💰 Entry Fee: $18.01
+
+🚀 SIGNAL: 20251124_042700_Cryptocurrency_Cointegra - SELL LINK
+   Type: UNKNOWN | Reason: Pairs/Z-Score: Z=2.02 (overbought, expecting reversion)
+🎯 OPENED: 20251124_042700_Cryptocurrency_Cointegration_Pairs
+   SELL LINK @ $12.25
+   Target: $12.12 | Stop: $12.43
+   Deviation: 2.02% | Volatility: 3.63%
+   Regime: UNKNOWN
+   💰 Entry Fee: $18.00
+
+🔧 RUNNING OPTIMIZATION CYCLE...
+   📊 Status: 16 open positions, 459 closed trades
+   📋 Need 5 closed trades per strategy for LLM analysis
+
+============================================================
+🔧 LLM OPTIMIZATION: 20251124_061812_Market_Maker_Inventory_Rebalancing
+============================================================
+   Current Win Rate: 45.7% (target: 71%)
+   Current Profit Factor: 0.90 (target: 1.8)
+   Total PnL: $-423.84
+   Optimization #: 16
+
+🤖 Sending to LLM for analysis...
+34.187.250.3 - - [02/Dec/2025 14:01:29] "GET /api/strategies HTTP/1.1" 200 -
+[2025-12-02 14:01:31,355] ERROR in app: Exception on /api/status [GET]
+Traceback (most recent call last):
+  File "/root/miniconda/lib/python3.13/site-packages/flask/app.py", line 1511, in wsgi_app
+    response = self.full_dispatch_request()
+  File "/root/miniconda/lib/python3.13/site-packages/flask/app.py", line 919, in full_dispatch_request
+    rv = self.handle_user_exception(e)
+  File "/root/miniconda/lib/python3.13/site-packages/flask_cors/extension.py", line 176, in wrapped_function
+    return cors_after_request(app.make_response(f(*args, **kwargs)))
+                                                ~^^^^^^^^^^^^^^^^^
+  File "/root/miniconda/lib/python3.13/site-packages/flask/app.py", line 917, in full_dispatch_request
+    rv = self.dispatch_request()
+  File "/root/miniconda/lib/python3.13/site-packages/flask/app.py", line 902, in dispatch_request
+    return self.ensure_sync(self.view_functions[rule.endpoint])(**view_args)  # type: ignore[no-any-return]
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^
+  File "/root/KEEP_SAFE/v1/APEX/trade11.py", line 127, in get_status
+    "wins": sum(1 for t in pe.trade_history if t.get('pnl', 0) > 0) if hasattr(pe, 'trade_history') else 0,
+            ~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/KEEP_SAFE/v1/APEX/trade11.py", line 127, in <genexpr>
+    "wins": sum(1 for t in pe.trade_history if t.get('pnl', 0) > 0) if hasattr(pe, 'trade_history') else 0,
+                                               ^^^^^
+AttributeError: 'TradeContext' object has no attribute 'get'
+34.187.250.3 - - [02/Dec/2025 14:01:31] "GET /api/status HTTP/1.1" 500 -
+[2025-12-02 14:01:31,417] ERROR in app: Exception on /api/portfolio [GET]
+Traceback (most recent call last):
+  File "/root/miniconda/lib/python3.13/site-packages/flask/app.py", line 1511, in wsgi_app
+    response = self.full_dispatch_request()
+  File "/root/miniconda/lib/python3.13/site-packages/flask/app.py", line 919, in full_dispatch_request
+    rv = self.handle_user_exception(e)
+  File "/root/miniconda/lib/python3.13/site-packages/flask_cors/extension.py", line 176, in wrapped_function
+    return cors_after_request(app.make_response(f(*args, **kwargs)))
+                                                ~^^^^^^^^^^^^^^^^^
+  File "/root/miniconda/lib/python3.13/site-packages/flask/app.py", line 917, in full_dispatch_request
+    rv = self.dispatch_request()
+  File "/root/miniconda/lib/python3.13/site-packages/flask/app.py", line 902, in dispatch_request
+    return self.ensure_sync(self.view_functions[rule.endpoint])(**view_args)  # type: ignore[no-any-return]
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^
+  File "/root/KEEP_SAFE/v1/APEX/trade11.py", line 236, in get_portfolio
+    total_realized = sum(t.get('pnl', 0) for t in pe.trade_history) if hasattr(pe, 'trade_history') else 0
+                     ~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/KEEP_SAFE/v1/APEX/trade11.py", line 236, in <genexpr>
+    total_realized = sum(t.get('pnl', 0) for t in pe.trade_history) if hasattr(pe, 'trade_history') else 0
+                         ^^^^^
+AttributeError: 'TradeContext' object has no attribute 'get'
+34.187.250.3 - - [02/Dec/2025 14:01:31] "GET /api/portfolio HTTP/1.1" 500 -
+
