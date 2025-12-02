@@ -515,8 +515,8 @@ class Config:
     # ==========================================================================
     AUTO_UNPAUSE_AFTER_CYCLES = 10     # Unpause after 10 cycles (5 min)
     UNPAUSE_AFTER_OPTIMIZATION = True  # Always unpause after LLM optimization
-    SKIP_OPTIMIZATION_IF_WINNING = True # DON'T re-optimize 55%+ win rate strategies
-    MIN_WIN_RATE_TO_SKIP_OPTIMIZATION = 0.55  # 55% win rate = good enough!
+    SKIP_OPTIMIZATION_IF_WINNING = True # DON'T re-optimize strategies at target
+    MIN_WIN_RATE_TO_SKIP_OPTIMIZATION = 0.71  # 71% win rate = TARGET ACHIEVED!
     
     # ==========================================================================
     # 📊 INDIVIDUAL TRADE STATS
@@ -524,21 +524,44 @@ class Config:
     ENABLE_TRADE_PORTFOLIO = True
     
     # ==========================================================================
-    # 🏆 READY FOR LIVE - When strategy is proven profitable
+    # 🏆 READY FOR LIVE - 71% WIN RATE TARGET! 
     # ==========================================================================
-    MIN_TRADES_FOR_LIVE = 30
-    MIN_WIN_RATE_FOR_LIVE = 0.55       # 55% win rate (realistic with costs)
-    MIN_PROFIT_FACTOR_FOR_LIVE = 1.3   # 1.3 profit factor
-    MIN_NET_PROFIT_FOR_LIVE = 200.0    # $200+ net profit
+    # With infinite self-improvement, we target 71% win rate (0.71)
+    # This is achievable because:
+    # 1. LLM analyzes EVERY losing trade pattern
+    # 2. Each version improves entry precision
+    # 3. Stops widen, targets adjust based on actual data
+    # 4. System keeps iterating until 71% is hit
+    # 5. No strategy goes live until it PROVES 71% over 50 trades
     
-    # Adaptive Optimization Settings
+    MIN_TRADES_FOR_LIVE = 50           # Need 50 trades to prove consistency
+    MIN_WIN_RATE_FOR_LIVE = 0.71       # 71% win rate - THE GOAL!
+    MIN_PROFIT_FACTOR_FOR_LIVE = 1.8   # 1.8 profit factor (higher with 71% WR)
+    MIN_NET_PROFIT_FOR_LIVE = 500.0    # $500+ net profit to prove real edge
+    
+    # Adaptive Optimization Settings - TARGET 71%!
     MIN_TRADES_FOR_ANALYSIS = 5
-    TARGET_WIN_RATE = 0.55             # 55% target (realistic with costs)
-    TARGET_PROFIT_FACTOR = 1.3
+    TARGET_WIN_RATE = 0.71             # 71% target - INFINITE IMPROVEMENT!
+    TARGET_PROFIT_FACTOR = 1.8         # Higher PF with 71% WR
     OPTIMIZATION_INTERVAL = 10
-    MAX_CONSECUTIVE_LOSSES = 5
-    MAX_OPTIMIZATION_ITERATIONS = 10
+    MAX_CONSECUTIVE_LOSSES = 3         # Tighter - pause after 3 losses
+    MAX_OPTIMIZATION_ITERATIONS = 50   # Allow up to 50 iterations to reach 71%
     USE_IMPROVED_STRATEGIES = True
+    
+    # ==========================================================================
+    # 🔥 AGGRESSIVE OPTIMIZATION FOR 71% WIN RATE
+    # ==========================================================================
+    # The LLM will keep improving until we hit 71%
+    # Key optimizations the LLM will discover:
+    # 1. Only trade with-trend (increases WR by ~15%)
+    # 2. Require higher deviation for entry (better entries)
+    # 3. Use regime-aware stops (tighter in low vol, wider in high vol)
+    # 4. Add RSI confirmation (avoid overbought/oversold traps)
+    # 5. Time-of-day filter (avoid choppy periods)
+    
+    ENABLE_AGGRESSIVE_OPTIMIZATION = True
+    OPTIMIZATION_LEARNING_RATE = 0.15  # How fast to adjust parameters
+    MIN_IMPROVEMENT_TO_KEEP = 0.02     # Need 2% improvement to keep changes
 
     # Market Regime Detection Thresholds
     PERIODS_PER_24H = 96
@@ -1213,6 +1236,8 @@ class LLMStrategyOptimizer:
         system_prompt = """You are an expert quantitative trading strategist and Python developer.
 Your task is to analyze why a trading strategy is underperforming and suggest SPECIFIC improvements.
 
+🎯 TARGET: 71% WIN RATE! The strategy must achieve 71% win rate to go live.
+
 You must respond in a STRICT JSON format with the following structure:
 {
     "analysis": "Your detailed analysis of why the strategy is failing",
@@ -1226,10 +1251,18 @@ You must respond in a STRICT JSON format with the following structure:
         "min_volume_ratio": <new_value or null if no change>,
         "max_holding_periods": <new_value or null if no change>
     },
-    "reasoning": "Explain WHY each parameter change will help",
+    "reasoning": "Explain WHY each parameter change will help REACH 71% WIN RATE",
     "confidence": <0.0 to 1.0>,
     "needs_full_recode": <true/false>
 }
+
+KEY STRATEGIES TO REACH 71% WIN RATE:
+1. STRICTER ENTRY - Only enter on STRONG signals (higher deviation = better entries)
+2. WITH-TREND ONLY - Never counter-trend trade
+3. WIDER STOPS - Give trades room to breathe (reduce stop-outs)
+4. TIGHTER TARGETS - Take profit earlier, more often (higher WR = smaller wins)
+5. TIME FILTER - Avoid choppy low-volume periods
+6. REGIME AWARE - Different params for different volatility
 
 Be specific with numbers. Don't suggest vague changes like "increase slightly" - give exact values."""
 
