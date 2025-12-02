@@ -121,10 +121,13 @@ class Config:
     IMPROVEMENT_VERSION_PREFIX = "v"  # e.g., original_strategy_v2.py
 
     # =============================================================================
-    # 🎯 PORTFOLIO TAKE PROFIT - BANK THE PROFIT!
+    # 🎯 PORTFOLIO CIRCUIT BREAKER - ONLY FOR BIG RUNS!
     # =============================================================================
-    PORTFOLIO_TAKE_PROFIT_THRESHOLD = 200.0   # Close all when $200+ unrealized profit
-    PORTFOLIO_STOP_LOSS_THRESHOLD = -400.0    # Close all when $400+ unrealized loss
+    # This is a CIRCUIT BREAKER, not the main exit method!
+    # 99% of exits should be per-trade TP/SL/time stops
+    # Portfolio TP only triggers on EXCEPTIONALLY good days
+    PORTFOLIO_TAKE_PROFIT_THRESHOLD = 800.0   # Close all when $800+ unrealized profit (BIG DAY!)
+    PORTFOLIO_STOP_LOSS_THRESHOLD = -400.0    # Close all when $400+ unrealized loss (DISASTER)
     
     # =============================================================================
     # 🔧 REALISTIC TRADING COSTS FOR 8X LEVERAGE
