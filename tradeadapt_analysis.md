@@ -41,7 +41,8 @@ At 8x leverage with the current fee structure:
 FUTURES_TAKER_FEE = 0.0007    # 0.07% per side
 ESTIMATED_SPREAD = 0.0005     # 0.05%
 EXTRA_SLIPPAGE = 0.0003       # 0.03%
-# Total: ~0.15% per side × 2 sides × 8x leverage = 2.4% per round trip
+# Calculation: (0.0007 + 0.0005 + 0.0003) = 0.15% per side
+# Total cost: 0.15% × 2 sides × 8x leverage = 2.4% per round trip
 ```
 
 Each trade starts at **-2.4%** effective cost. Entry fees of **$24.48 per trade** (293 entries = ~$7,200 in fees alone!)
@@ -52,7 +53,7 @@ The logs show 4-6 strategies opening the SAME direction on the SAME token:
 🎯 OPENED: 20251124_041055_Stoikov_Market_Making - SELL BTC @ $91131.02
 🎯 OPENED: 20251124_033154_Market_Maker_Inventory - SELL BTC @ $91131.02
 🎯 OPENED: 20251124_040640_Market_Maker_Inventory - SELL BTC @ $91095.57
-🎯 OPENED: 20251124_042700_Cryptocurrency_Cointe - SELL BTC @ $91095.57
+🎯 OPENED: 20251124_042700_Cryptocurrency_Cointegration - SELL BTC @ $91095.57
 ```
 
 This creates **concentrated risk** - when BTC moves against, ALL positions lose together.
@@ -105,7 +106,7 @@ But tradeadapt.py shows:
 PORTFOLIO_STOP_LOSS_THRESHOLD = -400.0
 
 # SHOULD BE (much wider or disabled):
-PORTFOLIO_STOP_LOSS_THRESHOLD = -2000.0  # Or -15% of capital
+PORTFOLIO_STOP_LOSS_THRESHOLD = -2000.0  # -20% of $10,000 starting capital
 ```
 
 Better approach: **Remove portfolio stop entirely** and rely on individual trade stops. The portfolio stop is killing good trades.
