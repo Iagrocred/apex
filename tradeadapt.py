@@ -79,8 +79,16 @@ class Config:
     DEFAULT_LEVERAGE = 5.3
     HTX_BASE_URL = "https://api.huobi.pro"
 
-    # TRADEABLE TOKENS - Can be expanded to scan more of the market
-    TRADEABLE_TOKENS = ['BTC', 'ETH', 'SOL', 'XRP', 'ADA', 'DOT', 'LINK', 'AVAX']
+    # TRADEABLE TOKENS - Expanded list for more opportunities
+    # Includes: Major coins + high-volume altcoins + trending new coins
+    TRADEABLE_TOKENS = [
+        # Major coins (highest liquidity)
+        'BTC', 'ETH', 'SOL', 'XRP', 'ADA', 'DOT', 'LINK', 'AVAX',
+        # High-volume altcoins (proven liquidity)
+        'DOGE', 'SHIB', 'MATIC', 'UNI', 'LTC', 'BCH', 'ATOM', 'NEAR',
+        # Trending new coins (high volume, good signals)
+        'APT', 'ARB', 'OP', 'TIA', 'SUI', 'SEI'
+    ]
 
     STRATEGIES_DIR = Path("./successful_strategies")
     CHECK_INTERVAL = 30  # Seconds between market checks
