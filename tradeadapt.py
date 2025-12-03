@@ -73,7 +73,10 @@ class Config:
     # =============================================================================
     STARTING_CAPITAL = 17000.0        # $17k capital
     MAX_POSITION_SIZE = 0.15          # 15% per trade
-    DEFAULT_LEVERAGE = 5.3            # 5.3X LEVERAGE (reduced from 8x for lower costs)
+    # Leverage: User requested 5.3x specifically (reduced from 8x)
+    # Lower leverage = lower trading costs and more manageable risk
+    # At 5.3x: round-trip cost ~1.06% vs 2.4% at 8x
+    DEFAULT_LEVERAGE = 5.3
     HTX_BASE_URL = "https://api.huobi.pro"
 
     # TRADEABLE TOKENS - Can be expanded to scan more of the market
@@ -87,6 +90,16 @@ class Config:
     MAX_POSITIONS_PER_STRATEGY = 5    # Was 2, now 5 for faster LLM optimization
     MAX_POSITIONS_PER_TOKEN = 2       # REDUCED: Max 2 positions per token (was 10 - caused correlation)
     MAX_POSITIONS_PER_TOKEN_PER_DIRECTION = 1  # NEW: Only 1 BUY or 1 SELL per token at a time
+    
+    # Regime filtering configuration - which strategy types to block in CHOPPY_HIGH_VOL
+    # Mean reversion strategies perform poorly in choppy high volatility markets
+    BLOCKED_REGIMES_BY_STRATEGY_TYPE = {
+        'MEAN_REVERSION': ['CHOPPY_HIGH_VOL'],
+        'UNKNOWN': ['CHOPPY_HIGH_VOL'],
+        'PAIRS_TRADING': [],  # Pairs trading can work in volatile markets
+        'BREAKOUT': [],       # Breakout strategies may benefit from volatility
+        'ML_BASED': [],       # Let ML strategies decide
+    }
 
     # Adaptive Optimization Settings
     MIN_TRADES_FOR_ANALYSIS = 5       # Need at least 5 trades before analyzing
@@ -2226,12 +2239,12 @@ class AdaptivePaperTradingEngine:
         regime = signal.get('market_regime', 'MIXED')
         
         # =============================================================================
-        # 🛡️ REGIME FILTERING - Block trades in CHOPPY_HIGH_VOL regime
+        # 🛡️ REGIME FILTERING - Block trades based on strategy type and regime
         # =============================================================================
-        # Analysis showed CHOPPY_HIGH_VOL trades have very low win rates
-        # For mean reversion strategies, only trade in favorable regimes
+        # Uses configurable mapping from Config.BLOCKED_REGIMES_BY_STRATEGY_TYPE
         strategy_type = signal.get('strategy_type', 'MEAN_REVERSION')
-        if regime == "CHOPPY_HIGH_VOL" and strategy_type in ['MEAN_REVERSION', 'UNKNOWN']:
+        blocked_regimes = Config.BLOCKED_REGIMES_BY_STRATEGY_TYPE.get(strategy_type, [])
+        if regime in blocked_regimes:
             print(f"⏸️  BLOCKED: {strategy_id[:30]} {symbol} - Regime {regime} unsuitable for {strategy_type}")
             return None
         
