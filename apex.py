@@ -289,12 +289,12 @@ class Config:
     TEST_FEE_PERCENT = 0.1  # 0.1% realistic slippage
 
     # Approval criteria (E17FINAL pattern)
-    MIN_WIN_RATE = 0.55  # 55%
-    MIN_PROFIT_FACTOR = 1.5
-    MAX_DRAWDOWN = 0.20  # 20%
-    MIN_SHARPE_RATIO = 1.0
-    MIN_TRADES = 50
-    CONSENSUS_REQUIRED_VOTES = 2  # Out of 3 LLMs
+    MIN_WIN_RATE = 0.55  # 55% - Moon-Dev standard
+    MIN_PROFIT_FACTOR = 1.5  # Moon-Dev standard
+    MAX_DRAWDOWN = 0.20  # 20% - Moon-Dev standard
+    MIN_SHARPE_RATIO = 1.0  # Moon-Dev standard
+    MIN_TRADES = 50  # Moon-Dev standard
+    CONSENSUS_REQUIRED_VOTES = 2  # Out of 3 LLMs - Moon-Dev standard
 
     # Data paths
     MARKET_DATA_PATH = DATA_DIR / "market_data"
@@ -976,19 +976,28 @@ Focus areas (vary between):
 Create a UNIQUE query focusing on a specific strategy type.
 Return ONLY the search query text, nothing else."""
 
-                # Call LLM
+                # Call LLM - Moon-Dev pattern: DeepSeek for heavy lifting
                 if Config.OPENROUTER_API_KEY:
                     response = self._call_openrouter_glm(system_prompt + "\n\n" + user_prompt)
-                elif Config.OPENAI_API_KEY:
+                elif Config.DEEPSEEK_API_KEY:
                     response = ModelFactory.call_llm(
-                        {"type": "openai", "name": "gpt-4"},
+                        {"type": "deepseek", "name": "deepseek-chat"},
+                        user_prompt,
+                        system_prompt,
+                        temperature=0.7,
+                        max_tokens=100
+                    )
+                elif Config.OPENAI_API_KEY:
+                    # Fallback to OpenAI if DeepSeek not available
+                    response = ModelFactory.call_llm(
+                        {"type": "openai", "name": "gpt-4o-mini"},
                         user_prompt,
                         system_prompt,
                         temperature=0.7,
                         max_tokens=100
                     )
                 else:
-                    # Fallback to predefined queries
+                    # Final fallback to predefined queries
                     response = self._get_fallback_query(i)
 
                 query = response.strip()
@@ -1211,14 +1220,55 @@ Extract and return a JSON object with these fields:
 
 Return ONLY valid JSON, no other text."""
 
-                # Call LLM
-                response = ModelFactory.call_llm(
-                    {"type": "gpt", "name": "gpt-4"},
-                    user_prompt,
-                    system_prompt,
-                    temperature=0.3,
-                    max_tokens=2000
-                )
+                # Call LLM - Moon-Dev pattern: DeepSeek-reasoner for heavy reasoning tasks
+                # Try DeepSeek first, fallback to other models if needed
+                try:
+                    if Config.DEEPSEEK_API_KEY:
+                        response = ModelFactory.call_llm(
+                            {"type": "deepseek", "name": "deepseek-reasoner"},
+                            user_prompt,
+                            system_prompt,
+                            temperature=0.3,
+                            max_tokens=2000
+                        )
+                    elif Config.OPENAI_API_KEY:
+                        # Fallback to OpenAI if DeepSeek not available
+                        response = ModelFactory.call_llm(
+                            {"type": "openai", "name": "gpt-4o-mini"},
+                            user_prompt,
+                            system_prompt,
+                            temperature=0.3,
+                            max_tokens=2000
+                        )
+                    elif Config.ANTHROPIC_API_KEY:
+                        # Fallback to Claude if OpenAI not available
+                        response = ModelFactory.call_llm(
+                            {"type": "anthropic", "name": "claude-3-5-haiku-latest"},
+                            user_prompt,
+                            system_prompt,
+                            temperature=0.3,
+                            max_tokens=2000
+                        )
+                    else:
+                        self.logger.error("❌ No API key available for strategy extraction")
+                        continue
+                except Exception as llm_error:
+                    self.logger.warning(f"Primary model failed, trying fallback: {llm_error}")
+                    # Try fallback model if primary fails
+                    try:
+                        if Config.ANTHROPIC_API_KEY:
+                            response = ModelFactory.call_llm(
+                                {"type": "anthropic", "name": "claude-3-5-haiku-latest"},
+                                user_prompt,
+                                system_prompt,
+                                temperature=0.3,
+                                max_tokens=2000
+                            )
+                        else:
+                            raise Exception("No fallback model available")
+                    except Exception as fallback_error:
+                        self.logger.warning(f"Fallback model also failed: {fallback_error}")
+                        continue
 
                 # Parse JSON response
                 try:
@@ -1877,8 +1927,8 @@ Return the COMPLETE optimized Python code."""
         votes = {}
         models = [
             {"type": "deepseek", "name": "deepseek-reasoner"},
-            {"type": "openai", "name": "gpt-4"},
-            {"type": "claude", "name": "claude-3-5-sonnet-20240620"}
+            {"type": "openai", "name": "gpt-4o"},  # Updated to latest model
+            {"type": "anthropic", "name": "claude-3-5-sonnet-latest"}  # Fixed: was "claude" type and outdated name
         ]
 
         for model in models:
@@ -1888,7 +1938,9 @@ Return the COMPLETE optimized Python code."""
                 votes[model_name] = vote
                 self.logger.info(f"   {model_name}: {vote}")
             except Exception as e:
-                self.logger.warning(f"Vote from {model['type']} failed: {e}")
+                self.logger.error(f"❌ CRITICAL: Vote from {model['type']} FAILED: {e}")
+                self.logger.error(f"   This model will count as REJECT and may block consensus!")
+                self.logger.error(f"   Strategy had: Win Rate {best_config['win_rate']:.1%}, Return {primary_results.get('return_pct', 0):.1f}%")
                 votes[model["type"]] = "REJECT"
 
         # Count approvals
@@ -1915,7 +1967,7 @@ Results:
 - Total Trades: {config['total_trades']}
 - Return: {results.get('return_pct', 0):.1f}%
 
-Minimum Criteria:
+Minimum Criteria (Moon-Dev Standards):
 - Win rate > 55%
 - Profit factor > 1.5
 - Max drawdown < 20%
