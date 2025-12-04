@@ -862,11 +862,17 @@ class StrategyDiscoveryAgent:
         # Track previously used queries to avoid duplicates
         self.used_queries = set()
 
+        # Track previously saved strategies to avoid duplicates
+        self.saved_strategies = set()
+
         # Initialize CSVs
         self._init_csv_files()
 
         # Load previously used queries to avoid duplicates
         self._load_previous_queries()
+
+        # Load previously saved strategies to avoid duplicates
+        self._load_previous_strategies()
 
     def _init_csv_files(self):
         """Initialize CSV files for logging"""
@@ -908,6 +914,33 @@ class StrategyDiscoveryAgent:
             except Exception as e:
                 self.logger.warning(f"⚠️ Failed to load previous queries: {e}")
 
+    def _load_previous_strategies(self):
+        """Load previously saved strategy names to avoid duplicates"""
+        import csv
+
+        if self.strategies_index_csv.exists():
+            try:
+                with open(self.strategies_index_csv, 'r', newline='') as f:
+                    reader = csv.DictReader(f)
+                    for row in reader:
+                        strategy_name = row.get('strategy_name', '').strip().lower()
+                        if strategy_name:
+                            self.saved_strategies.add(strategy_name)
+
+                self.logger.info(f"📚 Loaded {len(self.saved_strategies)} previous strategies to avoid duplicates")
+            except Exception as e:
+                self.logger.warning(f"⚠️ Failed to load previous strategies: {e}")
+
+    def _is_duplicate_strategy(self, strategy_name: str) -> bool:
+        """Check if strategy has been saved before (case-insensitive, normalized)"""
+        normalized = strategy_name.strip().lower()
+        return normalized in self.saved_strategies
+
+    def _add_strategy_to_saved(self, strategy_name: str):
+        """Add strategy name to saved set"""
+        normalized = strategy_name.strip().lower()
+        self.saved_strategies.add(normalized)
+
     def _is_duplicate_query(self, query: str) -> bool:
         """Check if query has been used before (case-insensitive, normalized)"""
         normalized = query.strip().lower()
@@ -926,6 +959,7 @@ class StrategyDiscoveryAgent:
         self.logger.info("   Based on Moon-Dev websearch_agent.py (1280+ lines)")
         self.logger.info("   🆕 Mode: FRESH SEARCH ONLY - Not loading old strategies")
         self.logger.info(f"   📊 Deduplication: Enabled - {len(self.used_queries)} queries will be skipped")
+        self.logger.info(f"   📊 Deduplication: Enabled - {len(self.saved_strategies)} strategies will be skipped")
 
         while True:
             try:
@@ -1354,6 +1388,13 @@ Return ONLY valid JSON, no other text."""
 
         for strategy in strategies:
             try:
+                strategy_name = strategy.get("name", "unknown")
+
+                # Check for duplicate strategy
+                if self._is_duplicate_strategy(strategy_name):
+                    self.logger.info(f"   ⚠️ Skipping duplicate strategy: {strategy_name}")
+                    continue
+
                 # Additional validation
                 if not self._deep_validate_strategy(strategy):
                     continue
@@ -1363,6 +1404,9 @@ Return ONLY valid JSON, no other text."""
 
                 # Log to index
                 self._log_strategy_to_index(strategy)
+
+                # Track as saved to avoid future duplicates
+                self._add_strategy_to_saved(strategy_name)
 
                 validated.append(strategy)
 
