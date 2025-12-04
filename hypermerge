@@ -1,0 +1,451 @@
+Now we finally have enough to write the developer blueprint to migrate TRADEPEX from HTX to Hyperliquid, properly, cleanly, and taking full advantage of HL’s strengths.
+
+I’ll break it down into concrete changes devs need to make, and tie them back to everything you just proved with the scripts.
+
+0. What we verified (the “facts on the ground”)
+
+From your runs we now know:
+
+✅ You can sign & trade on HL with your delegated API wallet (8-trade test succeeded).
+
+✅ You can pull 1d candles and see c (close) and v (volume in base units).
+
+✅ You can pull 15m candles (100 bars) and see:
+
+{
+  "t": 1764809100000,
+  "T": 1764809999999,
+  "s": "BTC",
+  "i": "15m",
+  "o": "93005.0",
+  "c": "93008.0",
+  "h": "93043.0",
+  "l": "92860.0",
+  "v": "450.98174",
+  "n": 3360
+}
+
+
+✅ You can pull full market stats:
+
+tradable coins (universe)
+
+per-coin maxLeverage
+
+correct 24h volume in base units
+
+and we learned to convert to USD with v * close.
+
+Example row:
+
+BTC  PRICE=93004.00  24H VOL(base)=2273.88  LEV=40
+FARTCOIN PRICE=0.3544 24H VOL(base)=10793787.80 LEV=10
+
+
+So now TRADEPEX has access to:
+
+full universe of ~184 coins
+
+max leverage per coin
+
+real, reliable candles
+
+real volume, convertible to USD
+
+MUCH better fee model than HTX (taker ~0.035% vs HTX 0.05–0.06%).
+
+This is EVERYTHING the engine needs.
+
+1. Replace the old HTX client with a Hyperliquid data client
+
+In tradepex you currently have something like:
+
+class RealHTXClient:
+    def fetch_candles(self, symbol, period='15min', count=100): ...
+    def get_current_price(self, symbol): ...
+
+➜ You now build:
+class HyperliquidClient:
+    INFO_URL = "https://api.hyperliquid.xyz/info"
+
+    def _info(self, payload: dict):
+        r = requests.post(self.INFO_URL, json=payload, timeout=10)
+        r.raise_for_status()
+        return r.json()
+
+    def fetch_candles(self, symbol: str, period: str = '15min', count: int = 100):
+        # Map TRADEPEX periods to HL intervals
+        map_period = {
+            "1min": "1m",
+            "3min": "3m",
+            "5min": "5m",
+            "15min": "15m",
+            "30min": "30m",
+            "60min": "1h",
+            "1d": "1d",
+        }
+        interval = map_period[period]
+
+        now = int(time.time() * 1000)
+        step = {
+            "1m": 60000, "3m": 180000, "5m": 300000,
+            "15m": 900000, "30m": 1800000, "1h": 3600000, "1d": 86400000
+        }[interval]
+
+        start = now - step * count
+
+        payload = {
+            "type": "candleSnapshot",
+            "req": {
+                "coin": symbol,
+                "interval": interval,
+                "startTime": start,
+                "endTime": now
+            }
+        }
+        data = self._info(payload)
+        if not data:
+            return None
+
+        df = pd.DataFrame(data)
+        df["datetime"] = pd.to_datetime(df["t"], unit="ms")
+        df.rename(columns={
+            "o": "Open",
+            "h": "High",
+            "l": "Low",
+            "c": "Close",
+            "v": "Volume"
+        }, inplace=True)
+        return df[["datetime", "Open", "High", "Low", "Close", "Volume"]].sort_values("datetime")
+
+    def get_current_price(self, symbol: str):
+        candles = self.fetch_candles(symbol, "1min", 1)
+        if candles is None or candles.empty:
+            return None
+        return float(candles["Close"].iloc[-1])
+
+
+Then, everywhere in TRADEPEX you use RealHTXClient, you switch to HyperliquidClient.
+All higher layers (executors, signals, analyzers) stay the same because they just take OHLCV + price.
+
+This is the key refactor.
+
+2. Use Hyperliquid’s universe instead of hard-coded tokens
+
+Right now your Config.TRADEABLE_TOKENS is a static list like:
+
+TRADEABLE_TOKENS = ['BTC', 'ETH', 'SOL', 'XRP', ...]
+
+
+On Hyperliquid we can derive this dynamically, safely, and better.
+
+a) Get universe + leverage
+
+We already had this from your stats script:
+
+def get_universe():
+    data = info_call({"type": "metaAndAssetCtxs"})
+    uni = data[0]["universe"]
+    coins = [c["name"] for c in uni if not c.get("isDelisted", False)]
+    leverage = {c["name"]: c["maxLeverage"] for c in uni}
+    return coins, leverage
+
+b) Filter by liquidity + leverage for TRADEPEX
+
+For a production engine you don’t want 184 coins – you want top N coins based on volume and suitable leverage.
+
+Use:
+
+1d candle: v (base units) and c (close)
+→ usdVol = v * c
+
+Keep coins where:
+
+usdVol >= MIN_DAILY_VOLUME_USD (e.g. $3M)
+
+maxLeverage >= MIN_ALLOWED_LEVERAGE (e.g. 5x)
+
+So:
+
+MIN_DAILY_VOLUME_USD = 3_000_000
+MIN_MAX_LEVERAGE = 5
+
+filtered_coins = []
+for coin in coins:
+    close, vol_base = get_1d_stats(coin)
+    usd_vol = close * vol_base
+    if usd_vol >= MIN_DAILY_VOLUME_USD and leverage[coin] >= MIN_MAX_LEVERAGE:
+        filtered_coins.append(coin)
+
+
+Set:
+
+Config.TRADEABLE_TOKENS = filtered_coins
+Config.PER_COIN_MAX_LEVERAGE = leverage   # new dict
+
+
+Now TRADEPEX automatically trades only top, liquid coins, respecting per-coin leverage.
+
+3. Dynamic per-coin leverage instead of one fixed leverage
+
+On HTX you had something like:
+
+DEFAULT_LEVERAGE = 5.3
+
+
+But Hyperliquid gives you maxLeverage per coin:
+
+BTC → 40x
+
+ETH → 25x
+
+ATOM → 5x
+
+DOGE → 10x
+
+FART → 10x
+
+etc.
+
+So you can do:
+
+coin_max_lev = Config.PER_COIN_MAX_LEVERAGE.get(symbol, Config.DEFAULT_LEVERAGE)
+effective_leverage = min(Config.DEFAULT_LEVERAGE, coin_max_lev)
+
+
+Or better: choose a fraction of the max:
+
+safe_leverage = min(Config.DEFAULT_LEVERAGE, coin_max_lev * 0.5)
+
+
+Then use safe_leverage when computing position size and estimated costs.
+
+This gives you:
+
+BTC uses up to e.g. 10–20x safely
+
+smaller coins with maxLeverage=3x will be used at 3x or less
+
+engine is dynamic and safe for all current & future listings.
+
+4. Fee model: why Hyperliquid is a massive upgrade over HTX
+Previously (HTX / Config):
+
+You set something like:
+
+FUTURES_TAKER_FEE = 0.0005   # 0.05%
+FUTURES_MAKER_FEE = 0.0002   # 0.02%
+ESTIMATED_SPREAD = 0.0003    # 0.03%
+EXTRA_SLIPPAGE   = 0.0002    # 0.02%
+
+
+Meaning at 5.3x leverage your round-trip cost ~1%+.
+
+On Hyperliquid:
+
+Current public docs show typical fees around:
+
+taker: ~0.035%
+
+maker: can even be negative (rebate)
+
+orderbook is much deeper = lower spread
+
+slippage is smaller on high-volume pairs
+
+So you can tune:
+
+# Hyperliquid
+FUTURES_TAKER_FEE = 0.00035   # 0.035% per side
+FUTURES_MAKER_FEE = -0.00015  # -0.015% (rebate) per side, if you go full maker
+ESTIMATED_SPREAD  = 0.00005   # 0.005%
+EXTRA_SLIPPAGE    = 0.00003   # 0.003%
+
+
+Impact:
+
+At 20x leverage:
+
+raw taker round-trip cost ≈ 0.07% × 20 = 1.4%
+
+but with HL’s much better execution & partial makers, you can realistically get it lower.
+
+Compared to HTX, your costs per trade drop massively, especially when:
+
+you tune the engine to use limit orders where possible (USE_MAKER_ORDERS = True)
+
+your mean reversion entries are often passively filled near bands
+
+➡ This directly translates into higher achievable profit factor and less bleed for tight strategies.
+
+5. How TRADEPEX’s logic plugs into HL candles
+
+The beautiful part: all your high-level logic already uses candles, not exchange-specific stats.
+
+Examples:
+
+VWAP & VWAP bands
+
+ATR
+
+volatility_24h
+
+deviation_percent
+
+trend_direction (MA cross)
+
+market_regime (CHOPPY, TRENDING, RANGING)
+
+All this is computed from OHLCV.
+
+You just need to ensure your HyperliquidClient.fetch_candles() returns:
+
+datetime | Open | High | Low | Close | Volume
+
+
+sorted by datetime.
+
+Then all these blocks in your engine remain unchanged:
+
+calculate_market_context() in AdaptiveStrategyExecutor
+
+detect_market_regime()
+
+LLMSignalGenerator._calculate_market_context()
+
+ATR / VWAP / std dev / trend calculations
+
+Multi-TP partial exits logic
+
+Time-based exits
+
+You already saw BTC 15m candles working and representing real data.
+So the same functions will work if you just change the client underneath.
+
+6. Handling 429 / 500 errors and rate limits
+
+Your outputs showed:
+
+MELANIA: ERROR: 429 Too Many Requests
+...
+SHIB: 500 Internal Server Error
+
+
+Hyperliquid is faster but expects you to be sane with requests.
+
+Recommendations:
+
+Add simple backoff:
+
+try:
+    r = requests.post(..., timeout=10)
+    if r.status_code == 429:
+        time.sleep(2)
+        # retry once
+        r = requests.post(..., timeout=10)
+    r.raise_for_status()
+except requests.exceptions.HTTPError as e:
+    # log and skip coin
+
+
+Limit global scans:
+
+For full universe stats, poll once every minute or 5 minutes, not every second.
+
+For per-coin candles, reuse data within a cycle instead of refetching from scratch for each strategy.
+
+Token selection:
+
+Filter to top N (e.g. 30 or 50) by 24h USD volume to reduce how many candles you fetch per cycle.
+
+7. Step-by-step migration for dev
+
+Here’s how I’d tell your dev to do the actual code change:
+
+Add Hyperliquid client file
+
+hyperliquid_client.py with HyperliquidClient as above.
+
+Swap client in engine constructor
+In AdaptiveTradingEngine.__init__:
+
+# OLD:
+self.htx_client = RealHTXClient()
+
+# NEW:
+from hyperliquid_client import HyperliquidClient
+self.htx_client = HyperliquidClient()  # keep the attribute name to avoid touching rest of code
+
+
+This way, no other code that calls self.htx_client.fetch_candles or self.htx_client.get_current_price has to change.
+
+Add dynamic coin universe
+
+On startup, call HyperliquidClient.get_universe() to fill:
+
+Config.TRADEABLE_TOKENS
+
+Config.PER_COIN_MAX_LEVERAGE
+
+Optionally, run the 24h USD volume scan and keep only top N.
+
+Adjust Config
+
+Update fee constants for HL
+
+Optionally increase DEFAULT_LEVERAGE now that costs are lower, but cap to safe fraction of maxLeverage.
+
+Test trade path (already done)
+
+You ran the 8-trade test script — confirmed OK.
+
+Once the data client swap is done, you can run TRADEPEX in paper mode, log entries/exits, and verify no crashes.
+
+Turn on LLM optimization
+
+No changes needed: LLM only cares about trade history & metrics.
+
+Data → engine → trades → analysis behavior is identical, just on a different exchange.
+
+8. The big picture: why Hyperliquid + TRADEPEX is a serious upgrade
+
+Data quality
+
+Clean candles, no weird gaps, no spam pairs
+
+Loads of niche perps (HYPE, FARTCOIN, PENGU, PUMP, etc.) with huge relative volume & volatility
+
+Fees & spread
+
+Lower taker fees
+
+Maker rebates possible
+
+Tighter spreads on main pairs → more net alpha for same strategy quality
+
+Leverage
+
+Higher per-coin caps (BTC 40x, ETH 25x)
+
+Allows you to keep risk per trade while reducing notional capital requirements.
+
+Token universe
+
+184+ coins, including all majors + memecoins + DeFi + RWA + AI tokens
+
+TRADEPEX can cherry-pick best opportunities every cycle
+
+Engine synergy
+
+Your design (LLM-driven adaptivity, infinite self-improvement, recoding of strategies) benefits massively from:
+
+more regimes
+
+more coins
+
+better microstructure
+
+In HTX you were paying a “mediocre venue tax” in fees and structure.
+On Hyperliquid, your same logic has more room to generate edge.
+
+If you want, the next thing I’ll do is:
