@@ -2,8 +2,15 @@
 """
 TRADEPEX ADAPTIVE - Dynamic Live Strategy Analyzer & Optimizer
 =================================================================
-This system analyzes live paper trading performance, identifies why strategies
+PAPER TRADING on HYPERLIQUID with LLM-based strategy optimization.
+
+This system analyzes paper trading performance, identifies why strategies
 are losing, and dynamically adjusts parameters until profitability is achieved.
+
+THE COMPLETE PIPELINE:
+1. APEX.py → Backtests and discovers successful strategies → successful_strategies/
+2. TRADEADAPT.py (THIS FILE) → Paper trades on HYPERLIQUID → When 71%+ WR → apexlive/
+3. APEXLIVE.py → Executes LIVE trades on HYPERLIQUID!
 
 IMPORTANT: This system does NOT modify the original strategy files!
 - Original strategies in successful_strategies/ are READ-ONLY
@@ -12,12 +19,18 @@ IMPORTANT: This system does NOT modify the original strategy files!
 - On restart, learned parameters are loaded from JSON files
 
 Key Features:
-1. Detailed Trade Logging - Captures full market context for each trade
-2. Loss Pattern Analysis - Identifies why trades fail
-3. LLM-BASED REASONING - Uses AI to analyze WHY trades fail and suggest improvements
-4. Adaptive Optimization Loop - Continues until target profitability is reached
-5. State Persistence - Saves learned parameters to JSON (survives restarts)
+1. HYPERLIQUID INTEGRATION - Uses Hyperliquid API for market data (lower fees!)
+2. 8-MINUTE STRATEGY SCANNING - Picks up new strategies from APEX automatically
+3. 71% WIN RATE PROMOTION - Auto-promotes successful strategies to apexlive/
+4. LLM-BASED REASONING - Uses AI to analyze WHY trades fail and suggest improvements
+5. Adaptive Optimization Loop - Continues until target profitability is reached
 6. Strategy Recoding - Saves improved strategies as new Python files
+
+HYPERLIQUID ADVANTAGES:
+- Taker Fee: 0.035% (vs HTX 0.05%) 
+- Maker Rebate: -0.015%
+- 180+ tradeable coins
+- Higher leverage limits
 
 HOW IT WORKS (LIKE APEX RBI):
 - Every OPTIMIZATION_INTERVAL cycles (default 10), the system analyzes performance
@@ -26,7 +39,7 @@ HOW IT WORKS (LIKE APEX RBI):
 - LLM suggests specific parameter changes or recodes the strategy
 - New parameters are applied and tested
 - Process repeats until TARGET_WIN_RATE and TARGET_PROFIT_FACTOR are achieved
-- Improved strategies are saved to improved_strategies/ folder
+- Strategies hitting 71% WR + profits → promoted to apexlive/ for LIVE trading!
 
 TRADE DURATION:
 - max_holding_periods (default 20) * 15 minutes = 300 minutes (5 hours) max
@@ -70,14 +83,16 @@ except ImportError:
 
 class Config:
     # =============================================================================
-    # 🔥 SIMPLE CONFIG - ONE TYPE OF TRADING: BIGGER MOVES WITH 8X LEVERAGE
+    # 🔥 SIMPLE CONFIG - HYPERLIQUID PAPER TRADING
     # =============================================================================
     STARTING_CAPITAL = 17000.0        # $17k capital
     MAX_POSITION_SIZE = 0.15          # 15% per trade
     DEFAULT_LEVERAGE = 8              # 8X LEVERAGE! 🎰
-    HTX_BASE_URL = "https://api.huobi.pro"
+    
+    # HYPERLIQUID API (Paper trading uses public API, no auth needed for prices)
+    HYPERLIQUID_BASE_URL = "https://api.hyperliquid.xyz"
 
-    # TRADEABLE TOKENS - Can be expanded to scan more of the market
+    # TRADEABLE TOKENS - Hyperliquid supports 180+ coins
     TRADEABLE_TOKENS = ['BTC', 'ETH', 'SOL', 'XRP', 'ADA', 'DOT', 'LINK', 'AVAX']
 
     STRATEGIES_DIR = Path("./successful_strategies")
@@ -154,12 +169,19 @@ class Config:
     PORTFOLIO_STOP_LOSS_THRESHOLD = -400.0    # Close all when $400+ unrealized loss (DISASTER)
     
     # =============================================================================
-    # 🔧 REALISTIC TRADING COSTS FOR 8X LEVERAGE
+    # 🔧 HYPERLIQUID TRADING COSTS (MUCH LOWER THAN HTX!)
     # =============================================================================
-    FUTURES_TAKER_FEE = 0.0007        # 0.07% taker fee per side
-    ESTIMATED_SPREAD = 0.0005         # 0.05% spread cost
-    EXTRA_SLIPPAGE = 0.0003           # 0.03% slippage on exit
-    # TOTAL COST: ~0.15% per side × 2 × 8x = ~2.4% per round trip at 8x
+    # From hypermerge documentation - Hyperliquid has MUCH better fees!
+    # Taker: ~0.035%, Maker: -0.015% (REBATE!)
+    # Spreads and slippage are also much tighter than HTX
+    FUTURES_TAKER_FEE = 0.00035       # 0.035% taker fee per side (Hyperliquid)
+    FUTURES_MAKER_FEE = -0.00015      # -0.015% maker REBATE! (Hyperliquid)
+    ESTIMATED_SPREAD = 0.00005        # 0.005% spread cost (MUCH tighter on Hyperliquid!)
+    EXTRA_SLIPPAGE = 0.00003          # 0.003% slippage on exit (better execution)
+    USE_MAKER_ORDERS = False          # Set True to use limit orders for rebates
+    # TOTAL COST at 8x with taker: ~0.04% per side × 2 × 8x = ~0.64% per round trip
+    # Compare to HTX: ~0.15% per side × 2 × 8x = ~2.4% per round trip
+    # HYPERLIQUID SAVES ~1.76% PER TRADE vs HTX!
     
     # =============================================================================
     # 🎯 MULTI-TARGET PARTIAL EXITS (50% / 25% / 25%)
@@ -1111,57 +1133,126 @@ Respond ONLY with valid JSON."""
         return new_params
 
 # =============================================================================
-# HTX API CLIENT
+# HYPERLIQUID API CLIENT (Paper Trading)
 # =============================================================================
+# Hyperliquid is used for BOTH paper testing AND live trading
+# Paper trading uses Hyperliquid price data
+# Live trading uses Hyperliquid order execution
 
-class RealHTXClient:
+class HyperliquidPaperClient:
+    """
+    Hyperliquid API client for paper trading.
+    Uses Hyperliquid public API for market data.
+    No authentication needed for price data.
+    """
+    
     def __init__(self):
-        self.base_url = Config.HTX_BASE_URL
+        self.base_url = "https://api.hyperliquid.xyz"
         self.session = requests.Session()
-
-    def fetch_candles(self, symbol: str, period: str = '15min', count: int = 100) -> Optional[pd.DataFrame]:
+        self.coin_info = {}
+        self._fetch_coin_info()
+    
+    def _fetch_coin_info(self):
+        """Fetch available coins from Hyperliquid."""
         try:
-            endpoint = f"{self.base_url}/market/history/kline"
-            params = {
-                "symbol": f"{symbol.lower()}usdt",
-                "period": period,
-                "size": min(count, 2000)
-            }
-
-            response = self.session.get(endpoint, params=params, timeout=10)
-
+            response = self.session.post(
+                f"{self.base_url}/info",
+                json={"type": "meta"},
+                timeout=10
+            )
             if response.status_code == 200:
                 data = response.json()
-                if data.get("status") == "ok":
-                    klines = data.get("data", [])
-
-                    if klines:
-                        df = pd.DataFrame(klines)
-                        df = df.rename(columns={
-                            'id': 'timestamp',
-                            'open': 'Open',
-                            'high': 'High',
-                            'low': 'Low',
-                            'close': 'Close',
-                            'amount': 'Volume'
-                        })
-                        df['datetime'] = pd.to_datetime(df['timestamp'], unit='s')
-                        df = df[['datetime', 'Open', 'High', 'Low', 'Close', 'Volume']]
-                        df = df.sort_values('datetime')
-                        return df
-
+                universe = data.get('universe', [])
+                for coin_data in universe:
+                    name = coin_data.get('name', '')
+                    self.coin_info[name] = {
+                        'max_leverage': coin_data.get('maxLeverage', 10),
+                        'sz_decimals': coin_data.get('szDecimals', 3),
+                    }
+                print(f"📊 Hyperliquid: {len(self.coin_info)} tradeable coins available")
         except Exception as e:
-            print(f"❌ HTX API Error for {symbol}: {e}")
+            print(f"⚠️  Could not fetch Hyperliquid coin info: {e}")
+    
+    def get_current_price(self, symbol: str) -> Optional[float]:
+        """Get current price for a symbol from Hyperliquid."""
+        try:
+            response = self.session.post(
+                f"{self.base_url}/info",
+                json={"type": "allMids"},
+                timeout=10
+            )
+            if response.status_code == 200:
+                all_mids = response.json()
+                price = all_mids.get(symbol)
+                if price:
+                    return float(price)
+        except Exception as e:
+            print(f"⚠️  Hyperliquid price fetch failed for {symbol}: {e}")
+        return None
+    
+    def fetch_candles(self, symbol: str, period: str = '15min', count: int = 100) -> Optional[pd.DataFrame]:
+        """
+        Fetch OHLCV candles from Hyperliquid.
+        Maps period format: 15min -> 15m
+        """
+        try:
+            # Map period format
+            period_map = {
+                '1min': '1m', '5min': '5m', '15min': '15m',
+                '1hour': '1h', '4hour': '4h', '1day': '1d'
+            }
+            interval = period_map.get(period, '15m')
+            
+            # Calculate time range
+            end_time = int(time.time() * 1000)
+            interval_ms = {
+                '1m': 60000, '5m': 300000, '15m': 900000,
+                '1h': 3600000, '4h': 14400000, '1d': 86400000
+            }.get(interval, 900000)
+            start_time = end_time - (count * interval_ms)
+            
+            response = self.session.post(
+                f"{self.base_url}/info",
+                json={
+                    "type": "candleSnapshot",
+                    "req": {
+                        "coin": symbol,
+                        "interval": interval,
+                        "startTime": start_time,
+                        "endTime": end_time
+                    }
+                },
+                timeout=10
+            )
+            
+            if response.status_code == 200:
+                candles = response.json()
+                if candles:
+                    df = pd.DataFrame(candles)
+                    df = df.rename(columns={
+                        't': 'timestamp',
+                        'o': 'Open',
+                        'h': 'High',
+                        'l': 'Low',
+                        'c': 'Close',
+                        'v': 'Volume'
+                    })
+                    
+                    for col in ['Open', 'High', 'Low', 'Close', 'Volume']:
+                        if col in df.columns:
+                            df[col] = pd.to_numeric(df[col], errors='coerce')
+                    
+                    df['datetime'] = pd.to_datetime(df['timestamp'], unit='ms')
+                    df = df.sort_values('datetime')
+                    return df[['datetime', 'Open', 'High', 'Low', 'Close', 'Volume']]
+        
+        except Exception as e:
+            print(f"❌ Hyperliquid candle fetch error for {symbol}: {e}")
         return None
 
-    def get_current_price(self, symbol: str) -> Optional[float]:
-        try:
-            candles = self.fetch_candles(symbol, '1min', 1)
-            if candles is not None and len(candles) > 0:
-                return float(candles['Close'].iloc[-1])
-        except:
-            pass
-        return None
+
+# Legacy alias for backwards compatibility
+RealHTXClient = HyperliquidPaperClient
 
 # =============================================================================
 # LLM-BASED SIGNAL GENERATOR - READS STRATEGY CODE TO UNDERSTAND WHAT TO TRADE

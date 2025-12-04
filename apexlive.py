@@ -79,11 +79,16 @@ class LiveConfig:
     MARKET_CHECK_INTERVAL = 30        # 30 seconds between market checks
     
     # ==========================================================================
-    # 💰 HYPERLIQUID FEE STRUCTURE (LOWER THAN HTX!)
+    # 💰 HYPERLIQUID FEE STRUCTURE (MUCH LOWER THAN HTX!)
     # ==========================================================================
+    # From hypermerge documentation - Hyperliquid has MUCH better fees!
     FUTURES_TAKER_FEE = 0.00035       # 0.035% taker fee per side
     FUTURES_MAKER_FEE = -0.00015      # -0.015% maker REBATE!
+    ESTIMATED_SPREAD = 0.00005        # 0.005% spread (MUCH tighter than HTX!)
+    EXTRA_SLIPPAGE = 0.00003          # 0.003% slippage (better execution)
     USE_MAKER_ORDERS = False          # Use taker for speed, maker for rebate
+    # TOTAL COST at 5x: ~0.04% per side × 2 × 5x = ~0.4% per round trip
+    # Compare to HTX: ~0.15% per side × 2 × 5x = ~1.5% per round trip
     
     # ==========================================================================
     # 🛡️ SAFETY LIMITS - CANNOT BE CHANGED BY LLM!
