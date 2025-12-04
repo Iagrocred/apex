@@ -89,6 +89,19 @@ class Config:
     MAX_POSITION_SIZE = 0.15          # 15% per trade
     DEFAULT_LEVERAGE = 8              # 8X LEVERAGE! 🎰
     
+    # =============================================================================
+    # 📊 DYNAMIC PER-COIN LEVERAGE LIMITS (Hyperliquid varies by coin)
+    # =============================================================================
+    # Some coins allow up to 40x (BTC), some only 5x (small caps)
+    # We cap at 26x max but respect per-coin limits from Hyperliquid API
+    MAX_LEVERAGE = 26                 # Hard cap at 26x (Hyperliquid allows up to 40x on BTC)
+    
+    # =============================================================================
+    # 📈 MINIMUM VOLUME FILTERING (Only trade liquid coins!)
+    # =============================================================================
+    MIN_DAILY_VOLUME_USD = 3_000_000  # $3M minimum 24h volume to trade
+    MIN_LEVERAGE_REQUIRED = 5         # Coin must support at least 5x leverage
+    
     # HYPERLIQUID API (Paper trading uses public API, no auth needed for prices)
     HYPERLIQUID_BASE_URL = "https://api.hyperliquid.xyz"
 
@@ -1172,6 +1185,23 @@ class HyperliquidPaperClient:
                 print(f"📊 Hyperliquid: {len(self.coin_info)} tradeable coins available")
         except Exception as e:
             print(f"⚠️  Could not fetch Hyperliquid coin info: {e}")
+    
+    def get_effective_leverage(self, coin: str) -> int:
+        """
+        Get the effective leverage for a coin.
+        Returns min(DEFAULT_LEVERAGE, coin_max_leverage, MAX_LEVERAGE).
+        """
+        coin_max = self.coin_info.get(coin, {}).get('max_leverage', 10)
+        effective = min(Config.DEFAULT_LEVERAGE, coin_max, Config.MAX_LEVERAGE)
+        return int(effective)
+    
+    def is_coin_tradeable(self, coin: str) -> bool:
+        """
+        Check if coin meets minimum requirements for trading.
+        - Must have at least MIN_LEVERAGE_REQUIRED leverage
+        """
+        coin_max = self.coin_info.get(coin, {}).get('max_leverage', 0)
+        return coin_max >= Config.MIN_LEVERAGE_REQUIRED
     
     def get_current_price(self, symbol: str) -> Optional[float]:
         """Get current price for a symbol from Hyperliquid."""
