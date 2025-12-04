@@ -1,0 +1,99 @@
+#!/usr/bin/env python3
+"""
+Hyperliquid 8-trade test for SDK v0.21.0
+This version WORKS with delegated API wallet + main wallet.
+"""
+
+import json
+import time
+from pathlib import Path
+
+from eth_account import Account
+from hyperliquid.info import Info
+from hyperliquid.exchange import Exchange
+from hyperliquid.utils import constants
+
+
+CONFIG_FILE = Path("config.json")
+
+
+def load_config():
+    with open(CONFIG_FILE, "r") as f:
+        cfg = json.load(f)
+    return cfg["secret_key"], cfg["account_address"]
+
+
+def setup_clients(use_testnet: bool):
+    secret_key, account_address = load_config()
+
+    base_url = (
+        constants.TESTNET_API_URL if use_testnet else constants.MAINNET_API_URL
+    )
+
+    # 🔥 THIS IS THE CORRECT WAY TO SIGN IN SDK v0.21.0
+    signer = Account.from_key(secret_key)
+
+    # Info = read only client
+    info = Info(base_url=base_url, skip_ws=True)
+
+    # 🔥 THIS IS THE CORRECT Exchange constructor
+    exchange = Exchange(
+        signer,
+        base_url=base_url,
+        account_address=account_address
+    )
+
+    return exchange, base_url
+
+
+def test_trade(exchange, side, coin, size):
+    try:
+        print(f"\n🚀 Opening {side.upper()} {size} {coin}")
+        resp = exchange.market_open(coin, side == "buy", size, None, 0.01)
+        print(resp)
+
+        time.sleep(2)
+
+        print(f"📥 Closing {side.upper()} {size} {coin}")
+        resp = exchange.market_close(coin)
+        print(resp)
+
+        if resp.get("status") == "ok":
+            print("   ✅ Success")
+            return True
+        else:
+            print("   ❌ Failure")
+            return False
+
+    except Exception as e:
+        print("   ❌ Exception:", e)
+        return False
+
+
+def main():
+    print("🔑 Hyperliquid v0.21.0 Connectivity Test")
+
+    mode = input("Use TESTNET? (y/n) [y]: ").strip().lower()
+    use_testnet = (mode != "n")
+
+    exchange, base_url = setup_clients(use_testnet)
+
+    print(f"\n🟢 base_url: {base_url}")
+
+    coin = input("Coin to trade [BTC]: ").strip().upper() or "BTC"
+
+    size = float(input("Size in coin units [0.001]: ") or "0.001")
+
+    print("\n🔄 Beginning 8-test sequence...\n")
+    ok = 0
+
+    for i in range(8):
+        side = "buy" if i % 2 == 0 else "sell"
+        if test_trade(exchange, side, coin, size):
+            ok += 1
+
+    print(f"\n🎯 Finished: {ok}/8 trades successful.\n")
+
+
+if __name__ == "__main__":
+    main()

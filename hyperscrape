@@ -1,0 +1,151 @@
+#!/usr/bin/env python3
+"""
+Hyperliquid Market Monitor
+==========================
+
+This script:
+  ✔ Fetches real 15m candles (last 100)
+  ✔ Prints REAL USD volume (v * close)
+  ✔ Scans ALL hyperliquid coins
+  ✔ Alerts when volume is high
+  ✔ Alerts when volatility is high
+  ✔ Perfect for TRADEPEX token filtering
+"""
+
+import requests
+import time
+import json
+
+INFO_URL = "https://api.hyperliquid.xyz/info"
+
+# How many candles to fetch
+CANDLE_COUNT = 100
+
+# Volume alert threshold (USD)
+HIGH_VOLUME_USD = 5_000_000
+
+# Volatility alert threshold (%) based on H/L range
+HIGH_VOLATILITY_PCT = 6.0
+
+
+# -----------------------------
+# API Helper
+# -----------------------------
+def info_call(payload):
+    r = requests.post(INFO_URL, json=payload, timeout=10)
+    r.raise_for_status()
+    return r.json()
+
+
+# -----------------------------
+# Fetch 15m candles for a coin
+# -----------------------------
+def get_15m_candles(coin):
+    now = int(time.time() * 1000)
+    interval_ms = 15 * 60 * 1000
+    start = now - (interval_ms * CANDLE_COUNT)
+
+    payload = {
+        "type": "candleSnapshot",
+        "req": {
+            "coin": coin,
+            "interval": "15m",
+            "startTime": start,
+            "endTime": now
+        }
+    }
+
+    return info_call(payload)
+
+
+# -----------------------------
+# Fetch tradable coins
+# -----------------------------
+def get_universe():
+    res = info_call({"type": "metaAndAssetCtxs"})
+    uni = res[0]["universe"]
+    return [c["name"] for c in uni if not c.get("isDelisted", False)]
+
+
+# -----------------------------
+# USD volume from candle
+# -----------------------------
+def calc_usd_volume(candle):
+    close = float(candle["c"])
+    vol_base = float(candle["v"])
+    return close * vol_base
+
+
+def calc_volatility(candle):
+    high = float(candle["h"])
+    low = float(candle["l"])
+    return ((high - low) / low) * 100 if low != 0 else 0.0
+
+
+# -----------------------------
+# MAIN SCRIPT
+# -----------------------------
+def main():
+    print("📊 Hyperliquid Market Monitor\n")
+
+    coins = get_universe()
+    print(f"Found {len(coins)} tradable coins.\n")
+
+    HOT_VOLUME = []
+    HOT_VOLATILITY = []
+
+    for coin in coins:
+        try:
+            candles = get_15m_candles(coin)
+            if not candles:
+                print(f"{coin}: ⚠ No candle data")
+                continue
+
+            last = candles[-1]
+
+            # Compute real metrics
+            vol_usd = calc_usd_volume(last)
+            vol_pct = calc_volatility(last)
+
+            # Print summary
+            print(f"{coin:<8} | Price {float(last['c']):>10.2f} | "
+                  f"USD VOL {vol_usd:>12.2f} | VOLATILITY {vol_pct:>6.2f}%")
+
+            # Alerts
+            if vol_usd > HIGH_VOLUME_USD:
+                HOT_VOLUME.append((coin, vol_usd))
+
+            if vol_pct > HIGH_VOLATILITY_PCT:
+                HOT_VOLATILITY.append((coin, vol_pct))
+
+        except Exception as e:
+            print(f"{coin}: ERROR: {e}")
+            continue
+
+    print("\n=================================================")
+
+    # -----------------------------
+    # HIGH-VOLUME ALERTS
+    # -----------------------------
+    print("\n🔥 HIGH VOLUME TOKENS (>$5M in last 15m):")
+    if not HOT_VOLUME:
+        print("None.")
+    else:
+        for (coin, v) in sorted(HOT_VOLUME, key=lambda x: -x[1]):
+            print(f"  ✔ {coin:<6} → ${v:,.2f} volume")
+
+    # -----------------------------
+    # HIGH-VOLATILITY ALERTS
+    # -----------------------------
+    print("\n⚡ HIGH VOLATILITY TOKENS (>6% range):")
+    if not HOT_VOLATILITY:
+        print("None.")
+    else:
+        for (coin, v) in sorted(HOT_VOLATILITY, key=lambda x: -x[1]):
+            print(f"  ✔ {coin:<6} → {v:.2f}% volatility")
+
+    print("\n✅ Monitoring complete.\n")
+
+
+if __name__ == "__main__":
+    main()
