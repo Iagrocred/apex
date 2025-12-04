@@ -58,10 +58,11 @@ class LiveConfig:
     """Configuration for LIVE trading - Safety first!"""
     
     # ==========================================================================
-    # 🔥 CAPITAL AND POSITION SIZING
+    # 🔥 CAPITAL AND POSITION SIZING - USES ACTUAL HYPERLIQUID BALANCE!
     # ==========================================================================
-    STRATEGY_CAPITAL_USD = 8000.0     # $8,000 per strategy (fixed allocation)
-    MAX_POSITION_SIZE_PERCENT = 0.15  # Max 15% of strategy capital per trade
+    # Capital is fetched dynamically from Hyperliquid account balance
+    # Position size is calculated as percentage of ACTUAL balance
+    MAX_POSITION_SIZE_PERCENT = 0.15  # Max 15% of account balance per trade
     DEFAULT_LEVERAGE = 8              # 8x leverage for live (matches tradeadapt)
     
     # ==========================================================================
@@ -619,8 +620,14 @@ class LiveTradingEngine:
         if entry_price <= 0:
             return None
         
-        # Calculate position size
-        position_usd = LiveConfig.STRATEGY_CAPITAL_USD * LiveConfig.MAX_POSITION_SIZE_PERCENT
+        # Get ACTUAL account balance from Hyperliquid
+        account_balance = self.hyperliquid.get_account_balance()
+        if not account_balance or account_balance <= 0:
+            print(f"⚠️  Could not fetch account balance or balance is zero")
+            return None
+        
+        # Calculate position size based on ACTUAL balance
+        position_usd = account_balance * LiveConfig.MAX_POSITION_SIZE_PERCENT
         leverage = min(LiveConfig.DEFAULT_LEVERAGE, LiveConfig.MAX_LEVERAGE)
         leveraged_usd = position_usd * leverage
         
@@ -652,6 +659,7 @@ class LiveTradingEngine:
         
         # EXECUTE LIVE TRADE!
         print(f"\n🔥 LIVE TRADE: {direction} {symbol}")
+        print(f"   Account Balance: ${account_balance:.2f}")
         print(f"   Size: {size_coin} {symbol} (${leveraged_usd:.2f} @ {leverage}x)")
         print(f"   Entry: ${entry_price:.2f}")
         print(f"   Targets: {[f'${p:.2f}' for p in target_prices]}")
@@ -972,10 +980,15 @@ class LiveTradingEngine:
     def run(self):
         """Main live trading loop."""
         
+        # Get actual account balance
+        account_balance = self.hyperliquid.get_account_balance() or 0
+        
         print("🚀 STARTING APEXLIVE - Live Trading Engine")
         print(f"🔥 Mode: {'TESTNET' if self.hyperliquid.use_testnet else 'MAINNET'}")
         print(f"🎯 Strategies: {len(self.strategies)}")
-        print(f"💰 Capital per strategy: ${LiveConfig.STRATEGY_CAPITAL_USD}")
+        print(f"💰 Account Balance: ${account_balance:.2f} (fetched from Hyperliquid)")
+        print(f"📊 Position Size: {LiveConfig.MAX_POSITION_SIZE_PERCENT*100:.0f}% of balance = ${account_balance * LiveConfig.MAX_POSITION_SIZE_PERCENT:.2f} per trade")
+        print(f"⚡ Leverage: {LiveConfig.DEFAULT_LEVERAGE}x default, {LiveConfig.MAX_LEVERAGE}x max")
         print(f"🛡️ Max daily loss: ${LiveConfig.MAX_DAILY_LOSS}")
         print(f"⏰ Strategy scan interval: {LiveConfig.STRATEGY_SCAN_INTERVAL // 60} minutes")
         print("="*80)

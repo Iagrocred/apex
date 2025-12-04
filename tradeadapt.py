@@ -173,15 +173,6 @@ class Config:
     MIN_NET_PROFIT_FOR_LIVE = 500.0    # $500+ net profit
 
     # =============================================================================
-    # 🎯 PORTFOLIO CIRCUIT BREAKER - ONLY FOR BIG RUNS!
-    # =============================================================================
-    # This is a CIRCUIT BREAKER, not the main exit method!
-    # 99% of exits should be per-trade TP/SL/time stops
-    # Portfolio TP only triggers on EXCEPTIONALLY good days
-    PORTFOLIO_TAKE_PROFIT_THRESHOLD = 800.0   # Close all when $800+ unrealized profit (BIG DAY!)
-    PORTFOLIO_STOP_LOSS_THRESHOLD = -400.0    # Close all when $400+ unrealized loss (DISASTER)
-    
-    # =============================================================================
     # 🔧 HYPERLIQUID TRADING COSTS (MUCH LOWER THAN HTX!)
     # =============================================================================
     # From hypermerge documentation - Hyperliquid has MUCH better fees!
@@ -3363,8 +3354,6 @@ class AdaptiveTradingEngine:
         print(f"💰 Tokens: {Config.TRADEABLE_TOKENS}")
         print(f"⏰ Check interval: {Config.CHECK_INTERVAL}s")
         print(f"🔧 Optimization interval: Every {Config.OPTIMIZATION_INTERVAL} cycles")
-        print(f"💵 Portfolio Take Profit: ${Config.PORTFOLIO_TAKE_PROFIT_THRESHOLD}")
-        print(f"🛑 Portfolio Stop Loss: ${Config.PORTFOLIO_STOP_LOSS_THRESHOLD}")
         print(f"🔍 Strategy scan interval: Every {Config.STRATEGY_SCAN_INTERVAL//60} minutes")
         print(f"🚀 Live promotion threshold: {Config.MIN_WIN_RATE_FOR_LIVE:.0%} WR + ${Config.MIN_NET_PROFIT_FOR_LIVE} profit")
         print("="*80)
@@ -3422,38 +3411,9 @@ class AdaptiveTradingEngine:
                             emoji = "🟢" if pnl_usd >= 0 else "🔴"
                             print(f"   {emoji} {pos.direction} {pos.symbol} @ ${pos.entry_price:.2f} → ${current_price:.2f} ({pnl_pct:+.2f}%) = ${pnl_usd:+.2f}")
                     
-                    # Show total
+                    # Show total unrealized P&L (for display only - no portfolio-level exits)
                     total_emoji = "🟢" if total_unrealized >= 0 else "🔴"
                     print(f"   {total_emoji} TOTAL UNREALIZED P&L: ${total_unrealized:+.2f}")
-                    
-                    # Portfolio take profit
-                    if total_unrealized >= Config.PORTFOLIO_TAKE_PROFIT_THRESHOLD:
-                        print(f"   💰 TAKE PROFIT THRESHOLD REACHED! (${total_unrealized:+.2f} >= ${Config.PORTFOLIO_TAKE_PROFIT_THRESHOLD})")
-                        print(f"\n💰 PORTFOLIO TAKE PROFIT TRIGGERED! Closing all {len(open_positions)} positions for ${total_unrealized:+.2f}")
-                        for pos in open_positions:
-                            if pos.symbol in current_prices:
-                                self.paper_engine.close_position(pos.position_id, current_prices[pos.symbol], "PORTFOLIO_TAKE_PROFIT")
-                        open_positions = []  # Reset after closing
-                    
-                    # Portfolio stop loss
-                    elif total_unrealized <= Config.PORTFOLIO_STOP_LOSS_THRESHOLD:
-                        print(f"\n🛑 PORTFOLIO STOP LOSS TRIGGERED!")
-                        print(f"   Unrealized: ${total_unrealized:.2f} <= ${Config.PORTFOLIO_STOP_LOSS_THRESHOLD}")
-                        print(f"   Closing ALL positions to limit losses!")
-                        for pos in open_positions:
-                            if pos.symbol in current_prices:
-                                self.paper_engine.close_position(pos.position_id, current_prices[pos.symbol], "PORTFOLIO_STOP_LOSS")
-                        open_positions = []  # Reset after closing
-                    
-                    # Show distance to threshold
-                    else:
-                        if total_unrealized >= 0:
-                            distance = Config.PORTFOLIO_TAKE_PROFIT_THRESHOLD - total_unrealized
-                            print(f"   📈 ${distance:.2f} away from take profit threshold (${Config.PORTFOLIO_TAKE_PROFIT_THRESHOLD})")
-                        else:
-                            distance_to_breakeven = abs(total_unrealized)
-                            distance_to_tp = Config.PORTFOLIO_TAKE_PROFIT_THRESHOLD + distance_to_breakeven
-                            print(f"   📉 ${distance_to_tp:.2f} away from take profit threshold (need +${distance_to_breakeven:.2f} to breakeven, then +${Config.PORTFOLIO_TAKE_PROFIT_THRESHOLD:.2f} more)")
 
                 # NEW: Real-time performance monitoring
                 self.paper_engine.check_real_time_metrics()
