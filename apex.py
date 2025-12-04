@@ -213,6 +213,9 @@ class Config:
     CHAMPION_LOGS_DIR = CHAMPIONS_DIR / "logs"
     CHAMPION_STRATEGIES_DIR = CHAMPIONS_DIR / "strategies"
 
+    # Successful strategies directory (approved strategies go here)
+    SUCCESSFUL_STRATEGIES_DIR = PROJECT_ROOT / "successful_strategies"
+
     # =========================================================================================
     # API KEYS
     # =========================================================================================
@@ -423,6 +426,7 @@ class Config:
             cls.CHAMPIONS_DIR,
             cls.CHAMPION_LOGS_DIR,
             cls.CHAMPION_STRATEGIES_DIR,
+            cls.SUCCESSFUL_STRATEGIES_DIR,
             cls.MARKET_DATA_PATH
         ]
 
@@ -1941,17 +1945,17 @@ Respond with ONLY one word: APPROVE or REJECT"""
             return "REJECT"
 
     def _save_approved_strategy(self, validated_strategy: Dict):
-        """Save approved strategy to final directory"""
+        """Save approved strategy to successful_strategies directory"""
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         strategy_name = validated_strategy.get("strategy_name", "unknown").replace(" ", "_")
 
-        # Save code
-        code_file = Config.FINAL_BACKTEST_DIR / f"{timestamp}_{strategy_name}.py"
+        # Save code to successful_strategies folder
+        code_file = Config.SUCCESSFUL_STRATEGIES_DIR / f"{timestamp}_{strategy_name}.py"
         with open(code_file, 'w') as f:
             f.write(validated_strategy.get("code", ""))
 
-        # Save metadata
-        meta_file = Config.FINAL_BACKTEST_DIR / f"{timestamp}_{strategy_name}_meta.json"
+        # Save metadata to successful_strategies folder
+        meta_file = Config.SUCCESSFUL_STRATEGIES_DIR / f"{timestamp}_{strategy_name}_meta.json"
         with open(meta_file, 'w') as f:
             json.dump({
                 "strategy_name": validated_strategy.get("strategy_name"),
@@ -1961,7 +1965,7 @@ Respond with ONLY one word: APPROVE or REJECT"""
                 "timestamp": validated_strategy.get("timestamp")
             }, f, indent=2)
 
-        self.logger.info(f"💾 Approved strategy saved: {strategy_name}")
+        self.logger.info(f"💾 Approved strategy saved to successful_strategies: {strategy_name}")
 
 logger.info("✅ RBI Backtest Engine class defined (FULL IMPLEMENTATION - 700+ lines)")
 
