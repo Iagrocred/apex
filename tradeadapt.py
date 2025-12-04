@@ -40,6 +40,7 @@ MARKET COVERAGE:
 import os
 import json
 import time
+import shutil
 import pandas as pd
 import numpy as np
 import requests
@@ -69,45 +70,23 @@ except ImportError:
 
 class Config:
     # =============================================================================
-    # 🔥 SIMPLE CONFIG - REDUCED LEVERAGE FOR BETTER RISK MANAGEMENT
+    # 🔥 SIMPLE CONFIG - ONE TYPE OF TRADING: BIGGER MOVES WITH 8X LEVERAGE
     # =============================================================================
     STARTING_CAPITAL = 17000.0        # $17k capital
     MAX_POSITION_SIZE = 0.15          # 15% per trade
-    # Leverage: User requested 5.3x specifically (reduced from 8x)
-    # Lower leverage = lower trading costs and more manageable risk
-    # At 5.3x: round-trip cost ~1.06% vs 2.4% at 8x
-    DEFAULT_LEVERAGE = 5.3
+    DEFAULT_LEVERAGE = 8              # 8X LEVERAGE! 🎰
     HTX_BASE_URL = "https://api.huobi.pro"
 
-    # TRADEABLE TOKENS - Expanded list for more opportunities
-    # Includes: Major coins + high-volume altcoins + trending new coins
-    TRADEABLE_TOKENS = [
-        # Major coins (highest liquidity)
-        'BTC', 'ETH', 'SOL', 'XRP', 'ADA', 'DOT', 'LINK', 'AVAX',
-        # High-volume altcoins (proven liquidity)
-        'DOGE', 'SHIB', 'MATIC', 'UNI', 'LTC', 'BCH', 'ATOM', 'NEAR',
-        # Trending new coins (high volume, good signals)
-        'APT', 'ARB', 'OP', 'TIA', 'SUI', 'SEI'
-    ]
+    # TRADEABLE TOKENS - Can be expanded to scan more of the market
+    TRADEABLE_TOKENS = ['BTC', 'ETH', 'SOL', 'XRP', 'ADA', 'DOT', 'LINK', 'AVAX']
 
     STRATEGIES_DIR = Path("./successful_strategies")
     CHECK_INTERVAL = 30  # Seconds between market checks
 
-    # Position Limits - REDUCED to prevent correlated losses
+    # Position Limits - INCREASED for more data collection
     MAX_TOTAL_POSITIONS = 40          # Was 8, now 40 for all strategies to trade
     MAX_POSITIONS_PER_STRATEGY = 5    # Was 2, now 5 for faster LLM optimization
-    MAX_POSITIONS_PER_TOKEN = 2       # REDUCED: Max 2 positions per token (was 10 - caused correlation)
-    MAX_POSITIONS_PER_TOKEN_PER_DIRECTION = 1  # NEW: Only 1 BUY or 1 SELL per token at a time
-    
-    # Regime filtering configuration - which strategy types to block in CHOPPY_HIGH_VOL
-    # Mean reversion strategies perform poorly in choppy high volatility markets
-    BLOCKED_REGIMES_BY_STRATEGY_TYPE = {
-        'MEAN_REVERSION': ['CHOPPY_HIGH_VOL'],
-        'UNKNOWN': ['CHOPPY_HIGH_VOL'],
-        'PAIRS_TRADING': [],  # Pairs trading can work in volatile markets
-        'BREAKOUT': [],       # Breakout strategies may benefit from volatility
-        'ML_BASED': [],       # Let ML strategies decide
-    }
+    MAX_POSITIONS_PER_TOKEN = 10      # Allow multiple strategies on same token
 
     # Adaptive Optimization Settings
     MIN_TRADES_FOR_ANALYSIS = 5       # Need at least 5 trades before analyzing
@@ -152,40 +131,47 @@ class Config:
     # Improved Strategies Folder - WHERE RECODED STRATEGIES ARE SAVED
     IMPROVED_STRATEGIES_DIR = Path("./improved_strategies")  # New folder for improved versions
     IMPROVEMENT_VERSION_PREFIX = "v"  # e.g., original_strategy_v2.py
+    
+    # =============================================================================
+    # 🚀 APEXLIVE INTEGRATION - Promote strategies to live trading
+    # =============================================================================
+    APEXLIVE_DIR = Path("./apexlive")  # Strategies ready for LIVE trading
+    STRATEGY_SCAN_INTERVAL = 480  # 8 minutes in seconds (scan for new strategies)
+    
+    # Criteria for promoting to live trading
+    MIN_TRADES_FOR_LIVE = 50           # Need 50+ trades to prove consistency
+    MIN_WIN_RATE_FOR_LIVE = 0.71       # 71% win rate - THE REAL GOAL!
+    MIN_PROFIT_FACTOR_FOR_LIVE = 1.8   # 1.8+ profit factor
+    MIN_NET_PROFIT_FOR_LIVE = 500.0    # $500+ net profit
 
     # =============================================================================
-    # 🎯 PORTFOLIO CIRCUIT BREAKER - DISABLED PER USER REQUEST
+    # 🎯 PORTFOLIO CIRCUIT BREAKER - ONLY FOR BIG RUNS!
     # =============================================================================
-    # IMPORTANT: Portfolio stop was killing good trades!
-    # Analysis showed 26 profitable trades were closed at a loss due to portfolio stop
-    # Individual trade SL/TP will manage risk - no portfolio-level stops needed
-    PORTFOLIO_TAKE_PROFIT_THRESHOLD = 2000.0   # Keep take profit (good for big wins)
-    PORTFOLIO_STOP_LOSS_THRESHOLD = -99999.0   # DISABLED - let individual trade SL handle risk
-    ENABLE_PORTFOLIO_STOP_LOSS = False         # NEW FLAG: Portfolio SL is OFF - rely on per-trade stops
+    # This is a CIRCUIT BREAKER, not the main exit method!
+    # 99% of exits should be per-trade TP/SL/time stops
+    # Portfolio TP only triggers on EXCEPTIONALLY good days
+    PORTFOLIO_TAKE_PROFIT_THRESHOLD = 800.0   # Close all when $800+ unrealized profit (BIG DAY!)
+    PORTFOLIO_STOP_LOSS_THRESHOLD = -400.0    # Close all when $400+ unrealized loss (DISASTER)
     
     # =============================================================================
-    # 🔧 DYNAMIC TRADING COSTS (HTX/HUOBI ACTUAL FEES)
+    # 🔧 REALISTIC TRADING COSTS FOR 8X LEVERAGE
     # =============================================================================
-    # Based on huobifees: Taker 0.05%, Maker 0.02%
-    # Fee = Position Size × Rate × 2 (open + close)
-    FUTURES_TAKER_FEE = 0.0005        # 0.05% taker fee per side (HTX actual)
-    FUTURES_MAKER_FEE = 0.0002        # 0.02% maker fee per side (HTX actual)
-    USE_MAKER_ORDERS = False          # Set True to use limit orders for lower fees
-    ESTIMATED_SPREAD = 0.0003         # 0.03% spread cost (reduced estimate)
-    EXTRA_SLIPPAGE = 0.0002           # 0.02% slippage on exit (reduced)
-    # TOTAL COST at 5.3x: ~0.1% per side × 2 × 5.3x = ~1.06% per round trip
+    FUTURES_TAKER_FEE = 0.0007        # 0.07% taker fee per side
+    ESTIMATED_SPREAD = 0.0005         # 0.05% spread cost
+    EXTRA_SLIPPAGE = 0.0003           # 0.03% slippage on exit
+    # TOTAL COST: ~0.15% per side × 2 × 8x = ~2.4% per round trip at 8x
     
     # =============================================================================
-    # 🎯 IMPROVED MULTI-TARGET PARTIAL EXITS - WIDER TARGETS AFTER COSTS
+    # 🎯 MULTI-TARGET PARTIAL EXITS (50% / 25% / 25%)
     # =============================================================================
-    TP_LEVELS = [0.008, 0.012, 0.018]   # 0.8%, 1.2%, 1.8% price moves (wider than before)
+    TP_LEVELS = [0.005, 0.007, 0.010]   # 0.5%, 0.7%, 1.0% price moves
     TP_FRACTIONS = [0.5, 0.25, 0.25]    # Close 50%, then 25%, then 25%
     
     # =============================================================================
-    # 🛡️ TIGHTER STOP LOSS FOR BETTER RISK:REWARD
+    # 🛡️ SAFER STOP LOSS FOR 8X LEVERAGE
     # =============================================================================
-    MIN_STOP_DISTANCE = 0.004         # 0.4% minimum stop = 2.1% loss at 5.3x
-    MAX_STOP_DISTANCE = 0.008         # 0.8% maximum stop = 4.2% loss at 5.3x (was 12% at 8x!)
+    MIN_STOP_DISTANCE = 0.005         # 0.5% minimum stop = 4% loss at 8x
+    MAX_STOP_DISTANCE = 0.015         # 1.5% maximum stop = 12% loss at 8x
     
     # =============================================================================
     # ⏰ SOFT TIME-STOP FOR DEAD TRADES
@@ -780,17 +766,11 @@ class LLMStrategyOptimizer:
         system_prompt = """You are an expert quantitative trading strategist and Python developer.
 Your task is to analyze why a trading strategy is underperforming and suggest SPECIFIC improvements.
 
-IMPORTANT CONSTRAINTS FOR 5.3X LEVERAGE:
-- Stop losses are CLAMPED to 0.4%-0.8% distance (2.1%-4.2% loss at 5.3x leverage)
-- Take profit targets are at 0.8%, 1.2%, 1.8% price moves (partial exits: 50%/25%/25%)
+IMPORTANT CONSTRAINTS FOR 8X LEVERAGE:
+- Stop losses are CLAMPED to 0.5%-1.5% distance (4%-12% loss at 8x leverage)
+- Take profit targets are at 0.5%, 0.7%, 1.0% price moves (partial exits: 50%/25%/25%)
 - DO NOT suggest changing these safety limits! Focus on ENTRY conditions instead.
 - You CAN adjust stop_loss_atr_multiplier and take_profit_atr_multiplier within safe ranges.
-- Trading costs are ~1.06% per round trip at 5.3x leverage (much lower than before)
-
-REGIME FILTERING (NEW):
-- CHOPPY_HIGH_VOL regime is now blocked for mean reversion strategies
-- STRONG_TREND and RANGING_LOW_VOL are ideal regimes
-- MIXED regime uses standard parameters
 
 You must respond in a STRICT JSON format with the following structure:
 {
@@ -829,9 +809,9 @@ Be specific with numbers. Don't suggest vague changes like "increase slightly" -
 - min_volume_ratio: {params.min_volume_ratio:.4f} (minimum volume vs average)
 - max_holding_periods: {params.max_holding_periods} (max 15-min periods before forced exit)
 
-## FIXED RISK LIMITS (DO NOT CHANGE - hardcoded for 5.3x leverage safety):
-- TP levels: 0.8%, 1.2%, 1.8% (partial exits 50%/25%/25%)
-- Stop loss: clamped to 0.4%-0.8% distance
+## FIXED RISK LIMITS (DO NOT CHANGE - hardcoded for 8x leverage safety):
+- TP levels: 0.5%, 0.7%, 1.0% (partial exits 50%/25%/25%)
+- Stop loss: clamped to 0.5%-1.5% distance
 - These are SAFETY limits, not strategy parameters!
 
 ## PERFORMANCE METRICS:
@@ -2201,8 +2181,8 @@ class AdaptivePaperTradingEngine:
             self.strategy_params[strategy_id] = AdaptiveParameters()
         return self.strategy_params[strategy_id]
 
-    def can_open_position(self, strategy_id: str, symbol: str, direction: str = None) -> Tuple[bool, str]:
-        """Check if position can be opened - with direction-based correlation prevention"""
+    def can_open_position(self, strategy_id: str, symbol: str) -> Tuple[bool, str]:
+        """Check if position can be opened - SIMPLIFIED like trader6.py!"""
         open_positions = [p for p in self.positions.values() if p.status == "OPEN"]
 
         # Total position limit
@@ -2219,15 +2199,7 @@ class AdaptivePaperTradingEngine:
         if len(token_positions) >= Config.MAX_POSITIONS_PER_TOKEN:
             return False, f"Token {symbol} has max positions ({Config.MAX_POSITIONS_PER_TOKEN})"
 
-        # NEW: Direction-based position limit (prevent correlated positions)
-        # Only allow 1 position per token per direction to avoid concentration risk
-        if direction:
-            same_direction_positions = [p for p in open_positions if p.symbol == symbol and p.direction == direction]
-            max_per_direction = getattr(Config, 'MAX_POSITIONS_PER_TOKEN_PER_DIRECTION', 1)
-            if len(same_direction_positions) >= max_per_direction:
-                return False, f"Already have {direction} position on {symbol} (max {max_per_direction} per direction)"
-
-        # Existing position check (same strategy + symbol)
+        # Existing position check
         existing = [p for p in open_positions if p.strategy_id == strategy_id and p.symbol == symbol]
         if existing:
             return False, f"Already have position on {symbol}"
@@ -2243,21 +2215,7 @@ class AdaptivePaperTradingEngine:
         if signal['signal'] == 'HOLD':
             return None
 
-        direction = signal['signal']
-        regime = signal.get('market_regime', 'MIXED')
-        
-        # =============================================================================
-        # 🛡️ REGIME FILTERING - Block trades based on strategy type and regime
-        # =============================================================================
-        # Uses configurable mapping from Config.BLOCKED_REGIMES_BY_STRATEGY_TYPE
-        strategy_type = signal.get('strategy_type', 'MEAN_REVERSION')
-        blocked_regimes = Config.BLOCKED_REGIMES_BY_STRATEGY_TYPE.get(strategy_type, [])
-        if regime in blocked_regimes:
-            print(f"⏸️  BLOCKED: {strategy_id[:30]} {symbol} - Regime {regime} unsuitable for {strategy_type}")
-            return None
-        
-        # Pass direction to can_open_position for correlation check
-        can_open, reason = self.can_open_position(strategy_id, symbol, direction)
+        can_open, reason = self.can_open_position(strategy_id, symbol)
         if not can_open:
             print(f"⏸️  BLOCKED: {strategy_id[:30]} {symbol} - {reason}")
             return None
@@ -2270,6 +2228,7 @@ class AdaptivePaperTradingEngine:
         leverage_size = size_usd * Config.DEFAULT_LEVERAGE
 
         entry_price = signal['current_price']
+        direction = signal['signal']
 
         # ---------------------------------------------------------------------
         # MULTI-TP LEVELS (50% / 25% / 25%)
@@ -2858,6 +2817,9 @@ class AdaptiveTradingEngine:
         self.strategies = self.load_strategies()
         self.cycle_count = 0
         self.start_time = datetime.now()
+        
+        # Track last strategy scan time (for 8-minute interval scanning)
+        self.last_strategy_scan = datetime.now()
 
         # Create LLM signal generator for strategy-aware signals
         self.llm_signal_generator = LLMSignalGenerator(self.paper_engine.llm_optimizer)
@@ -2969,6 +2931,177 @@ class AdaptiveTradingEngine:
         print(f"🎯 Total strategies: {len(strategies)} ({improved_count} using improved versions)")
 
         return strategies
+
+    def scan_for_new_strategies(self):
+        """
+        Scan successful_strategies/ folder for NEW strategies added by APEX.
+        This runs every 8 minutes to pick up strategies approved by APEX backtesting.
+        """
+        if not Config.STRATEGIES_DIR.exists():
+            return []
+        
+        new_strategies = []
+        current_strategies = set(self.strategies.keys())
+        
+        py_files = [f for f in Config.STRATEGIES_DIR.glob("*.py") if '_meta' not in str(f)]
+        
+        for py_file in py_files:
+            strategy_id = py_file.stem
+            if strategy_id not in current_strategies:
+                # NEW STRATEGY FOUND! Add it to paper trading
+                print(f"\n🆕 NEW STRATEGY DISCOVERED: {strategy_id}")
+                
+                self.strategies[strategy_id] = {
+                    'py_file': py_file,
+                    'original_file': py_file,
+                    'version': 0,
+                    'is_improved': False
+                }
+                
+                # Register and create executor
+                self.paper_engine.set_strategy_file(strategy_id, py_file)
+                params = self.paper_engine.get_params(strategy_id)
+                executor = AdaptiveStrategyExecutor(params)
+                executor.strategy_file = py_file
+                
+                # Analyze strategy type
+                strategy_logic = self.llm_signal_generator.parse_strategy_logic(py_file)
+                executor.strategy_type = strategy_logic.get('strategy_type', 'UNKNOWN')
+                
+                self.executors[strategy_id] = executor
+                new_strategies.append(strategy_id)
+                
+                print(f"   📊 Type: {executor.strategy_type}")
+                print(f"   ✅ Added to paper trading!")
+        
+        if new_strategies:
+            print(f"\n🎉 Added {len(new_strategies)} new strategies to paper trading!")
+        
+        return new_strategies
+
+    def promote_to_live(self, strategy_id: str) -> bool:
+        """
+        Promote a strategy to LIVE trading by copying to apexlive/ folder.
+        Only if it meets the 71% win rate + profit criteria!
+        
+        Returns True if successfully promoted.
+        """
+        if strategy_id not in self.paper_engine.analyzer.strategy_performance:
+            print(f"❌ Cannot promote {strategy_id}: No performance data")
+            return False
+        
+        perf = self.paper_engine.analyzer.strategy_performance[strategy_id]
+        
+        # Check all criteria
+        if perf.total_trades < Config.MIN_TRADES_FOR_LIVE:
+            print(f"❌ Cannot promote {strategy_id}: Only {perf.total_trades} trades (need {Config.MIN_TRADES_FOR_LIVE})")
+            return False
+        
+        if perf.win_rate < Config.MIN_WIN_RATE_FOR_LIVE:
+            print(f"❌ Cannot promote {strategy_id}: Win rate {perf.win_rate:.1%} < {Config.MIN_WIN_RATE_FOR_LIVE:.0%}")
+            return False
+        
+        if perf.profit_factor < Config.MIN_PROFIT_FACTOR_FOR_LIVE:
+            print(f"❌ Cannot promote {strategy_id}: Profit factor {perf.profit_factor:.2f} < {Config.MIN_PROFIT_FACTOR_FOR_LIVE}")
+            return False
+        
+        if perf.total_pnl < Config.MIN_NET_PROFIT_FOR_LIVE:
+            print(f"❌ Cannot promote {strategy_id}: Net profit ${perf.total_pnl:.2f} < ${Config.MIN_NET_PROFIT_FOR_LIVE}")
+            return False
+        
+        # All criteria met! Promote to live!
+        print(f"\n🚀 PROMOTING TO LIVE: {strategy_id}")
+        print(f"   📊 Trades: {perf.total_trades}")
+        print(f"   🎯 Win Rate: {perf.win_rate:.1%}")
+        print(f"   📈 Profit Factor: {perf.profit_factor:.2f}")
+        print(f"   💰 Net Profit: ${perf.total_pnl:.2f}")
+        
+        # Create apexlive folder if it doesn't exist
+        Config.APEXLIVE_DIR.mkdir(parents=True, exist_ok=True)
+        
+        # Get the best version of the strategy (improved or original)
+        strategy_info = self.strategies.get(strategy_id, {})
+        source_file = strategy_info.get('py_file')
+        
+        if not source_file or not source_file.exists():
+            print(f"❌ Source file not found for {strategy_id}")
+            return False
+        
+        # Copy strategy to apexlive folder with performance metadata
+        import shutil
+        version = strategy_info.get('version', 0)
+        live_filename = f"{strategy_id}_live_v{version}.py" if version > 0 else f"{strategy_id}_live.py"
+        dest_file = Config.APEXLIVE_DIR / live_filename
+        
+        shutil.copy2(source_file, dest_file)
+        
+        # Also save performance metadata
+        meta_file = Config.APEXLIVE_DIR / f"{strategy_id}_live_meta.json"
+        meta_data = {
+            'strategy_id': strategy_id,
+            'version': version,
+            'promoted_at': datetime.now().isoformat(),
+            'source_file': str(source_file),
+            'performance': {
+                'total_trades': perf.total_trades,
+                'win_rate': perf.win_rate,
+                'profit_factor': perf.profit_factor,
+                'total_pnl': perf.total_pnl,
+                'avg_win': perf.avg_win,
+                'avg_loss': perf.avg_loss
+            }
+        }
+        with open(meta_file, 'w') as f:
+            json.dump(meta_data, f, indent=2)
+        
+        print(f"   📁 Saved to: {dest_file}")
+        print(f"   📋 Metadata: {meta_file}")
+        print(f"   🚀 READY FOR LIVE TRADING VIA APEXLIVE.PY!")
+        
+        return True
+
+    def check_and_promote_strategies(self):
+        """
+        Check all strategies and promote any that meet the 71% criteria.
+        Called periodically to auto-promote successful strategies.
+        """
+        promoted = []
+        
+        for strategy_id in self.strategies:
+            if strategy_id in self.paper_engine.analyzer.strategy_performance:
+                perf = self.paper_engine.analyzer.strategy_performance[strategy_id]
+                
+                # Check if already promoted (file exists in apexlive)
+                live_files = list(Config.APEXLIVE_DIR.glob(f"{strategy_id}_live*.py")) if Config.APEXLIVE_DIR.exists() else []
+                
+                # Check criteria
+                meets_criteria = (
+                    perf.total_trades >= Config.MIN_TRADES_FOR_LIVE and
+                    perf.win_rate >= Config.MIN_WIN_RATE_FOR_LIVE and
+                    perf.profit_factor >= Config.MIN_PROFIT_FACTOR_FOR_LIVE and
+                    perf.total_pnl >= Config.MIN_NET_PROFIT_FOR_LIVE
+                )
+                
+                if meets_criteria:
+                    # Check if this version is newer than what's in apexlive
+                    current_version = self.strategies[strategy_id].get('version', 0)
+                    should_update = True
+                    
+                    if live_files:
+                        # Check if we have a newer version
+                        for lf in live_files:
+                            if f"_v{current_version}" in str(lf) or (current_version == 0 and "_v" not in str(lf)):
+                                should_update = False
+                                break
+                    
+                    if should_update:
+                        if self.promote_to_live(strategy_id):
+                            promoted.append(strategy_id)
+        
+        if promoted:
+            print(f"\n🎉 Promoted {len(promoted)} strategies to LIVE trading!")
+        
+        return promoted
 
     def refresh_executor(self, strategy_id: str):
         """
@@ -3105,43 +3238,33 @@ class AdaptiveTradingEngine:
     def run_adaptive(self):
         """Run with adaptive learning and real-time monitoring"""
         print("🚀 STARTING TRADEPEX ADAPTIVE - Dynamic Strategy Optimizer")
-        print(f"{'='*80}")
-        print(f"📊 CONFIGURATION SUMMARY (v2 - Improved Settings)")
-        print(f"{'='*80}")
-        print(f"   🎯 Strategies: {len(self.strategies)}")
-        print(f"   💰 Tokens: {Config.TRADEABLE_TOKENS}")
-        print(f"   📈 Leverage: {Config.DEFAULT_LEVERAGE}x (reduced from 8x for lower costs)")
-        print(f"   ⏰ Check interval: {Config.CHECK_INTERVAL}s")
-        print(f"   🔧 Optimization interval: Every {Config.OPTIMIZATION_INTERVAL} cycles")
-        print(f"   💵 Portfolio Take Profit: ${Config.PORTFOLIO_TAKE_PROFIT_THRESHOLD}")
-        portfolio_sl_status = "ENABLED" if getattr(Config, 'ENABLE_PORTFOLIO_STOP_LOSS', False) else "DISABLED"
-        print(f"   🛑 Portfolio Stop Loss: {portfolio_sl_status} (per-trade SL active)")
-        print(f"   📉 Max positions per token per direction: {getattr(Config, 'MAX_POSITIONS_PER_TOKEN_PER_DIRECTION', 1)}")
-        print(f"   🎯 Take Profit Targets: {[f'{tp*100:.1f}%' for tp in Config.TP_LEVELS]}")
-        print(f"   🛡️ Stop Loss Range: {Config.MIN_STOP_DISTANCE*100:.1f}% - {Config.MAX_STOP_DISTANCE*100:.1f}%")
-        print(f"   💸 Trading Fees: Taker {Config.FUTURES_TAKER_FEE*100:.3f}% | Maker {getattr(Config, 'FUTURES_MAKER_FEE', 0.0002)*100:.3f}%")
-        print(f"{'='*80}")
-        print(f"📝 KEY IMPROVEMENTS IN THIS VERSION:")
-        print(f"   ✅ Portfolio stop loss DISABLED - individual trade SL manages risk")
-        print(f"   ✅ Reduced leverage 8x → 5.3x - lower trading costs")
-        print(f"   ✅ Limit 1 position per token per direction - prevents correlation")
-        print(f"   ✅ Wider take profit targets - better after costs")
-        print(f"   ✅ Tighter stop losses - better risk:reward ratio")
-        print(f"   ✅ CHOPPY_HIGH_VOL regime filter - blocks bad trades")
-        print(f"   ✅ Dynamic HTX fee rates - based on actual exchange fees")
-        print(f"{'='*80}")
-        print(f"📝 LLM VERSIONING CLARIFICATION:")
-        print(f"   ✅ LLM optimizes PARAMETERS only (min_deviation, stop_mult, etc.)")
-        print(f"   ✅ Strategy versions (v1, v2...) = improved PARAMETERS, same core logic")
-        print(f"   ✅ This is CORRECT because: 55-60% win rate means LOGIC IS GOOD!")
-        print(f"   ❌ Full recoding NOT needed: problems were costs/risk mgmt, not logic")
-        print(f"{'='*80}")
+        print(f"🎯 Strategies: {len(self.strategies)}")
+        print(f"💰 Tokens: {Config.TRADEABLE_TOKENS}")
+        print(f"⏰ Check interval: {Config.CHECK_INTERVAL}s")
+        print(f"🔧 Optimization interval: Every {Config.OPTIMIZATION_INTERVAL} cycles")
+        print(f"💵 Portfolio Take Profit: ${Config.PORTFOLIO_TAKE_PROFIT_THRESHOLD}")
+        print(f"🛑 Portfolio Stop Loss: ${Config.PORTFOLIO_STOP_LOSS_THRESHOLD}")
+        print(f"🔍 Strategy scan interval: Every {Config.STRATEGY_SCAN_INTERVAL//60} minutes")
+        print(f"🚀 Live promotion threshold: {Config.MIN_WIN_RATE_FOR_LIVE:.0%} WR + ${Config.MIN_NET_PROFIT_FOR_LIVE} profit")
+        print("="*80)
 
         while True:
             self.cycle_count += 1
 
             try:
                 print(f"\n🔄 CYCLE {self.cycle_count} - {datetime.now().strftime('%H:%M:%S')}")
+
+                # =================================================================
+                # 🔍 SCAN FOR NEW STRATEGIES (every 8 minutes)
+                # =================================================================
+                seconds_since_scan = (datetime.now() - self.last_strategy_scan).total_seconds()
+                if seconds_since_scan >= Config.STRATEGY_SCAN_INTERVAL:
+                    print(f"\n🔍 SCANNING FOR NEW STRATEGIES (8-minute interval)...")
+                    new_strategies = self.scan_for_new_strategies()
+                    self.last_strategy_scan = datetime.now()
+                    
+                    # Also check for strategies ready to promote to live
+                    self.check_and_promote_strategies()
 
                 # Get current prices
                 current_prices = {}
@@ -3191,9 +3314,8 @@ class AdaptiveTradingEngine:
                                 self.paper_engine.close_position(pos.position_id, current_prices[pos.symbol], "PORTFOLIO_TAKE_PROFIT")
                         open_positions = []  # Reset after closing
                     
-                    # Portfolio stop loss - DISABLED by default to let individual trade stops work
-                    # Analysis showed portfolio stop was killing profitable trades!
-                    elif getattr(Config, 'ENABLE_PORTFOLIO_STOP_LOSS', False) and total_unrealized <= Config.PORTFOLIO_STOP_LOSS_THRESHOLD:
+                    # Portfolio stop loss
+                    elif total_unrealized <= Config.PORTFOLIO_STOP_LOSS_THRESHOLD:
                         print(f"\n🛑 PORTFOLIO STOP LOSS TRIGGERED!")
                         print(f"   Unrealized: ${total_unrealized:.2f} <= ${Config.PORTFOLIO_STOP_LOSS_THRESHOLD}")
                         print(f"   Closing ALL positions to limit losses!")
@@ -3202,18 +3324,15 @@ class AdaptiveTradingEngine:
                                 self.paper_engine.close_position(pos.position_id, current_prices[pos.symbol], "PORTFOLIO_STOP_LOSS")
                         open_positions = []  # Reset after closing
                     
-                    # Show distance to threshold (only show portfolio SL distance if enabled)
+                    # Show distance to threshold
                     else:
                         if total_unrealized >= 0:
                             distance = Config.PORTFOLIO_TAKE_PROFIT_THRESHOLD - total_unrealized
                             print(f"   📈 ${distance:.2f} away from take profit threshold (${Config.PORTFOLIO_TAKE_PROFIT_THRESHOLD})")
                         else:
-                            if getattr(Config, 'ENABLE_PORTFOLIO_STOP_LOSS', False):
-                                distance_to_breakeven = abs(total_unrealized)
-                                distance_to_tp = Config.PORTFOLIO_TAKE_PROFIT_THRESHOLD + distance_to_breakeven
-                                print(f"   📉 ${distance_to_tp:.2f} away from take profit threshold (need +${distance_to_breakeven:.2f} to breakeven, then +${Config.PORTFOLIO_TAKE_PROFIT_THRESHOLD:.2f} more)")
-                            else:
-                                print(f"   📉 Unrealized: ${total_unrealized:.2f} (portfolio SL disabled - per-trade SL active)")
+                            distance_to_breakeven = abs(total_unrealized)
+                            distance_to_tp = Config.PORTFOLIO_TAKE_PROFIT_THRESHOLD + distance_to_breakeven
+                            print(f"   📉 ${distance_to_tp:.2f} away from take profit threshold (need +${distance_to_breakeven:.2f} to breakeven, then +${Config.PORTFOLIO_TAKE_PROFIT_THRESHOLD:.2f} more)")
 
                 # NEW: Real-time performance monitoring
                 self.paper_engine.check_real_time_metrics()
