@@ -269,11 +269,11 @@ class Config:
     # THREAD 2: RBI BACKTEST ENGINE CONFIGURATION (Moon-Dev v3 Full)
     # =========================================================================================
 
-    # LLM Models for RBI (Moon-Dev pattern)
-    RBI_RESEARCH_MODEL = {"type": "xai", "name": "grok-4-fast-reasoning"}
-    RBI_BACKTEST_MODEL = {"type": "xai", "name": "grok-4-fast-reasoning"}
-    RBI_DEBUG_MODEL = {"type": "xai", "name": "grok-4-fast-reasoning"}
-    RBI_OPTIMIZE_MODEL = {"type": "xai", "name": "grok-4-fast-reasoning"}
+    # LLM Models for RBI (DeepSeek V3.2 Reasoner - latest version)
+    RBI_RESEARCH_MODEL = {"type": "deepseek", "name": "deepseek-reasoner"}  # DeepSeek V3.2 Reasoner
+    RBI_BACKTEST_MODEL = {"type": "deepseek", "name": "deepseek-reasoner"}  # DeepSeek V3.2 Reasoner
+    RBI_DEBUG_MODEL = {"type": "deepseek", "name": "deepseek-reasoner"}  # DeepSeek V3.2 Reasoner
+    RBI_OPTIMIZE_MODEL = {"type": "deepseek", "name": "deepseek-reasoner"}  # DeepSeek V3.2 Reasoner
 
     # Execution settings
     MAX_DEBUG_ITERATIONS = 10
@@ -859,8 +859,20 @@ class StrategyDiscoveryAgent:
         self.search_queries_csv = Config.SEARCH_QUERIES_DIR / "search_queries.csv"
         self.strategies_index_csv = Config.STRATEGY_LIBRARY_DIR / "strategies_index.csv"
 
+        # Track previously used queries to avoid duplicates
+        self.used_queries = set()
+
+        # Track previously saved strategies to avoid duplicates
+        self.saved_strategies = set()
+
         # Initialize CSVs
         self._init_csv_files()
+
+        # Load previously used queries to avoid duplicates
+        self._load_previous_queries()
+
+        # Load previously saved strategies to avoid duplicates
+        self._load_previous_strategies()
 
     def _init_csv_files(self):
         """Initialize CSV files for logging"""
@@ -885,10 +897,69 @@ class StrategyDiscoveryAgent:
                 writer = csv.writer(f)
                 writer.writerow(['timestamp', 'strategy_name', 'source', 'file_path', 'quality_score'])
 
+    def _load_previous_queries(self):
+        """Load previously used queries to avoid duplicates"""
+        import csv
+
+        if self.search_queries_csv.exists():
+            try:
+                with open(self.search_queries_csv, 'r', newline='') as f:
+                    reader = csv.DictReader(f)
+                    for row in reader:
+                        query = row.get('query', '').strip().lower()
+                        if query:
+                            self.used_queries.add(query)
+
+                self.logger.info(f"📚 Loaded {len(self.used_queries)} previous queries to avoid duplicates")
+            except Exception as e:
+                self.logger.warning(f"⚠️ Failed to load previous queries: {e}")
+
+    def _load_previous_strategies(self):
+        """Load previously saved strategy names to avoid duplicates"""
+        import csv
+
+        if self.strategies_index_csv.exists():
+            try:
+                with open(self.strategies_index_csv, 'r', newline='') as f:
+                    reader = csv.DictReader(f)
+                    for row in reader:
+                        strategy_name = row.get('strategy_name', '').strip().lower()
+                        if strategy_name:
+                            self.saved_strategies.add(strategy_name)
+
+                self.logger.info(f"📚 Loaded {len(self.saved_strategies)} previous strategies to avoid duplicates")
+            except Exception as e:
+                self.logger.warning(f"⚠️ Failed to load previous strategies: {e}")
+
+    def _is_duplicate_strategy(self, strategy_name: str) -> bool:
+        """Check if strategy has been saved before (case-insensitive, normalized)"""
+        normalized = strategy_name.strip().lower()
+        return normalized in self.saved_strategies
+
+    def _add_strategy_to_saved(self, strategy_name: str):
+        """Add strategy name to saved set"""
+        normalized = strategy_name.strip().lower()
+        self.saved_strategies.add(normalized)
+
+    def _is_duplicate_query(self, query: str) -> bool:
+        """Check if query has been used before (case-insensitive, normalized)"""
+        normalized = query.strip().lower()
+        # Remove extra quotes and whitespace
+        normalized = normalized.replace('"', '').replace("'", "").strip()
+        return normalized in self.used_queries
+
+    def _add_query_to_used(self, query: str):
+        """Add query to used set"""
+        normalized = query.strip().lower().replace('"', '').replace("'", "").strip()
+        self.used_queries.add(normalized)
+
     def run_continuous(self):
         """Main continuous loop for strategy discovery"""
         self.logger.info("🚀 Strategy Discovery Agent started (Full Implementation)")
         self.logger.info("   Based on Moon-Dev websearch_agent.py (1280+ lines)")
+        self.logger.info("   🆕 Mode: FRESH SEARCH ONLY - Not loading old strategies")
+        self.logger.info(f"   📊 Deduplication: Enabled - {len(self.used_queries)} queries will be skipped")
+        self.logger.info(f"   📊 Deduplication: Enabled - {len(self.saved_strategies)} strategies will be skipped")
 
         while True:
             try:
@@ -897,6 +968,7 @@ class StrategyDiscoveryAgent:
 
                 self.logger.info("=" * 80)
                 self.logger.info(f"🔍 DISCOVERY CYCLE {self.cycle_count}")
+                self.logger.info("   Mode: FRESH NEW STRATEGIES ONLY (no loading old ones)")
                 self.logger.info("=" * 80)
 
                 # Phase 1: Generate search queries using LLM
@@ -940,6 +1012,7 @@ class StrategyDiscoveryAgent:
     def _generate_search_queries_full(self) -> List[str]:
         """Generate search queries using LLM (Full Moon-Dev implementation)"""
         self.logger.info("🧠 Generating search queries with LLM...")
+        self.logger.info(f"   Previously used queries: {len(self.used_queries)} (will skip duplicates)")
 
         # Use OpenRouter GLM model (Moon-Dev pattern)
         system_prompt = """You are Moon Dev's Web Search Query Generator 🌙
@@ -954,26 +1027,34 @@ Be creative and varied! Each query should explore DIFFERENT strategy types:
 - Time-based patterns, seasonal effects, intraday patterns
 - Options strategies, volatility trading, correlation trading
 - Machine learning strategies, neural network trading
-- Quantitative strategies with mathematical models"""
+- Quantitative strategies with mathematical models
+
+IMPORTANT: Generate UNIQUE queries - avoid common/repeated patterns!"""
 
         queries = []
+        attempts = 0
+        max_attempts = Config.DISCOVERY_QUERIES_PER_CYCLE * 3  # Allow more attempts to find unique queries
 
-        # Generate multiple queries
-        for i in range(Config.DISCOVERY_QUERIES_PER_CYCLE):
+        # Generate multiple queries, but skip duplicates
+        while len(queries) < Config.DISCOVERY_QUERIES_PER_CYCLE and attempts < max_attempts:
+            attempts += 1
             try:
-                user_prompt = f"""Generate search query #{i+1} of {Config.DISCOVERY_QUERIES_PER_CYCLE}.
+                user_prompt = f"""Generate search query #{len(queries)+1} of {Config.DISCOVERY_QUERIES_PER_CYCLE}.
 
-Focus areas (vary between):
-1. "RSI divergence crypto trading strategy backtest results"
-2. "Volume profile breakout strategy TradingView"
-3. "Funding rate arbitrage cryptocurrency quantpedia"
-4. "Order flow imbalance HFT strategy arxiv"
-5. "VWAP mean reversion intraday strategy"
-6. "Bollinger band squeeze momentum strategy"
-7. "Market maker inventory management strategy"
-8. "Statistical arbitrage pairs trading cryptocurrency"
+Focus areas (vary between - BE CREATIVE AND UNIQUE):
+1. Exotic derivatives trading strategies
+2. Gamma scalping options strategies
+3. Statistical arbitrage cointegration
+4. Liquidity provision market making
+5. Delta neutral hedging strategies
+6. Volatility surface arbitrage
+7. Cross-asset correlation trading
+8. High-frequency mean reversion
+9. Regime detection trading
+10. Sentiment-based trading algorithms
 
 Create a UNIQUE query focusing on a specific strategy type.
+Make it different from common queries about RSI, VWAP, Bollinger bands, market makers.
 Return ONLY the search query text, nothing else."""
 
                 # Call LLM
@@ -984,23 +1065,33 @@ Return ONLY the search query text, nothing else."""
                         {"type": "openai", "name": "gpt-4"},
                         user_prompt,
                         system_prompt,
-                        temperature=0.7,
+                        temperature=0.9,  # Higher temperature for more variety
                         max_tokens=100
                     )
                 else:
                     # Fallback to predefined queries
-                    response = self._get_fallback_query(i)
+                    response = self._get_fallback_query(len(queries))
 
                 query = response.strip()
                 if query and len(query) > 10:
+                    # Check for duplicates
+                    if self._is_duplicate_query(query):
+                        self.logger.info(f"   ⚠️ Skipping duplicate query: {query[:50]}...")
+                        continue
+
                     queries.append(query)
-                    self.logger.info(f"   Query {i+1}: {query}")
+                    self._add_query_to_used(query)
+                    self.logger.info(f"   Query {len(queries)}: {query}")
 
             except Exception as e:
-                self.logger.warning(f"Query generation {i+1} failed: {e}")
-                queries.append(self._get_fallback_query(i))
+                self.logger.warning(f"Query generation attempt {attempts} failed: {e}")
+                # Try fallback
+                fallback = self._get_fallback_query(len(queries))
+                if not self._is_duplicate_query(fallback):
+                    queries.append(fallback)
+                    self._add_query_to_used(fallback)
 
-        self.logger.info(f"✅ Generated {len(queries)} search queries")
+        self.logger.info(f"✅ Generated {len(queries)} UNIQUE search queries (skipped duplicates)")
 
         # Log queries to CSV
         self._log_queries_to_csv(queries)
@@ -1030,26 +1121,49 @@ Return ONLY the search query text, nothing else."""
         else:
             raise Exception(f"OpenRouter API error: {response.status_code}")
 
+    # Shared fallback queries list for consistency
+    FALLBACK_QUERIES = [
+        # Classic strategies (expanded)
+        "Turtle trading system cryptocurrency backtest",
+        "Dual momentum investing strategy performance",
+        "Donchian channel breakout system forex",
+        "Larry Connors RSI2 mean reversion strategy",
+        "Mark Minervini SEPA trading strategy",
+        # Quantitative strategies
+        "Pairs trading cointegration Johansen test",
+        "Kelly criterion position sizing backtest",
+        "Faber tactical asset allocation strategy",
+        "Risk parity portfolio optimization",
+        "Value at risk momentum strategy",
+        # Options & volatility
+        "Iron condor adjustment strategy backtest",
+        "Straddle earnings volatility crush",
+        "Calendar spread theta decay strategy",
+        "VIX term structure trading strategy",
+        "Put credit spread wheel strategy",
+        # Crypto specific
+        "DeFi yield farming strategy performance",
+        "Perpetual funding rate carry trade",
+        "DEX arbitrage flashbots MEV",
+        "Liquidity mining impermanent loss hedge",
+        "Cross-exchange latency arbitrage crypto",
+        # Machine learning
+        "LSTM neural network price prediction trading",
+        "Random forest feature selection trading",
+        "Reinforcement learning trading agent PPO",
+        "Sentiment analysis NLP trading strategy",
+        "Transformer model time series forecasting",
+        # Market microstructure
+        "Limit order book imbalance prediction",
+        "Tick data microstructure trading",
+        "Queue priority high frequency trading",
+        "Adverse selection market making",
+        "Hidden liquidity dark pool trading"
+    ]
+
     def _get_fallback_query(self, index: int) -> str:
-        """Get fallback query if LLM fails"""
-        fallback_queries = [
-            "RSI divergence crypto trading strategy backtest",
-            "Volume profile breakout strategy performance",
-            "Funding rate arbitrage cryptocurrency",
-            "Order flow imbalance trading signal",
-            "VWAP mean reversion strategy",
-            "Bollinger bands squeeze momentum",
-            "Market maker strategy inventory",
-            "Statistical arbitrage pairs trading",
-            "Moving average crossover optimization",
-            "Ichimoku cloud trend following",
-            "Fibonacci retracement levels trading",
-            "ATR volatility breakout strategy",
-            "Relative strength rotation strategy",
-            "Mean reversion z-score trading",
-            "Momentum factor investing strategy"
-        ]
-        return fallback_queries[index % len(fallback_queries)]
+        """Get fallback query if LLM fails - expanded list with more variety"""
+        return self.FALLBACK_QUERIES[index % len(self.FALLBACK_QUERIES)]
 
     def _execute_searches_full(self, queries: List[str]) -> List[Dict]:
         """Execute web searches using Tavily or Perplexity (Full implementation)"""
@@ -1274,6 +1388,13 @@ Return ONLY valid JSON, no other text."""
 
         for strategy in strategies:
             try:
+                strategy_name = strategy.get("name", "unknown")
+
+                # Check for duplicate strategy
+                if self._is_duplicate_strategy(strategy_name):
+                    self.logger.info(f"   ⚠️ Skipping duplicate strategy: {strategy_name}")
+                    continue
+
                 # Additional validation
                 if not self._deep_validate_strategy(strategy):
                     continue
@@ -1283,6 +1404,9 @@ Return ONLY valid JSON, no other text."""
 
                 # Log to index
                 self._log_strategy_to_index(strategy)
+
+                # Track as saved to avoid future duplicates
+                self._add_strategy_to_saved(strategy_name)
 
                 validated.append(strategy)
 
