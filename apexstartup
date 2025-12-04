@@ -1,0 +1,341 @@
+12:50:37 | INFO     | 📁 All directories created/verified (LLM Manager pattern)
+12:50:37 | INFO     |    Total directories: 25
+12:50:37 | INFO     | ================================================================================
+12:50:37 | INFO     | 🚀 APEX SYSTEM - COMPLETE IMPLEMENTATION LOADING
+12:50:37 | INFO     | ================================================================================
+12:50:37 | INFO     | Version: 2.0 (4000+ lines)
+12:50:37 | INFO     | Architecture: E17FINAL Monolith + Moon-Dev Full Agents
+12:50:37 | INFO     | Mode: NO PLACEHOLDERS - FULL FUNCTIONAL CODE
+12:50:37 | INFO     | ================================================================================
+12:50:37 | INFO     | ✅ Model Factory initialized (5 LLM providers supported)
+12:50:37 | INFO     | 📊 Initializing market data...
+12:50:37 | INFO     | 📊 Fetching data for 3 assets...
+12:50:37 | INFO     | ✅ Using existing data file: BTC-USD-15m.csv
+12:50:38 | INFO     | ✅ Using existing data file: ETH-USD-15m.csv
+12:50:38 | INFO     | ✅ Using existing data file: SOL-USD-15m.csv
+12:50:39 | INFO     | ✅ Fetched 3/3 assets successfully
+12:50:39 | INFO     | ✅ HTX Data Fetcher initialized
+12:50:39 | INFO     | ✅ Queues and global state initialized
+12:50:39 | INFO     | ✅ Strategy Discovery Agent class defined (FULL IMPLEMENTATION - 400+ lines)
+12:50:39 | INFO     | ✅ RBI Backtest Engine class defined (FULL IMPLEMENTATION - 700+ lines)
+12:50:39 | INFO     | ✅ Champion Manager class defined (FULL IMPLEMENTATION - 600+ lines)
+12:50:39 | INFO     | ✅ Market Data Agents defined (Whale + Sentiment + Funding - FULL IMPLEMENTATIONS)
+12:50:39 | INFO     | ✅ API Server class defined (FULL IMPLEMENTATION - 400+ lines)
+12:50:39 | INFO     | ✅ Thread Monitor class defined (FULL IMPLEMENTATION)
+12:50:39 | INFO     | ================================================================================
+12:50:39 | INFO     | 🚀 APEX - AUTONOMOUS PROFIT EXTRACTION SYSTEM
+12:50:39 | INFO     | ================================================================================
+12:50:39 | INFO     |
+12:50:39 | INFO     |    Version: 2.0 (COMPLETE IMPLEMENTATION)
+12:50:39 | INFO     |    Architecture: E17FINAL Monolith + Moon-Dev Full Agents
+12:50:39 | INFO     |    Lines of Code: 4000+
+12:50:39 | INFO     |    Mode: NO PLACEHOLDERS - FULL FUNCTIONAL CODE
+12:50:39 | INFO     |
+12:50:39 | INFO     |    5 Autonomous Threads:
+12:50:39 | INFO     |    1. Strategy Discovery (WebSearch + LLM Extraction)
+12:50:39 | INFO     |    2. RBI Backtest Engine (Auto-debug + Optimization + LLM Consensus)
+12:50:39 | INFO     |    3. Champion Manager (3-tier Qualification + Paper Trading)
+12:50:39 | INFO     |    4. Market Data Agents (Whale + Sentiment + Funding)
+12:50:39 | INFO     |    5. API Server (FastAPI Monitoring Dashboard)
+12:50:39 | INFO     |
+12:50:39 | INFO     | ================================================================================
+12:50:39 | INFO     | 🔑 Validating API keys...
+12:50:39 | INFO     | ✅ All required API keys present
+12:50:39 | INFO     |
+12:50:39 | INFO     | ================================================================================
+12:50:39 | INFO     | 🚀 LAUNCHING ALL THREADS
+12:50:39 | INFO     | ================================================================================
+12:50:39 | INFO     | 🚀 Starting all APEX threads...
+12:50:39 | INFO     | 📚 Loaded 5 processed strategies from history
+12:50:39 | INFO     | 🚀 Strategy Discovery Agent started (Full Implementation)
+12:50:39 | INFO     |    Based on Moon-Dev websearch_agent.py (1280+ lines)
+12:50:39 | INFO     | 🚀 RBI Backtest Engine started (FULL Moon-Dev v3)
+12:50:39 | INFO     | ================================================================================
+12:50:39 | INFO     |    Features: Auto-debug, Multi-config, Optimization, LLM Consensus
+12:50:39 | INFO     | 🚀 Champion Manager started (FULL IMPLEMENTATION)
+12:50:39 | INFO     | 🔍 DISCOVERY CYCLE 1
+12:50:39 | INFO     |    Deduplication: Enabled - will skip previously processed strategies
+12:50:39 | INFO     | 🐋 Whale Agent started (FULL Moon-Dev Implementation)
+12:50:39 | INFO     |    3-tier system: CHAMPION → QUALIFIED → ELITE
+12:50:39 | INFO     | ================================================================================
+12:50:39 | INFO     |
+12:50:39 | INFO     | 📊 Sentiment Agent started (FULL Moon-Dev Implementation)
+12:50:39 | INFO     |    Features: OI monitoring, Large transfers, Whale alerts
+12:50:39 | INFO     | 🧠 Generating search queries with LLM...
+12:50:39 | INFO     | 👂 Champion listener started
+12:50:39 | INFO     | 💰 Funding Agent started (FULL Moon-Dev Implementation)
+12:50:39 | INFO     | ================================================================================
+12:50:39 | INFO     | 🚀 API Server starting on http://0.0.0.0:8000...
+12:50:39 | INFO     |    Features: Twitter analysis, Social sentiment, Extreme detection
+12:50:39 | INFO     | ✅ All threads started successfully
+12:50:39 | INFO     |    Features: Funding rate monitoring, Arbitrage opportunities
+12:50:39 | INFO     | 🔄 STARTUP: Processing existing strategies from library
+12:50:39 | INFO     |    Total threads: 7
+12:50:39 | INFO     | 💰 Funding Alert: BTCUSDT +0.0019 → SHORT
+12:50:39 | INFO     |    Will approve ALL strategies that meet criteria!
+12:50:39 | INFO     |
+12:50:39 | INFO     | 💰 Funding Alert: MATICUSDT +0.0013 → SHORT
+12:50:39 | INFO     |    (Some got great results but were denied - Claude was broken)
+12:50:39 | INFO     | ✅ APEX System fully operational
+12:50:39 | INFO     | ================================================================================
+12:50:39 | INFO     | 📊 Access monitoring dashboard at: http://localhost:8000
+12:50:39 | INFO     | 🔍 Scanning strategy_library for existing strategies...
+12:50:39 | INFO     |
+12:50:39 | INFO     | Press Ctrl+C to stop
+12:50:39 | INFO     |
+12:50:39 | INFO     | 📂 Found 161 strategy files in library
+12:50:39 | INFO     | ✅ Loaded: Intraday VWAP Mean Reversion Strategy
+12:50:39 | INFO     | ✅ Loaded: Neural Network Volatility Trading Strategy
+12:50:39 | INFO     | ✅ Loaded: Market Maker Inventory Management Strategy
+12:50:39 | INFO     | ✅ Loaded: Seasonal Effects Trading Strategy
+12:50:39 | INFO     | ✅ Loaded: Python Backtesting Correlation Strategy
+12:50:39 | INFO     | ✅ Loaded: AI Neural Network Predictive Model for Forex Trading
+12:50:39 | INFO     | ✅ Loaded: Option Volatility Trading using Mathematical Models
+12:50:39 | INFO     | ✅ Loaded: Neural Network Forex Trading Strategy
+12:50:39 | INFO     | ✅ Loaded: Correlation and Cointegration Pairs Trading Strategy
+12:50:39 | INFO     | ✅ Loaded: VWAP Mean Reversion Intraday Strategy
+12:50:39 | INFO     | ✅ Loaded: Seasonal Effects on Forex Market
+12:50:39 | INFO     | ✅ Loaded: Seasonal Volatility Index Options Trading Strategy
+12:50:39 | INFO     | ✅ Loaded: Market Maker Inventory Rebalancing Strategy with Adverse Selection Modeling
+12:50:39 | INFO     | ✅ Loaded: Machine Learning Volatility Skew Prediction
+12:50:39 | INFO     | ✅ Loaded: Machine Learning Correlation Trading Strategy
+12:50:39 | INFO     | ✅ Loaded: Neural Network Predictive Model for Volatility Trading
+12:50:39 | INFO     | ✅ Loaded: Stoikov Market Making Inventory Management Strategy
+12:50:39 | INFO     | ✅ Loaded: Seasonal Commodity ETFs Trading Strategy
+12:50:39 | INFO     | ✅ Loaded: Neural Network Based Breakout Strategy
+12:50:39 | INFO     | ✅ Loaded: AI-powered Neural Network Options Trading Strategy
+12:50:39 | INFO     | ✅ Loaded: Cryptocurrency Cointegration Pairs Trading Strategy
+12:50:39 | INFO     | ✅ Loaded: Neural Network-Based Microstructure Trading
+12:50:39 | INFO     | ✅ Loaded: Machine Learning Momentum Shift Detection
+12:50:39 | INFO     | ✅ Loaded: Machine Learning Seasonality Pattern Recognition
+12:50:39 | INFO     | ✅ Loaded: Machine Learning Statistical Arbitrage in Forex Trading
+12:50:39 | INFO     | ✅ Loaded: Neural Network Cryptocurrency Trading Strategy
+12:50:39 | INFO     | ✅ Loaded: Stoikov Market Making Inventory Management Strategy
+12:50:39 | INFO     | ✅ Loaded: Correlation Trading Strategy with S&P 500 and Gold
+12:50:39 | INFO     | ✅ Loaded: Neural Network Based Volatility Trading Strategy
+12:50:39 | INFO     | ✅ Loaded: Machine Learning Based Cryptocurrency Price Prediction
+12:50:39 | INFO     | ✅ Loaded: Neural Network Correlation Forex Trading Strategy
+12:50:39 | INFO     | ✅ Loaded: Neural Network Based Forex Trading Strategy
+12:50:39 | INFO     | ✅ Loaded: Market Maker Inventory Management Strategy
+12:50:39 | INFO     | ✅ Loaded: Correlation-Based Pairs Trading Strategy
+12:50:39 | INFO     | ✅ Loaded: Avellaneda-Stoikov Market Making Strategy
+12:50:39 | INFO     | ✅ Loaded: Reversal During Earnings Announcements
+12:50:39 | INFO     | ✅ Loaded: Neural Network Based Volatility Trading Strategy
+12:50:39 | INFO     | ✅ Loaded: Performative Market Making Inventory Rebalancing Strategy
+12:50:39 | INFO     | ✅ Loaded: Seasonal Commodity Futures Trading
+12:50:39 | INFO     | ✅ Loaded: Machine Learning RSI Divergence Strategy for Crypto Markets
+12:50:39 | INFO     | ✅ Loaded: Neural Network Predictive Forex Trading Strategy
+12:50:39 | INFO     | ✅ Loaded: Inventory-Based Market Making Strategy
+12:50:39 | INFO     | ✅ Loaded: Avellaneda-Stoikov Market Making with Inventory Constraints
+12:50:39 | INFO     | ✅ Loaded: Seasonal Effect Time Series Analysis Trading Strategy
+12:50:39 | INFO     | ✅ Loaded: Neural Network Predictive Modeling for Options Trading
+12:50:39 | INFO     | ✅ Loaded: Stoikov Market Making Strategy
+12:50:39 | INFO     | ✅ Loaded: Performative Market Making Strategy with Inventory Control
+12:50:39 | INFO     | ✅ Loaded: Artificial Neural Network Based Predictive Model for Swing Trading
+12:50:39 | INFO     | ✅ Loaded: Seasonal Options Trading Strategy
+12:50:39 | INFO     | ✅ Loaded: Commodity Seasonality Trading Strategy
+12:50:39 | INFO     | ✅ Loaded: Stoikov Market Making Strategy
+12:50:39 | INFO     | ✅ Loaded: Machine Learning Volatility Trading Strategy
+12:50:39 | INFO     | ✅ Loaded: Avellaneda-Stoikov Market Making Strategy
+12:50:39 | INFO     | ✅ Loaded: Market Maker Inventory Rebalancing with Adverse Selection Modeling
+12:50:39 | INFO     | ✅ Loaded: Market Maker Inventory Rebalancing Strategy
+12:50:39 | INFO     | ✅ Loaded: Neural Network Based Volatility Trading Strategy
+12:50:39 | INFO     | ✅ Loaded: Neural Network-Based Forex Trading Strategy
+12:50:39 | INFO     | ✅ Loaded: Neural Network Volatility Prediction for Options Trading
+12:50:39 | INFO     | ✅ Loaded: Machine Learning Based Stock Momentum Strategy
+12:50:39 | INFO     | ✅ Loaded: Correlation Trading Options Strategy with Backtesting
+12:50:39 | INFO     | ✅ Loaded: Neural Network Based Predictive Modeling for Options Trading
+12:50:39 | INFO     | ✅ Loaded: Machine Learning Statistical Arbitrage in Cryptocurrency
+12:50:39 | INFO     | ✅ Loaded: Market Maker Inventory Rebalancing with Adverse Selection Protection
+12:50:39 | INFO     | ✅ Loaded: Reinforcement Learning Market Making with Impulse Control
+12:50:39 | INFO     | ✅ Loaded: Unconventional Seasonal Effects Trading Strategy
+12:50:39 | INFO     | ✅ Loaded: Neural Network Based Correlation Trading Strategy
+12:50:39 | INFO     | ✅ Loaded: AI-Powered Volatility Options Trading
+12:50:39 | INFO     | ✅ Loaded: Quantitative Correlation Trading Strategy
+12:50:39 | INFO     | ✅ Loaded: Deep Learning Intraday Stock Forecasting
+12:50:39 | INFO     | ✅ Loaded: Machine Learning Enhanced Mean Reversion Strategy
+12:50:39 | INFO     | ✅ Loaded: Seasonal Effects on Commodity Prices
+12:50:39 | INFO     | ✅ Loaded: Seasonal Front-Running Commodity Strategy
+12:50:39 | INFO     | ✅ Loaded: Neural Network Trading Strategy for Options Backtesting
+12:50:39 | INFO     | ✅ Loaded: Cryptocurrency Cointegration Pairs Trading
+12:50:39 | INFO     | ✅ Loaded: Bollinger Band Squeeze Breakout with Volume and Momentum Confirmation
+12:50:39 | INFO     | ✅ Loaded: Stoikov Inventory Management Market Making Strategy
+12:50:39 | INFO     | ✅ Loaded: Machine Learning Price Action Strategy
+12:50:39 | INFO     | ✅ Loaded: Neural Network Options Volatility Prediction Strategy
+12:50:39 | INFO     | ✅ Loaded: BB Breakout + Momentum Squeeze Strategy
+12:50:39 | INFO     | ✅ Loaded: Machine Learning Forex Seasonality Strategy
+12:50:39 | INFO     | ✅ Loaded: AI-Based Volatility Trading Strategy
+12:50:39 | INFO     | ✅ Loaded: Machine Learning-Powered Volatility Trading Strategy
+12:50:39 | INFO     | ✅ Loaded: Stoikov Market Making Strategy
+12:50:39 | INFO     | ✅ Loaded: Machine Learning Volatility-Based Trading Strategy
+12:50:39 | INFO     | ✅ Loaded: Neural Network Predictive Volatility Trading
+12:50:39 | INFO     | ✅ Loaded: Neural Network Options Trading Strategy
+12:50:39 | INFO     | ✅ Loaded: Neural Network-GARCH Volatility Forecasting for Options Trading
+INFO:     Started server process [2735420]
+INFO:     Waiting for application startup.
+12:50:39 | INFO     | ✅ Loaded: Commodity Seasonality Front-Running Strategy
+INFO:     Application startup complete.
+12:50:39 | INFO     | ✅ Loaded: Market Maker Inventory Management Strategy
+12:50:39 | INFO     | ✅ Loaded: AI-Powered Options Trading Strategy with Neural Networks
+12:50:39 | INFO     | ✅ Loaded: Neural Network Predictive Modelling for Options Volatility
+INFO:     Uvicorn running on http://0.0.0.0:8000 (Press CTRL+C to quit)
+12:50:39 | INFO     | ✅ Loaded: Avellaneda-Stoikov Inventory Management Strategy
+12:50:39 | INFO     | ✅ Loaded: VWAP Mean Reversion Intraday Strategy
+12:50:39 | INFO     | ✅ Loaded: Machine Learning Volatility Prediction Strategy
+12:50:39 | INFO     | ✅ Loaded: Market Maker Inventory Management Strategy
+12:50:39 | INFO     | ✅ Loaded: Machine Learning Volatility Trading Strategy
+12:50:39 | INFO     | ✅ Loaded: VWAP Mean Reversion Intraday Strategy
+12:50:39 | INFO     | ✅ Loaded: Unconventional Machine Learning Models for Forex Trading
+12:50:39 | INFO     | ✅ Loaded: Seasonal Front-Running & Pre-Holiday Commodity Trading
+12:50:39 | INFO     | ✅ Loaded: Neural Network Based Correlation Trading Strategy
+12:50:39 | INFO     | ✅ Loaded: Market Maker Inventory Management Strategy
+12:50:39 | INFO     | ✅ Loaded: Market Maker Inventory Rebalancing with Adverse Selection
+12:50:39 | INFO     | ✅ Loaded: Order Flow Imbalance Intraday Strategy
+12:50:39 | INFO     | ✅ Loaded: Neural Network Optimized Forex Trading Strategy
+12:50:39 | INFO     | ✅ Loaded: Market Maker Inventory Rebalancing with Order Flow Analysis
+12:50:39 | INFO     | ✅ Loaded: Neural Network-Based Correlation Trading Strategy
+12:50:39 | INFO     | ✅ Loaded: Neural Network Model for Options Trading
+12:50:39 | INFO     | ✅ Loaded: Order Flow Delta Divergence Scalping Strategy
+12:50:39 | INFO     | ✅ Loaded: Machine Learning Based Bollinger Band Squeeze Momentum Trading Strategy
+12:50:39 | INFO     | ✅ Loaded: Machine Learning Trend-Following Options Trading
+12:50:39 | INFO     | ✅ Loaded: Order Flow Market Maker Inventory Rebalancing Strategy
+12:50:39 | INFO     | ✅ Loaded: Neural Network Forex Trading Strategy
+12:50:39 | INFO     | ✅ Loaded: Neural Network Based Forex Trading Strategy
+12:50:39 | INFO     | ✅ Loaded: Stoikov Market Making with Inventory Risk Management
+12:50:39 | INFO     | ✅ Loaded: Intraday Price Action Pattern Trading
+12:50:39 | INFO     | ✅ Loaded: Seasonality-Based Commodity Trading
+12:50:39 | INFO     | ✅ Loaded: Neural Network Volatility Trading Strategy
+12:50:39 | INFO     | ✅ Loaded: Seasonal Agricultural Commodity Options Trading
+12:50:39 | INFO     | ✅ Loaded: Quantitative Options Trading Strategy
+12:50:39 | INFO     | ✅ Loaded: Neural Network-Based Cryptocurrency Trading
+12:50:39 | INFO     | ✅ Loaded: Market Maker Inventory Rebalancing with Adverse Selection
+12:50:39 | INFO     | ✅ Loaded: Cryptocurrency Cointegration Pairs Trading Strategy
+12:50:39 | INFO     | ✅ Loaded: Market Making with Inventory Risk Limits
+12:50:39 | INFO     | ✅ Loaded: Inventory-Managed Market Making Strategy
+12:50:39 | INFO     | ✅ Loaded: AMM Inventory Rebalancing Strategy
+12:50:39 | INFO     | ✅ Loaded: Stoikov Inventory Rebalancing Strategy
+12:50:39 | INFO     | ✅ Loaded: Multi-Level Order Flow Imbalance Inventory Rebalancing Strategy
+12:50:39 | INFO     | ✅ Loaded: Stoikov-Based Market Making Inventory Strategy
+12:50:39 | INFO     | ✅ Loaded: Forex Correlation Trading Using Mathematical Models
+12:50:39 | INFO     | ✅ Loaded: Machine Learning-Powered Volatility Trading
+12:50:39 | INFO     | ✅ Loaded: Moving Average Crossover Strategy
+12:50:39 | INFO     | ✅ Loaded: VWAP Mean Reversion Intraday Strategy
+12:50:39 | INFO     | ✅ Loaded: Neural Network Based Options Trading Strategy
+12:50:39 | INFO     | ✅ Loaded: Machine Learning Seasonality Forex Strategy
+12:50:39 | INFO     | ✅ Loaded: Cryptocurrency Cointegration Pairs Trading Strategy
+12:50:39 | INFO     | ✅ Loaded: Stoikov Market Making Strategy
+12:50:39 | INFO     | ✅ Loaded: Stoikov Market Making Strategy with Inventory Management
+12:50:39 | INFO     | ✅ Loaded: Machine Learning Techniques for Stock Market Seasonality
+12:50:39 | INFO     | ✅ Loaded: Cryptocurrency Cointegration Pairs Trading Strategy
+12:50:39 | INFO     | ✅ Loaded: Bollinger Band Squeeze Momentum Trading Strategy
+12:50:39 | INFO     | ✅ Loaded: Stoikov Market Making Strategy
+12:50:39 | INFO     | ✅ Loaded: Bollinger Band Squeeze Momentum Strategy
+12:50:39 | INFO     | ✅ Loaded: Seasonal Forex Trading with SARIMA
+12:50:39 | INFO     | ✅ Loaded: Neural Network-Based Algorithmic Trading with Market Microstructure Data
+12:50:39 | INFO     | ✅ Loaded: VWAP Mean Reversion Intraday Strategy with Trend Filter
+12:50:39 | INFO     | ✅ Loaded: Neural Network Pairs Trading Strategy
+12:50:39 | INFO     | ✅ Loaded: AI-Powered Options Straddle Strategy
+12:50:39 | INFO     | ✅ Loaded: Market Maker Inventory Rebalancing via Order Flow Fractals
+12:50:39 | INFO     | ✅ Loaded: Seasonal Effects on Agricultural Commodity Options
+12:50:39 | INFO     | ✅ Loaded: Forex Pairs Correlation Trading Strategy
+12:50:39 | INFO     | ✅ Loaded: Seasonal Front-Running Commodity Futures Trading Strategy
+12:50:39 | INFO     | ✅ Loaded: Machine Learning Correlation Trading Strategy
+12:50:39 | INFO     | ✅ Loaded: AI-Powered Options Trading Strategy
+12:50:39 | INFO     | ✅ Loaded: Neural Network Based Options Trading Strategy
+12:50:39 | INFO     | ✅ Loaded: Market Maker Inventory Rebalancing Strategy
+12:50:39 | INFO     | ✅ Loaded: Stoikov Inventory Management Market Making Strategy
+12:50:39 | INFO     | ✅ Loaded: Quantitative Volatility Surface Trading Strategy
+12:50:39 | INFO     | ✅ Loaded: Neural Network Based Options Trading Strategy
+12:50:39 | INFO     | ✅ Loaded: Machine Learning Volatility Trading Strategy
+12:50:39 | INFO     | ✅ Loaded: Machine Learning Momentum and Mean Reversion Strategy
+12:50:39 | INFO     | 📊 Total strategies to re-backtest with swarm: 160
+12:50:39 | INFO     |
+📂 Processing existing strategy 1/160
+12:50:39 | INFO     | ================================================================================
+12:50:39 | INFO     | 🔄 RE-BACKTESTING EXISTING: Intraday VWAP Mean Reversion Strategy
+12:50:39 | INFO     |    Will approve if meets criteria (now with working Claude swarm!)
+12:50:39 | INFO     | ================================================================================
+12:50:39 | INFO     | 📚 Research phase...
+12:50:40 | INFO     |    Query 1: "Neural network predictive models for options trading strategies backtest results"
+12:50:41 | INFO     |    Query 2: "Time-series analysis for seasonal effects in stock market trading strategies"
+12:50:42 | INFO     |    Query 3: "Seasonal effects in Forex trading: backtest results and strategies"
+12:50:43 | INFO     |    Query 4: "Neural network based correlation trading strategy in forex market backtest results"
+12:50:45 | INFO     |    Query 5: "Seasonal effects in forex market trading strategy backtest results"
+12:50:46 | INFO     |    Query 6: "Seasonal effects and time-based patterns in forex trading strategies with backtesting results"
+12:50:47 | INFO     |    Query 7: "Neural network predictive model for volatility trading strategies"
+12:50:48 | INFO     |    Query 8: "Mathematical model based quantitative options trading strategies with backtest results"
+12:50:49 | INFO     |    Query 9: "Neural network based options trading strategies and performance backtest"
+12:50:51 | INFO     |    Query 10: "Neural network trading strategy using price action and volume analysis for forex backtest results"
+12:50:52 | INFO     |    Query 11: "Neural network trading strategy with Fibonacci retracement backtest results"
+12:50:53 | INFO     |    Query 12: "Exploring correlation trading strategies using machine learning: Backtest results and code examples"
+12:50:54 | INFO     |    Query 13: "Machine learning algorithms for seasonal effects in Forex trading strategies backtest results"
+12:50:55 | INFO     |    Query 14: "Machine learning predictive models for volatility trading strategies performance analysis"
+12:50:57 | INFO     |    Query 15: "Neural network trading strategy for options volatility prediction backtest results"
+12:50:57 | INFO     | ✅ Generated 15 search queries
+12:50:57 | INFO     | 🌐 Executing 15 web searches...
+12:50:57 | INFO     |    Search 1/15: "Neural network predictive models for options trading strate...
+^C12:50:58 | INFO     |
+12:50:58 | INFO     | 🛑 Shutting down APEX...
+12:50:58 | INFO     | Goodbye!
+12:50:58 | INFO     | ================================================================================
+12:50:58 | INFO     | 🎉 APEX SYSTEM - COMPLETE IMPLEMENTATION LOADED
+12:50:58 | INFO     | ================================================================================
+12:50:58 | INFO     | Total: 4000+ lines of REAL, FUNCTIONAL CODE
+12:50:58 | INFO     | NO PLACEHOLDERS - NO SIMPLIFIED CODE
+12:50:58 | INFO     |
+12:50:58 | INFO     | Based on:
+12:50:58 | INFO     |   - E17FINAL (5146 lines)
+12:50:58 | INFO     |   - Moon-Dev RBI Agent v3 (1167 lines)
+12:50:58 | INFO     |   - Moon-Dev WebSearch Agent (1280 lines)
+12:50:58 | INFO     |   - Moon-Dev Whale Agent (679 lines)
+12:50:58 | INFO     |   - Moon-Dev Sentiment Agent (516 lines)
+12:50:58 | INFO     |   - Moon-Dev Funding Agent (527 lines)
+12:50:58 | INFO     |
+12:50:58 | INFO     | Ready to launch with: python apex.py
+12:50:58 | INFO     | ================================================================================
+12:50:58 | INFO     | ✅ Utility functions, helpers, and extended classes defined (1000+ lines)
+12:50:58 | INFO     | ✅ LLM Prompt Templates defined (Complete Moon-Dev patterns)
+12:50:58 | INFO     | ✅ Additional utility classes defined (Advanced analytics & validation)
+12:50:58 | INFO     | ================================================================================
+12:50:58 | INFO     | 🎉 APEX SYSTEM FULLY LOADED
+12:50:58 | INFO     | ================================================================================
+12:50:58 | INFO     | name: APEX - Autonomous Profit EXtraction System
+12:50:58 | INFO     | version: 2.0
+12:50:58 | INFO     | architecture: E17FINAL Monolith + Moon-Dev Full Agents
+12:50:58 | INFO     | total_lines: 4000+
+12:50:58 | INFO     | implementation: COMPLETE - NO PLACEHOLDERS
+12:50:58 | INFO     | threads:
+12:50:58 | INFO     |   1: Strategy Discovery Agent (WebSearch + LLM)
+12:50:58 | INFO     |   2: RBI Backtest Engine (Auto-debug + Optimization + Consensus)
+12:50:58 | INFO     |   3: Champion Manager (3-tier Qualification)
+12:50:58 | INFO     |   4: Market Data Agents (Whale + Sentiment + Funding)
+12:50:58 | INFO     |   5: API Server (FastAPI Monitoring)
+12:50:58 | INFO     | features:
+12:50:58 | INFO     |   - LLM Swarm Consensus (DeepSeek + GPT-4 + Claude)
+12:50:58 | INFO     |   - Auto-debug Loop (10 iterations)
+12:50:58 | INFO     |   - Optimization Loop (targets 50% return)
+12:50:58 | INFO     |   - Multi-configuration Testing
+12:50:58 | INFO     |   - Paper Trading Simulation
+12:50:58 | INFO     |   - 3-tier Champion Qualification
+12:50:58 | INFO     |   - Real-time Market Signals
+12:50:58 | INFO     |   - FastAPI Dashboard
+12:50:58 | INFO     |   - Thread Monitoring & Auto-restart
+12:50:58 | INFO     |   - Checkpoint System
+12:50:58 | INFO     |   - Performance Analytics
+12:50:58 | INFO     |   - Risk Management
+12:50:58 | INFO     |   - Portfolio Optimization
+12:50:58 | INFO     | based_on:
+12:50:58 | INFO     |   E17FINAL: 5146 lines - System architecture
+12:50:58 | INFO     |   Moon-Dev RBI v3: 1167 lines - Backtest engine
+12:50:58 | INFO     |   Moon-Dev WebSearch: 1280 lines - Strategy discovery
+12:50:58 | INFO     |   Moon-Dev Whale: 679 lines - Whale monitoring
+12:50:58 | INFO     |   Moon-Dev Sentiment: 516 lines - Sentiment analysis
+12:50:58 | INFO     |   Moon-Dev Funding: 527 lines - Funding rates
+12:50:58 | INFO     | ================================================================================
+12:50:58 | INFO     | 🔧 Loading Enhanced Agents (Risk, Research, Volume from Moon-Dev)
+Traceback (most recent call last):
+  File "/root/KEEP_SAFE/v1/APEX/apex8.py", line 4698, in <module>
+    from src import config
+ModuleNotFoundError: No module named 'src'
+(base) root@Ubuntu-2404-noble-amd64-base ~/KEEP_SAFE/v1/APEX # ^C
+(base) root@Ubuntu-2404-noble-amd64-base ~/KEEP_SAFE/v1/APEX #
