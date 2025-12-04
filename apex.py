@@ -269,11 +269,11 @@ class Config:
     # THREAD 2: RBI BACKTEST ENGINE CONFIGURATION (Moon-Dev v3 Full)
     # =========================================================================================
 
-    # LLM Models for RBI (DeepSeek V3.2 models - latest version)
-    RBI_RESEARCH_MODEL = {"type": "deepseek", "name": "deepseek-chat"}  # DeepSeek V3.2 for reasoning
-    RBI_BACKTEST_MODEL = {"type": "deepseek", "name": "deepseek-chat"}  # DeepSeek V3.2 for code generation
-    RBI_DEBUG_MODEL = {"type": "deepseek", "name": "deepseek-chat"}  # DeepSeek V3.2 for debugging
-    RBI_OPTIMIZE_MODEL = {"type": "deepseek", "name": "deepseek-chat"}  # DeepSeek V3.2 for optimization
+    # LLM Models for RBI (DeepSeek V3.2 Reasoner - latest version)
+    RBI_RESEARCH_MODEL = {"type": "deepseek", "name": "deepseek-reasoner"}  # DeepSeek V3.2 Reasoner
+    RBI_BACKTEST_MODEL = {"type": "deepseek", "name": "deepseek-reasoner"}  # DeepSeek V3.2 Reasoner
+    RBI_DEBUG_MODEL = {"type": "deepseek", "name": "deepseek-reasoner"}  # DeepSeek V3.2 Reasoner
+    RBI_OPTIMIZE_MODEL = {"type": "deepseek", "name": "deepseek-reasoner"}  # DeepSeek V3.2 Reasoner
 
     # Execution settings
     MAX_DEBUG_ITERATIONS = 10
