@@ -1087,74 +1087,49 @@ Return ONLY the search query text, nothing else."""
         else:
             raise Exception(f"OpenRouter API error: {response.status_code}")
 
+    # Shared fallback queries list for consistency
+    FALLBACK_QUERIES = [
+        # Classic strategies (expanded)
+        "Turtle trading system cryptocurrency backtest",
+        "Dual momentum investing strategy performance",
+        "Donchian channel breakout system forex",
+        "Larry Connors RSI2 mean reversion strategy",
+        "Mark Minervini SEPA trading strategy",
+        # Quantitative strategies
+        "Pairs trading cointegration Johansen test",
+        "Kelly criterion position sizing backtest",
+        "Faber tactical asset allocation strategy",
+        "Risk parity portfolio optimization",
+        "Value at risk momentum strategy",
+        # Options & volatility
+        "Iron condor adjustment strategy backtest",
+        "Straddle earnings volatility crush",
+        "Calendar spread theta decay strategy",
+        "VIX term structure trading strategy",
+        "Put credit spread wheel strategy",
+        # Crypto specific
+        "DeFi yield farming strategy performance",
+        "Perpetual funding rate carry trade",
+        "DEX arbitrage flashbots MEV",
+        "Liquidity mining impermanent loss hedge",
+        "Cross-exchange latency arbitrage crypto",
+        # Machine learning
+        "LSTM neural network price prediction trading",
+        "Random forest feature selection trading",
+        "Reinforcement learning trading agent PPO",
+        "Sentiment analysis NLP trading strategy",
+        "Transformer model time series forecasting",
+        # Market microstructure
+        "Limit order book imbalance prediction",
+        "Tick data microstructure trading",
+        "Queue priority high frequency trading",
+        "Adverse selection market making",
+        "Hidden liquidity dark pool trading"
+    ]
+
     def _get_fallback_query(self, index: int) -> str:
         """Get fallback query if LLM fails - expanded list with more variety"""
-        fallback_queries = [
-            # Classic strategies (expanded)
-            "Turtle trading system cryptocurrency backtest",
-            "Dual momentum investing strategy performance",
-            "Donchian channel breakout system forex",
-            "Larry Connors RSI2 mean reversion strategy",
-            "Mark Minervini SEPA trading strategy",
-            # Quantitative strategies
-            "Pairs trading cointegration Johansen test",
-            "Kelly criterion position sizing backtest",
-            "Faber tactical asset allocation strategy",
-            "Risk parity portfolio optimization",
-            "Value at risk momentum strategy",
-            # Options & volatility
-            "Iron condor adjustment strategy backtest",
-            "Straddle earnings volatility crush",
-            "Calendar spread theta decay strategy",
-            "VIX term structure trading strategy",
-            "Put credit spread wheel strategy",
-            # Crypto specific
-            "DeFi yield farming strategy performance",
-            "Perpetual funding rate carry trade",
-            "DEX arbitrage flashbots MEV",
-            "Liquidity mining impermanent loss hedge",
-            "Cross-exchange latency arbitrage crypto",
-            # Machine learning
-            "LSTM neural network price prediction trading",
-            "Random forest feature selection trading",
-            "Reinforcement learning trading agent PPO",
-            "Sentiment analysis NLP trading strategy",
-            "Transformer model time series forecasting",
-            # Market microstructure
-            "Limit order book imbalance prediction",
-            "Tick data microstructure trading",
-            "Queue priority high frequency trading",
-            "Adverse selection market making",
-            "Hidden liquidity dark pool trading"
-        ]
-        return fallback_queries[index % len(fallback_queries)]
-
-    def _get_unique_fallback_query(self) -> Optional[str]:
-        """Get a unique fallback query that hasn't been used"""
-        all_fallbacks = [
-            "Turtle trading system cryptocurrency backtest",
-            "Dual momentum investing strategy performance",
-            "Donchian channel breakout system forex",
-            "Larry Connors RSI2 mean reversion strategy",
-            "Pairs trading cointegration Johansen test",
-            "Kelly criterion position sizing backtest",
-            "Faber tactical asset allocation strategy",
-            "Risk parity portfolio optimization",
-            "Iron condor adjustment strategy backtest",
-            "VIX term structure trading strategy",
-            "DeFi yield farming strategy performance",
-            "Perpetual funding rate carry trade",
-            "LSTM neural network price prediction trading",
-            "Random forest feature selection trading",
-            "Reinforcement learning trading agent PPO",
-            "Limit order book imbalance prediction",
-            "Tick data microstructure trading"
-        ]
-
-        for query in all_fallbacks:
-            if not self._is_duplicate_query(query):
-                return query
-        return None
+        return self.FALLBACK_QUERIES[index % len(self.FALLBACK_QUERIES)]
 
     def _execute_searches_full(self, queries: List[str]) -> List[Dict]:
         """Execute web searches using Tavily or Perplexity (Full implementation)"""
