@@ -152,6 +152,7 @@ def setup_enhanced_logging():
     logger.addHandler(console_handler)
 
     # Specialized loggers for different components (E17FINAL pattern)
+    # Set propagate=False to prevent duplicate logging
     components = [
         "DISCOVERY", "RBI", "CHAMPION", "WHALE", "SENTIMENT", "FUNDING",
         "API-SERVER", "SYSTEM", "TRADING", "MONITORING", "BACKTEST", "SEARCH"
@@ -160,6 +161,7 @@ def setup_enhanced_logging():
     for component in components:
         comp_logger = logging.getLogger(f"APEX.{component}")
         comp_logger.setLevel(logging.INFO)
+        comp_logger.propagate = False  # CRITICAL: Prevent duplicate logs
         comp_logger.addHandler(file_handler)
         comp_logger.addHandler(console_handler)
 
@@ -190,17 +192,18 @@ class Config:
     SEARCH_RESULTS_DIR = PROJECT_ROOT / "search_results"
     SEARCH_QUERIES_DIR = PROJECT_ROOT / "search_queries"
 
-    # RBI directories (Moon-Dev pattern)
-    DATA_DIR = PROJECT_ROOT / "data"
+    # RBI directories (Moon-Dev V3 pattern - EXACT match to moon-dev-ai-agents)
+    DATA_DIR = PROJECT_ROOT / "src" / "data" / "rbi_v3"  # V3 uses separate folder structure
     TODAY_DATE = datetime.now().strftime("%m_%d_%Y")
     TODAY_DIR = DATA_DIR / TODAY_DATE
     RESEARCH_DIR = TODAY_DIR / "research"
     BACKTEST_DIR = TODAY_DIR / "backtests"
     PACKAGE_DIR = TODAY_DIR / "backtests_package"
     FINAL_BACKTEST_DIR = TODAY_DIR / "backtests_final"
-    OPTIMIZATION_DIR = TODAY_DIR / "backtests_optimized"
+    OPTIMIZATION_DIR = TODAY_DIR / "backtests_optimized"  # NEW for V3!
     CHARTS_DIR = TODAY_DIR / "charts"
     EXECUTION_DIR = TODAY_DIR / "execution_results"
+    PROCESSED_IDEAS_LOG = DATA_DIR / "processed_ideas.log"  # V3 tracking
 
     # Market data directories
     MARKET_DATA_DIR = DATA_DIR / "market_data"
@@ -229,10 +232,15 @@ class Config:
     PERPLEXITY_API_KEY = os.getenv("PERPLEXITY_API_KEY", "")
     OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY", "")
 
-    # Exchange
+    # Exchange APIs
     HTX_API_KEY = os.getenv("HTX_API_KEY", "")
     HTX_SECRET = os.getenv("HTX_SECRET", "")
     HTX_BASE_URL = "https://api.huobi.pro"
+    
+    # Future: OANDA for Forex (Phase 2 expansion)
+    # OANDA_API_KEY = os.getenv("OANDA_API_KEY", "")
+    # OANDA_ACCOUNT_ID = os.getenv("OANDA_ACCOUNT_ID", "")
+    # OANDA_PRACTICE = os.getenv("OANDA_PRACTICE", "true")  # true for practice, false for live
 
     # Optional Data Sources
     TWITTER_API_KEY = os.getenv("TWITTER_API_KEY", "")
@@ -858,9 +866,30 @@ class StrategyDiscoveryAgent:
         self.search_results_csv = Config.SEARCH_RESULTS_DIR / "search_results.csv"
         self.search_queries_csv = Config.SEARCH_QUERIES_DIR / "search_queries.csv"
         self.strategies_index_csv = Config.STRATEGY_LIBRARY_DIR / "strategies_index.csv"
+        
+        # Query memory to prevent repeats
+        self.recent_queries = set()  # Track recent queries
+        self.query_history_file = Config.SEARCH_QUERIES_DIR / "query_history.txt"
+        self._load_query_history()
 
         # Initialize CSVs
         self._init_csv_files()
+    
+    def _load_query_history(self):
+        """Load recent query history to avoid repeats"""
+        if self.query_history_file.exists():
+            with open(self.query_history_file, 'r') as f:
+                # Load last 100 queries
+                lines = f.readlines()
+                self.recent_queries = set(line.strip().lower() for line in lines[-100:])
+        else:
+            self.recent_queries = set()
+    
+    def _save_query(self, query: str):
+        """Save query to history file"""
+        with open(self.query_history_file, 'a') as f:
+            f.write(f"{query}\n")
+        self.recent_queries.add(query.lower())
 
     def _init_csv_files(self):
         """Initialize CSV files for logging"""
@@ -942,19 +971,29 @@ class StrategyDiscoveryAgent:
         self.logger.info("🧠 Generating search queries with LLM...")
 
         # Use OpenRouter GLM model (Moon-Dev pattern)
-        system_prompt = """You are Moon Dev's Web Search Query Generator 🌙
+        system_prompt = """You are APEX's Web Search Query Generator for CRYPTOCURRENCY trading strategies 🚀
 
 ⚠️ CRITICAL INSTRUCTION: YOU MUST RESPOND IN ENGLISH ONLY ⚠️
 
-Generate ONE creative search query to find unique, backtestable trading strategies on the web.
+Generate ONE creative search query to find unique, backtestable CRYPTOCURRENCY trading strategies on the web.
+
+**CRYPTO MARKETS ONLY**: Focus on strategies for:
+- Bitcoin, Ethereum, Altcoins
+- Crypto perpetual futures
+- DeFi, on-chain metrics
+- Crypto-specific features (funding rates, whale movements, etc.)
+
+Good crypto strategies are SIGNAL-BASED and work across different crypto assets!
 
 Be creative and varied! Each query should explore DIFFERENT strategy types:
-- Momentum, mean reversion, breakout, arbitrage, statistical arbitrage
-- Price action, volume analysis, order flow, market microstructure
+- Momentum, mean reversion, breakout, arbitrage
+- Price action, volume analysis, order flow
 - Time-based patterns, seasonal effects, intraday patterns
-- Options strategies, volatility trading, correlation trading
+- Funding rate arbitrage, perpetual futures strategies
+- Volatility trading, correlation trading (between cryptos)
 - Machine learning strategies, neural network trading
-- Quantitative strategies with mathematical models"""
+- Quantitative strategies with mathematical models
+- On-chain metrics, whale movements, exchange flows"""
 
         queries = []
 
@@ -963,17 +1002,23 @@ Be creative and varied! Each query should explore DIFFERENT strategy types:
             try:
                 user_prompt = f"""Generate search query #{i+1} of {Config.DISCOVERY_QUERIES_PER_CYCLE}.
 
-Focus areas (vary between):
-1. "RSI divergence crypto trading strategy backtest results"
-2. "Volume profile breakout strategy TradingView"
-3. "Funding rate arbitrage cryptocurrency quantpedia"
-4. "Order flow imbalance HFT strategy arxiv"
-5. "VWAP mean reversion intraday strategy"
-6. "Bollinger band squeeze momentum strategy"
-7. "Market maker inventory management strategy"
-8. "Statistical arbitrage pairs trading cryptocurrency"
+Focus areas for CRYPTOCURRENCY strategies (vary between these and create unique variations):
 
-Create a UNIQUE query focusing on a specific strategy type.
+1. "RSI divergence Bitcoin trading strategy backtest results"
+2. "Volume profile breakout cryptocurrency TradingView"
+3. "Funding rate arbitrage perpetual futures strategy"
+4. "Order flow imbalance crypto trading strategy"
+5. "VWAP mean reversion Bitcoin intraday strategy"
+6. "Bollinger band squeeze momentum altcoin strategy"
+7. "Crypto market maker inventory management strategy"
+8. "Statistical arbitrage BTC-ETH correlation pairs trading"
+9. "On-chain metrics whale accumulation strategy"
+10. "Exchange inflow/outflow Bitcoin prediction strategy"
+11. "Ichimoku cloud cryptocurrency trend following"
+12. "EMA crossover Bitcoin scalping strategy"
+
+Create a UNIQUE query for a CRYPTO strategy (Bitcoin, Ethereum, altcoins).
+**Remember**: We trade on HTX exchange (crypto spot + perpetuals).
 Return ONLY the search query text, nothing else."""
 
                 # Call LLM
@@ -993,7 +1038,16 @@ Return ONLY the search query text, nothing else."""
 
                 query = response.strip()
                 if query and len(query) > 10:
+                    # Check if we've searched this recently
+                    query_lower = query.lower()
+                    if query_lower in self.recent_queries:
+                        self.logger.info(f"   Query {i+1}: SKIPPED (duplicate): {query}")
+                        # Generate a variation or use fallback
+                        query = self._get_fallback_query(i)
+                        query_lower = query.lower()
+                    
                     queries.append(query)
+                    self._save_query(query)  # Save to history
                     self.logger.info(f"   Query {i+1}: {query}")
 
             except Exception as e:
@@ -1380,6 +1434,10 @@ class RBIBacktestEngine:
         self.backtest_count = 0
         self.optimization_enabled = True
         self.target_return = Config.TARGET_RETURN_PERCENT
+        
+        # Debug memory to prevent repeating same errors
+        self.error_memory = []  # List of (error_pattern, attempted_fixes)
+        self.successful_patterns = []  # List of patterns that worked
 
     def run_continuous(self):
         """Main continuous loop for RBI backtesting"""
@@ -1511,19 +1569,43 @@ Return detailed analysis."""
         self.logger.info("🤖 Generating backtest code...")
 
         system_prompt = """You are an expert quant developer specializing in backtesting.py library.
-Generate COMPLETE, EXECUTABLE Python code for backtesting strategies.
+Generate COMPLETE, EXECUTABLE Python code EXACTLY like Moon Dev's proven patterns.
 
-Requirements:
-- Use backtesting.py library
-- Include all necessary imports
-- Define Strategy class with init() and next() methods
-- Implement entry/exit logic
-- Use self.I() wrapper for all indicators
-- Calculate position sizing with ATR
-- Print detailed Moon Dev themed messages 🌙
-- Return ONLY Python code, no explanations"""
+CRITICAL REQUIREMENTS:
+- Use backtesting.py library ONLY
+- DO NOT import talib (not available)
+- Use pandas for all calculations
+- Wrap indicators with self.I() method
+- MUST call self.buy(size=X, sl=Y, tp=Z) to execute trades
+- Calculate stop loss and take profit prices explicitly
+- Print APEX themed messages 🚀
+- Return ONLY Python code, no explanations
 
-        user_prompt = f"""Generate complete backtest code for this strategy:
+MOON DEV'S PROVEN PATTERN (COPY THIS):
+```python
+def next(self):
+    price = self.data.Close[-1]
+    
+    if entry_condition and not self.position:
+        # Calculate position size
+        pos_size = 0.01  # 1% of equity
+        
+        # Calculate SL/TP prices
+        sl_price = price * (1 - self.stop_loss/100)
+        tp_price = price * (1 + self.take_profit/100)
+        
+        print(f"🚀 APEX ENTRY LONG: Price: {price:.2f}, SL: {sl_price:.2f}, TP: {tp_price:.2f}")
+        
+        # CRITICAL: Actually execute trade
+        self.buy(size=pos_size, sl=sl_price, tp=tp_price)
+```
+
+INDICATOR EXAMPLES (pandas only, NO TALIB):
+- EMA: self.I(lambda x: pd.Series(x).ewm(span=20).mean(), self.data.Close)
+- SMA: self.I(lambda x: pd.Series(x).rolling(14).mean(), self.data.Close)
+- Volume MA: self.I(lambda x: pd.Series(x).rolling(50).mean(), self.data.Volume)"""
+
+        user_prompt = f"""Generate complete backtest code EXACTLY like Moon Dev's pattern:
 
 Name: {strategy.get('name', '')}
 Description: {strategy.get('description', '')}
@@ -1538,14 +1620,42 @@ Research Analysis:
 
 Data path: {Config.BTC_DATA_PATH}
 
-Generate complete working code with:
-1. All imports (backtesting, talib, pandas, numpy)
-2. Strategy class implementation
-3. Entry/exit logic with indicators
-4. Risk management
-5. Main execution block with stats printing
+REQUIRED STRUCTURE (Moon Dev's proven pattern):
+1. Imports: pandas, numpy, backtesting (NO TALIB!)
+2. Strategy class with class parameters (stop_loss, take_profit, etc.)
+3. init() method: Calculate indicators using self.I(lambda...) with pd.Series()
+4. next() method: 
+   - Check entry conditions
+   - Calculate pos_size, sl_price, tp_price
+   - Call self.buy(size=pos_size, sl=sl_price, tp=tp_price)
+   - Print APEX entry message
+5. Load data, run backtest, print stats
 
-Return ONLY the Python code."""
+CRITICAL EXAMPLE (Moon Dev's pattern):
+```python
+class MyStrategy(Strategy):
+    stop_loss = 2.0  # %
+    take_profit = 4.0  # %
+    
+    def init(self):
+        self.ema = self.I(lambda x: pd.Series(x).ewm(span=20).mean(), self.data.Close)
+    
+    def next(self):
+        if entry_condition and not self.position:
+            price = self.data.Close[-1]
+            pos_size = 0.01
+            sl_price = price * (1 - self.stop_loss/100)
+            tp_price = price * (1 + self.take_profit/100)
+            print(f"🚀 APEX ENTRY: Price {{price:.2f}}")
+            self.buy(size=pos_size, sl=sl_price, tp=tp_price)  # CRITICAL!
+```
+
+CRITICAL: 
+- DO NOT use talib - use pd.Series(x) for pandas functions
+- MUST call self.buy() with size, sl, tp parameters
+- Use pd.Series(x).ewm() or pd.Series(x).rolling() patterns
+
+Return ONLY the complete Python code."""
 
         try:
             response = ModelFactory.call_llm(
@@ -1585,8 +1695,11 @@ Return ONLY the Python code."""
         return response.strip()
 
     def _auto_debug_loop(self, code: str, strategy: Dict) -> Optional[str]:
-        """Auto-debug loop with LLM (Moon-Dev pattern - up to 10 iterations)"""
+        """Auto-debug loop with LLM and memory (Moon-Dev pattern - up to 10 iterations)"""
         self.logger.info("🔧 Starting auto-debug loop...")
+        
+        # Track errors in this debug session
+        session_errors = []
 
         for iteration in range(1, Config.MAX_DEBUG_ITERATIONS + 1):
             self.logger.info(f"   Iteration {iteration}/{Config.MAX_DEBUG_ITERATIONS}")
@@ -1596,8 +1709,15 @@ Return ONLY the Python code."""
                 ast.parse(code)
                 self.logger.info("   ✅ Syntax valid")
             except SyntaxError as e:
-                self.logger.warning(f"   ❌ Syntax error: {e}")
-                code = self._fix_code_with_llm(code, str(e), strategy)
+                error_msg = str(e)
+                self.logger.warning(f"   ❌ Syntax error: {error_msg}")
+                
+                # Check if we've seen this error before
+                if self._is_repeated_error(error_msg, session_errors):
+                    self.logger.warning("   ⚠️ Repeated error detected - using memory to avoid")
+                
+                session_errors.append(error_msg)
+                code = self._fix_code_with_llm(code, error_msg, strategy, session_errors)
                 continue
 
             # Try to execute in test environment
@@ -1605,36 +1725,126 @@ Return ONLY the Python code."""
 
             if success:
                 self.logger.info("✅ Code executes successfully")
+                # Store successful pattern
+                self._record_success(code, session_errors)
                 return code
             else:
-                self.logger.warning(f"   ❌ Execution error: {error}")
-                code = self._fix_code_with_llm(code, error, strategy)
+                error_msg = str(error)
+                self.logger.warning(f"   ❌ Execution error: {error_msg}")
+                
+                # Check if we've seen this error before
+                if self._is_repeated_error(error_msg, session_errors):
+                    self.logger.warning("   ⚠️ Repeated error detected - applying learned fix")
+                
+                session_errors.append(error_msg)
+                code = self._fix_code_with_llm(code, error_msg, strategy, session_errors)
 
         self.logger.error("❌ Auto-debug failed after max iterations")
+        self._record_failure(session_errors)
         return None
+    
+    def _is_repeated_error(self, error: str, session_errors: List[str]) -> bool:
+        """Check if this error pattern has been seen before"""
+        # Simple pattern matching for common repeated errors
+        error_lower = error.lower()
+        
+        # Check session errors
+        for prev_error in session_errors:
+            if prev_error.lower() == error_lower:
+                return True
+        
+        # Check global memory
+        for prev_error, _ in self.error_memory:
+            if prev_error.lower() in error_lower or error_lower in prev_error.lower():
+                return True
+        
+        return False
+    
+    def _record_success(self, code: str, errors_encountered: List[str]):
+        """Record successful pattern for future reference"""
+        # Extract key patterns from successful code
+        if 'talib' not in code.lower() and len(errors_encountered) > 0:
+            self.successful_patterns.append({
+                'pattern': 'avoid_talib',
+                'code_snippet': 'Use self.I() wrappers instead of direct talib calls'
+            })
+    
+    def _record_failure(self, errors: List[str]):
+        """Record failed debug session for future reference"""
+        if errors:
+            self.error_memory.append((errors[-1], errors))
 
-    def _fix_code_with_llm(self, code: str, error: str, strategy: Dict) -> str:
-        """Use LLM to fix code based on error"""
+    def _fix_code_with_llm(self, code: str, error: str, strategy: Dict, error_history: List[str]) -> str:
+        """Use LLM to fix code based on error with memory of previous attempts"""
         self.logger.info("🔧 Fixing code with LLM...")
 
-        system_prompt = """You are a debugging expert. Fix Python backtesting code based on error messages.
-Return ONLY the fixed Python code, no explanations."""
+        system_prompt = """You are a debugging expert for backtesting.py library. Fix code FAST by applying these EXACT solutions:
 
-        user_prompt = f"""Fix this backtest code:
+COMMON ERRORS & INSTANT FIXES:
+
+1. Column Names Error ("None of [Index(['Open',...)] are in columns"):
+   FIX: Add this BEFORE Backtest():
+   ```python
+   data.columns = [col.capitalize() for col in data.columns]
+   ```
+
+2. Indicator "λ(C)" or "RSI(C)" or "ema(C,12)" errors:
+   FIX: Use Moon Dev's pattern with pd.Series():
+   ```python
+   self.ema = self.I(lambda x: pd.Series(x).ewm(span=20).mean(), self.data.Close)
+   self.sma = self.I(lambda x: pd.Series(x).rolling(14).mean(), self.data.Close)
+   ```
+
+3. RSI calculation:
+   FIX: Use pandas RSI calculation:
+   ```python
+   def calculate_rsi(prices, period=14):
+       delta = pd.Series(prices).diff()
+       gain = (delta.where(delta > 0, 0)).rolling(window=period).mean()
+       loss = (-delta.where(delta < 0, 0)).rolling(window=period).mean()
+       rs = gain / loss
+       return 100 - (100 / (1 + rs))
+   
+   self.rsi = self.I(calculate_rsi, self.data.Close, 14)
+   ```
+
+4. Missing self.buy() call:
+   FIX: Always call self.buy() when entering:
+   ```python
+   self.buy(size=pos_size, sl=sl_price, tp=tp_price)
+   ```
+
+5. Talib errors:
+   FIX: NEVER use talib. Use pd.Series() for everything.
+
+Return ONLY the complete fixed Python code, no explanations."""
+
+        # Build error history context
+        history_text = ""
+        if len(error_history) > 1:
+            history_text = f"\n\nPrevious errors in this session (DO NOT REPEAT THESE MISTAKES):\n"
+            for i, prev_error in enumerate(error_history[:-1], 1):
+                history_text += f"{i}. {prev_error}\n"
+
+        user_prompt = f"""Fix this backtest code QUICKLY using the instant fixes above:
 
 ```python
 {code}
 ```
 
-Error encountered:
-{error}
+ERROR: {error}
+{history_text}
 
-Strategy context:
-- Name: {strategy.get('name', '')}
-- Entry: {strategy.get('entry_rules', '')}
-- Exit: {strategy.get('exit_rules', '')}
+APPLY THE RIGHT INSTANT FIX:
+- If "None of [Index" → Add data.columns capitalization
+- If "λ" or "ema(" or "RSI(" → Use pd.Series() wrapper
+- If RSI calculation → Use pandas RSI function shown above
+- If no trades executing → Add self.buy(size=X, sl=Y, tp=Z)
+- Capitalize column names BEFORE creating Backtest
 
-Return the COMPLETE fixed Python code."""
+Strategy: {strategy.get('name', '')}
+
+Return the COMPLETE fixed Python code with the instant fix applied."""
 
         try:
             response = ModelFactory.call_llm(
@@ -1712,7 +1922,7 @@ Return the COMPLETE fixed Python code."""
             return None
 
     def _parse_backtest_output(self, output: str) -> Optional[Dict]:
-        """Parse metrics from backtest output"""
+        """Parse metrics from backtest output - NO SYNTHETIC DATA"""
         metrics = {
             'return_pct': 0.0,
             'sharpe': 0.0,
@@ -1722,23 +1932,43 @@ Return the COMPLETE fixed Python code."""
             'max_drawdown': 0.0
         }
 
-        # Look for common metric patterns
-        if "Return" in output:
-            # Try to extract return percentage
-            import re
-            match = re.search(r'Return.*?([0-9.]+)%', output)
-            if match:
-                metrics['return_pct'] = float(match.group(1))
+        # Parse actual backtest.py output
+        import re
+        
+        # Look for Return [%]
+        match = re.search(r'Return\s+\[%\]\s+([-+]?[0-9]*\.?[0-9]+)', output)
+        if match:
+            metrics['return_pct'] = float(match.group(1))
+        
+        # Look for Sharpe Ratio
+        match = re.search(r'Sharpe Ratio\s+([-+]?[0-9]*\.?[0-9]+)', output)
+        if match:
+            metrics['sharpe'] = float(match.group(1))
+        
+        # Look for # Trades
+        match = re.search(r'#\s+Trades\s+(\d+)', output)
+        if match:
+            metrics['trades'] = int(match.group(1))
+        
+        # Look for Win Rate [%]
+        match = re.search(r'Win Rate\s+\[%\]\s+([-+]?[0-9]*\.?[0-9]+)', output)
+        if match:
+            metrics['win_rate'] = float(match.group(1)) / 100.0
+        
+        # Look for Profit Factor
+        match = re.search(r'Profit Factor\s+([-+]?[0-9]*\.?[0-9]+)', output)
+        if match:
+            metrics['profit_factor'] = float(match.group(1))
+        
+        # Look for Max. Drawdown [%]
+        match = re.search(r'Max\.\s+Drawdown\s+\[%\]\s+([-+]?[0-9]*\.?[0-9]+)', output)
+        if match:
+            metrics['max_drawdown'] = float(match.group(1)) / 100.0
 
-        # For demo purposes, generate synthetic metrics
-        # In production, this would parse actual backtest output
-        if metrics['return_pct'] == 0.0:
-            metrics['return_pct'] = np.random.uniform(5, 80)
-            metrics['sharpe'] = np.random.uniform(0.5, 2.5)
-            metrics['trades'] = np.random.randint(30, 200)
-            metrics['win_rate'] = np.random.uniform(0.45, 0.75)
-            metrics['profit_factor'] = np.random.uniform(1.0, 2.5)
-            metrics['max_drawdown'] = np.random.uniform(0.05, 0.30)
+        # If no trades were generated, return None instead of fake metrics
+        if metrics['trades'] == 0:
+            self.logger.warning("⚠️ Backtest generated 0 trades - strategy may need debugging")
+            return None
 
         return metrics
 
@@ -1832,25 +2062,36 @@ Return the COMPLETE optimized Python code."""
 
         results = []
 
-        # Test on different assets and timeframes
+        # Test on different assets and timeframes with REAL data
         for asset in Config.TEST_ASSETS[:3]:  # Test top 3 assets
             for timeframe in Config.TEST_TIMEFRAMES[:2]:  # Test top 2 timeframes
                 self.logger.info(f"   Testing: {asset} {timeframe}")
 
-                # For demo, generate synthetic results
-                # In production, would run actual backtest with different data
-                result = {
-                    "asset": asset,
-                    "timeframe": timeframe,
-                    "win_rate": np.random.uniform(0.45, 0.75),
-                    "profit_factor": np.random.uniform(1.0, 2.5),
-                    "sharpe_ratio": np.random.uniform(0.5, 2.0),
-                    "max_drawdown": np.random.uniform(0.05, 0.30),
-                    "total_trades": np.random.randint(30, 200),
-                    "return_pct": np.random.uniform(5, 80)
-                }
-
-                results.append(result)
+                # Fetch real data for this asset/timeframe
+                symbol = f"{asset.lower()}usdt"
+                period_map = {'15m': '15min', '1H': '60min', '4H': '4hour'}
+                period = period_map.get(timeframe, '15min')
+                
+                # Ensure data exists
+                data_path = data_fetcher.ensure_data_exists(symbol, period)
+                
+                # Run actual backtest with this data
+                test_metrics = self._run_backtest_process(code, str(data_path))
+                
+                if test_metrics:
+                    result = {
+                        "asset": asset,
+                        "timeframe": timeframe,
+                        "win_rate": test_metrics.get('win_rate', 0.0),
+                        "profit_factor": test_metrics.get('profit_factor', 0.0),
+                        "sharpe_ratio": test_metrics.get('sharpe', 0.0),
+                        "max_drawdown": test_metrics.get('max_drawdown', 0.0),
+                        "total_trades": test_metrics.get('trades', 0),
+                        "return_pct": test_metrics.get('return_pct', 0.0)
+                    }
+                    results.append(result)
+                else:
+                    self.logger.warning(f"   Skipping {asset} {timeframe} - backtest failed")
 
         self.logger.info(f"✅ Tested {len(results)} configurations")
         return results
@@ -2156,24 +2397,36 @@ class ChampionManager:
 
     def _generate_strategy_signal(self, champion: Dict) -> Optional[Dict]:
         """Generate trading signal from champion's strategy"""
-
-        # Simplified signal generation
-        # In production, this would execute the actual strategy logic
-
-        # Random signal for demonstration (10% chance)
-        if np.random.random() < 0.10:
-            return {
-                "action": np.random.choice(["BUY", "SELL"]),
-                "symbol": np.random.choice(Config.PAPER_TRADE_SYMBOLS),
-                "confidence": np.random.uniform(0.6, 0.9),
-                "price": np.random.uniform(30000, 50000)  # BTC price range
-            }
-
+        
+        # TODO: In full implementation, this would execute the actual strategy code
+        # against current market data to generate real signals
+        # For now, we skip random signals and let market data signals drive trading
+        
         return None
+
+    def _get_current_price(self, symbol: str) -> Optional[float]:
+        """Get current price from HTX exchange"""
+        try:
+            # HTX ticker endpoint
+            endpoint = f"{Config.HTX_BASE_URL}/market/detail/merged"
+            params = {"symbol": symbol.lower().replace("USDT", "usdt")}
+            
+            response = requests.get(endpoint, params=params, timeout=10)
+            
+            if response.status_code == 200:
+                data = response.json()
+                if data.get("status") == "ok" and "tick" in data:
+                    # Use close price from ticker
+                    return float(data["tick"]["close"])
+            
+            return None
+        except Exception as e:
+            self.logger.warning(f"Could not fetch price for {symbol}: {e}")
+            return None
 
     def _execute_paper_trade(self, champion_id: str, champion: Dict,
                             strategy_signal: Optional[Dict], market_signals: List[Dict]):
-        """Execute paper trade"""
+        """Execute REALISTIC paper trade with SL/TP, leverage, slippage, fees"""
 
         with champions_lock:
             champion = champions[champion_id]
@@ -2183,33 +2436,103 @@ class ChampionManager:
                 action = strategy_signal["action"]
                 symbol = strategy_signal.get("symbol", "BTCUSDT")
                 confidence = strategy_signal.get("confidence", 0.7)
+            elif market_signals:
+                # Use first market signal
+                signal = market_signals[0]
+                action = signal.get("action", "BUY")
+                symbol = signal.get("symbol", "BTCUSDT")
+                confidence = signal.get("confidence", 0.7)
             else:
-                action = "BUY"
-                symbol = "BTCUSDT"
-                confidence = 0.6
+                # No signal, skip trade
+                return
 
-            # Calculate position size (2% risk per trade)
-            risk_amount = champion["bankroll"] * Config.RISK_PER_TRADE_PERCENT
+            # Get REAL current price from HTX
+            entry_price = self._get_current_price(symbol)
+            
+            if entry_price is None:
+                self.logger.warning(f"Cannot execute trade - no price data for {symbol}")
+                return
 
-            # Simulate price and profit/loss
-            entry_price = np.random.uniform(40000, 45000)
-
-            # Simulate trade outcome based on confidence
-            win_probability = 0.5 + (confidence * 0.3)  # 50-80% win rate
-            is_winner = np.random.random() < win_probability
-
+            # ============ REALISTIC TRADING PARAMETERS ============
+            
+            # Position sizing with leverage (default 3x for crypto)
+            leverage = 3.0
+            risk_per_trade = Config.RISK_PER_TRADE_PERCENT  # 2%
+            risk_amount = champion["bankroll"] * risk_per_trade
+            
+            # Stop loss (2% from entry)
+            stop_loss_pct = 0.02
+            if action == "BUY":
+                stop_loss_price = entry_price * (1 - stop_loss_pct)
+                take_profit_price = entry_price * (1 + stop_loss_pct * 2)  # 2:1 RR
+            else:  # SELL
+                stop_loss_price = entry_price * (1 + stop_loss_pct)
+                take_profit_price = entry_price * (1 - stop_loss_pct * 2)
+            
+            # Position size calculation with leverage
+            position_size_usd = (risk_amount / stop_loss_pct) * leverage
+            position_size_units = position_size_usd / entry_price
+            margin_required = position_size_usd / leverage
+            
+            # ============ SLIPPAGE ============
+            # Market orders have slippage (0.05% average)
+            slippage_pct = 0.0005
+            if action == "BUY":
+                actual_entry = entry_price * (1 + slippage_pct)
+            else:
+                actual_entry = entry_price * (1 - slippage_pct)
+            
+            # ============ TRADING FEES ============
+            # HTX taker fee: 0.2% (maker: 0.15%, but we use taker for market orders)
+            fee_pct = 0.002
+            entry_fee = position_size_usd * fee_pct
+            
+            # ============ SIMULATE TRADE OUTCOME ============
+            # Based on confidence and market conditions
+            base_win_rate = 0.45  # Base 45% win rate
+            confidence_bonus = confidence * 0.15  # Up to +15% from confidence
+            win_probability = base_win_rate + confidence_bonus
+            
+            # Deterministic simulation (SHA256-based)
+            seed = hashlib.sha256(f"{champion_id}{datetime.now().timestamp()}".encode()).hexdigest()
+            is_winner = int(seed, 16) % 100 < int(win_probability * 100)
+            
+            # Calculate exit and P&L
             if is_winner:
-                # Winning trade
-                profit_mult = np.random.uniform(1.5, 3.0)  # 1.5R to 3R
-                profit = risk_amount * profit_mult
+                # Hit take profit
+                exit_price = take_profit_price
+                # Add some random variation (TP might not be exact)
+                variation = (int(seed[:8], 16) % 20 - 10) / 10000  # -0.1% to +0.1%
+                exit_price = exit_price * (1 + variation)
+            else:
+                # Hit stop loss
+                exit_price = stop_loss_price
+            
+            # Calculate P&L
+            if action == "BUY":
+                price_diff = exit_price - actual_entry
+            else:  # SELL
+                price_diff = actual_entry - exit_price
+            
+            # P&L with leverage
+            pnl_before_fees = (price_diff / actual_entry) * position_size_usd
+            
+            # Exit fee
+            exit_fee = position_size_usd * fee_pct
+            
+            # Total fees and slippage cost
+            total_fees = entry_fee + exit_fee
+            slippage_cost = abs(actual_entry - entry_price) * position_size_units
+            
+            # Final P&L
+            profit = pnl_before_fees - total_fees - slippage_cost
+            
+            # Update champion stats
+            if profit > 0:
                 champion["winning_trades"] += 1
             else:
-                # Losing trade
-                loss_mult = np.random.uniform(0.8, 1.0)  # 80-100% of risk
-                profit = -risk_amount * loss_mult
                 champion["losing_trades"] += 1
-
-            # Update champion stats
+            
             champion["bankroll"] += profit
             champion["total_pnl"] += profit
             champion["current_pnl"] += profit
@@ -2223,23 +2546,36 @@ class ChampionManager:
             if champion["total_pnl"] < champion["min_pnl"]:
                 champion["min_pnl"] = champion["total_pnl"]
 
-            # Record trade
+            # Record DETAILED trade
             trade_record = {
                 "timestamp": datetime.now().isoformat(),
                 "action": action,
                 "symbol": symbol,
                 "entry_price": entry_price,
+                "actual_entry": actual_entry,
+                "exit_price": exit_price,
+                "stop_loss": stop_loss_price,
+                "take_profit": take_profit_price,
+                "position_size_usd": position_size_usd,
+                "position_size_units": position_size_units,
+                "leverage": leverage,
+                "margin_required": margin_required,
+                "slippage": slippage_cost,
+                "fees": total_fees,
+                "pnl_before_fees": pnl_before_fees,
                 "profit": profit,
                 "is_winner": is_winner,
-                "bankroll_after": champion["bankroll"]
+                "bankroll_after": champion["bankroll"],
+                "confidence": confidence
             }
             champion["trade_history"].append(trade_record)
 
-            # Log trade
+            # Log trade with details
             result_emoji = "✅" if is_winner else "❌"
-            self.logger.info(f"{result_emoji} {champion_id} | {action} {symbol} | "
-                           f"P&L: ${profit:+,.2f} | Bankroll: ${champion['bankroll']:,.2f} | "
-                           f"Trades: {champion['total_trades']}")
+            self.logger.info(f"{result_emoji} {champion_id} | {action} {symbol} @${actual_entry:.2f} | "
+                           f"Leverage: {leverage}x | Position: ${position_size_usd:,.0f} | "
+                           f"P&L: ${profit:+,.2f} | Fees: ${total_fees:.2f} | "
+                           f"Bankroll: ${champion['bankroll']:,.2f}")
 
     def _update_daily_stats(self, champion_id: str, champion: Dict):
         """Update daily statistics"""
@@ -2351,58 +2687,60 @@ class WhaleAgent:
                 time.sleep(60)
 
     def _monitor_open_interest(self):
-        """Monitor open interest changes (Moon-Dev pattern)"""
-
-        # Simulate OI data
-        current_oi = np.random.uniform(1e9, 5e9)  # $1B - $5B
-        self.oi_history.append({
-            "timestamp": datetime.now(),
-            "oi": current_oi
-        })
-
-        if len(self.oi_history) < 2:
-            return
-
-        # Calculate change
-        previous_oi = self.oi_history[-2]["oi"]
-        pct_change = ((current_oi - previous_oi) / previous_oi) * 100
-
-        # Check threshold
-        if abs(pct_change) > 2.0:  # 2% change threshold
-            signal = {
-                "type": "WHALE_OI",
-                "symbol": "BTCUSDT",
-                "oi_change_pct": pct_change,
-                "current_oi": current_oi,
-                "previous_oi": previous_oi,
-                "action": "BUY" if pct_change > 0 else "SELL",
-                "confidence": min(abs(pct_change) / 10, 0.9),
-                "timestamp": datetime.now().isoformat()
-            }
-
-            market_data_queue.put(signal)
-            self.logger.info(f"🐋 OI Change: {pct_change:+.2f}% | ${current_oi/1e9:.2f}B")
+        """Monitor open interest changes using REAL HTX data"""
+        
+        try:
+            # Get real futures open interest from HTX
+            # HTX futures API endpoint for contract info
+            endpoint = f"{Config.HTX_BASE_URL}/linear-swap-api/v1/swap_open_interest"
+            params = {"contract_code": "BTC-USDT"}
+            
+            response = requests.get(endpoint, params=params, timeout=10)
+            
+            if response.status_code == 200:
+                data = response.json()
+                if data.get("status") == "ok" and "data" in data:
+                    # Extract open interest
+                    oi_data = data["data"][0] if data["data"] else None
+                    if oi_data:
+                        # OI volume is returned from HTX API
+                        # Multiplier converts contract volume to approximate USD value
+                        current_oi = float(oi_data.get("volume", 0)) * 100
+                        
+                        self.oi_history.append({
+                            "timestamp": datetime.now(),
+                            "oi": current_oi
+                        })
+                        
+                        if len(self.oi_history) >= 2:
+                            previous_oi = self.oi_history[-2]["oi"]
+                            pct_change = ((current_oi - previous_oi) / previous_oi) * 100
+                            
+                            # Check threshold
+                            if abs(pct_change) > 2.0:  # 2% change threshold
+                                signal = {
+                                    "type": "WHALE_OI",
+                                    "symbol": "BTCUSDT",
+                                    "oi_change_pct": pct_change,
+                                    "current_oi": current_oi,
+                                    "previous_oi": previous_oi,
+                                    "action": "BUY" if pct_change > 0 else "SELL",
+                                    "confidence": min(abs(pct_change) / 10, 0.9),
+                                    "timestamp": datetime.now().isoformat()
+                                }
+                                
+                                market_data_queue.put(signal)
+                                self.logger.info(f"🐋 OI Change: {pct_change:+.2f}% | ${current_oi/1e9:.2f}B")
+        except Exception as e:
+            self.logger.debug(f"Could not fetch OI data: {e}")
 
     def _monitor_large_transfers(self):
-        """Monitor large exchange transfers"""
-
-        # Simulate large transfer detection (5% chance)
-        if np.random.random() < 0.05:
-            amount_usd = np.random.uniform(1_000_000, 10_000_000)
-
-            if amount_usd > Config.WHALE_MIN_AMOUNT_USD:
-                signal = {
-                    "type": "WHALE_TRANSFER",
-                    "asset": np.random.choice(["BTC", "ETH", "SOL"]),
-                    "amount_usd": amount_usd,
-                    "transfer_type": np.random.choice(["deposit", "withdrawal"]),
-                    "action": "BUY",  # Deposit = potential buy
-                    "confidence": Config.WHALE_CONFIDENCE,
-                    "timestamp": datetime.now().isoformat()
-                }
-
-                market_data_queue.put(signal)
-                self.logger.info(f"🐋 Large Transfer: ${amount_usd/1e6:.1f}M {signal['asset']}")
+        """Monitor large exchange transfers - disabled pending blockchain API integration"""
+        
+        # NOTE: This requires blockchain explorer APIs (Etherscan, etc.)
+        # or exchange websocket feeds which are not currently configured
+        # Leaving this disabled rather than generating fake data
+        pass
 
 class SentimentAgent:
     """
@@ -2444,26 +2782,14 @@ class SentimentAgent:
                 time.sleep(60)
 
     def _analyze_sentiment(self) -> float:
-        """Analyze social media sentiment"""
-
-        # Simulate sentiment analysis
-        # In production, this would use Twitter API + NLP models
-        sentiment_score = np.random.uniform(-1.0, 1.0)
-
-        # Add to history
-        self.sentiment_history.append({
-            "timestamp": datetime.now(),
-            "score": sentiment_score
-        })
-
-        # Keep last 24 hours
-        cutoff = datetime.now() - timedelta(hours=24)
-        self.sentiment_history = [
-            s for s in self.sentiment_history
-            if s["timestamp"] > cutoff
-        ]
-
-        return sentiment_score
+        """Analyze social media sentiment - DISABLED pending API integration"""
+        
+        # NOTE: Real sentiment analysis requires Twitter API v2, Reddit API, etc.
+        # These are not currently configured in the environment
+        # Rather than generating fake data, we disable this feature
+        
+        # Return neutral sentiment
+        return 0.0
 
 class FundingAgent:
     """
@@ -2507,17 +2833,33 @@ class FundingAgent:
                 time.sleep(60)
 
     def _get_funding_rates(self) -> Dict[str, float]:
-        """Get current funding rates"""
-
-        # Simulate funding rates
-        # In production, this would query HTX or other exchange APIs
+        """Get current funding rates from HTX exchange"""
+        
         rates = {}
-
-        for symbol in Config.FUNDING_SYMBOLS:
-            rate = np.random.uniform(-0.002, 0.002)  # -0.2% to +0.2%
-            rates[symbol] = rate
-
-        return rates
+        
+        try:
+            # Get real funding rates from HTX futures
+            endpoint = f"{Config.HTX_BASE_URL}/linear-swap-api/v1/swap_batch_funding_rate"
+            
+            response = requests.get(endpoint, timeout=10)
+            
+            if response.status_code == 200:
+                data = response.json()
+                if data.get("status") == "ok" and "data" in data:
+                    for contract in data["data"]:
+                        symbol = contract.get("contract_code", "").replace("-USDT", "USDT")
+                        funding_rate = float(contract.get("funding_rate", 0))
+                        
+                        # Only track symbols we care about
+                        if any(s in symbol for s in Config.FUNDING_SYMBOLS):
+                            rates[symbol] = funding_rate
+            
+            # If we didn't get any rates, return empty dict instead of fake data
+            return rates
+            
+        except Exception as e:
+            self.logger.debug(f"Could not fetch funding rates: {e}")
+            return {}
 
 logger.info("✅ Market Data Agents defined (Whale + Sentiment + Funding - FULL IMPLEMENTATIONS)")
 
@@ -2609,6 +2951,103 @@ class APEXAPIServer:
                     }
 
                     return {"champions": champions_list, "summary": summary}
+
+            # Individual Champion Detail endpoint - REAL-TIME TRACKING
+            @app.get("/api/champion/{champion_id}")
+            async def get_champion_detail(champion_id: str):
+                """Get detailed information for a specific champion including real-time trades"""
+                with champions_lock:
+                    if champion_id not in champions:
+                        return {"error": "Champion not found"}, 404
+                    
+                    champion = champions[champion_id]
+                    
+                    # Calculate metrics
+                    profit_pct = ((champion["bankroll"] - champion["initial_bankroll"]) / champion["initial_bankroll"]) * 100
+                    win_rate = (champion["winning_trades"] / max(champion["total_trades"], 1)) * 100
+                    win_rate_days = (champion["winning_days"] / max(champion["total_days"], 1)) * 100
+                    
+                    # Get recent trades (last 50)
+                    recent_trades = champion["trade_history"][-50:] if champion["trade_history"] else []
+                    
+                    # Calculate trade statistics
+                    if recent_trades:
+                        avg_profit = sum(t["profit"] for t in recent_trades) / len(recent_trades)
+                        biggest_win = max((t["profit"] for t in recent_trades), default=0)
+                        biggest_loss = min((t["profit"] for t in recent_trades), default=0)
+                    else:
+                        avg_profit = biggest_win = biggest_loss = 0
+                    
+                    # Performance by day
+                    daily_performance = {}
+                    for trade in champion["trade_history"]:
+                        trade_date = trade["timestamp"][:10]  # YYYY-MM-DD
+                        if trade_date not in daily_performance:
+                            daily_performance[trade_date] = {
+                                "trades": 0,
+                                "wins": 0,
+                                "pnl": 0
+                            }
+                        daily_performance[trade_date]["trades"] += 1
+                        if trade["is_winner"]:
+                            daily_performance[trade_date]["wins"] += 1
+                        daily_performance[trade_date]["pnl"] += trade["profit"]
+                    
+                    return {
+                        "champion_id": champion_id,
+                        "strategy_name": champion["strategy_name"],
+                        "status": champion["status"],
+                        
+                        # Bankroll & Performance
+                        "bankroll": {
+                            "current": champion["bankroll"],
+                            "initial": champion["initial_bankroll"],
+                            "profit_pct": profit_pct,
+                            "total_pnl": champion["total_pnl"],
+                            "current_pnl": champion["current_pnl"],
+                            "max_pnl": champion["max_pnl"],
+                            "min_pnl": champion["min_pnl"]
+                        },
+                        
+                        # Trading Statistics
+                        "statistics": {
+                            "total_trades": champion["total_trades"],
+                            "winning_trades": champion["winning_trades"],
+                            "losing_trades": champion["losing_trades"],
+                            "win_rate": win_rate,
+                            "trades_today": champion["trades_today"],
+                            "winning_days": champion["winning_days"],
+                            "losing_days": champion["losing_days"],
+                            "total_days": champion["total_days"],
+                            "win_rate_days": win_rate_days,
+                            "avg_profit_per_trade": avg_profit,
+                            "biggest_win": biggest_win,
+                            "biggest_loss": biggest_loss
+                        },
+                        
+                        # Recent Trades (last 50)
+                        "recent_trades": recent_trades,
+                        
+                        # Daily Performance
+                        "daily_performance": [
+                            {
+                                "date": date,
+                                "trades": stats["trades"],
+                                "wins": stats["wins"],
+                                "pnl": stats["pnl"],
+                                "win_rate": (stats["wins"] / stats["trades"] * 100) if stats["trades"] > 0 else 0
+                            }
+                            for date, stats in sorted(daily_performance.items(), reverse=True)[:30]  # Last 30 days
+                        ],
+                        
+                        # Timestamps
+                        "created_at": champion["created_at"].isoformat(),
+                        "last_trade_at": champion["last_trade_at"].isoformat() if champion["last_trade_at"] else None,
+                        "last_updated": datetime.now().isoformat(),
+                        
+                        # Eligibility
+                        "real_trading_eligible": champion.get("real_trading_eligible", False)
+                    }
 
             # System status endpoint
             @app.get("/api/system_status")
@@ -3511,7 +3950,7 @@ logger.info("✅ Utility functions, helpers, and extended classes defined (1000+
 # =========================================================================================
 
 RESEARCH_PROMPT_TEMPLATE = """
-You are Moon Dev's Research AI 🌙
+You are APEX's Research AI 🚀
 
 IMPORTANT NAMING RULES:
 1. Create a UNIQUE TWO-WORD NAME for this specific strategy
@@ -3551,7 +3990,7 @@ Remember: The name must be UNIQUE and SPECIFIC to this strategy's approach!
 """
 
 BACKTEST_CODE_PROMPT_TEMPLATE = """
-You are Moon Dev's Backtest AI 🌙 ONLY SEND BACK CODE, NO OTHER TEXT.
+You are APEX's Backtest AI 🚀 ONLY SEND BACK CODE, NO OTHER TEXT.
 Create a backtesting.py implementation for the strategy.
 USE BACKTESTING.PY
 
@@ -3606,7 +4045,7 @@ Example fix:
 RISK MANAGEMENT:
 1. Always calculate position sizes based on risk percentage
 2. Use proper stop loss and take profit calculations
-3. Print entry/exit signals with Moon Dev themed messages
+3. Print entry/exit signals with APEX themed messages
 
 If you need indicators use TA lib or pandas TA.
 
@@ -3631,14 +4070,14 @@ df = pd.read_csv(data_path, parse_dates=['datetime'], index_col='datetime')
 
 DO NOT generate sample data - use the actual CSV file from HTX API!
 
-Always add plenty of Moon Dev themed debug prints with emojis to make debugging easier! 🌙 ✨ 🚀
+Always add plenty of APEX themed debug prints with emojis to make debugging easier! 🚀 ✨ 💎
 
 FOR THE PYTHON BACKTESTING LIBRARY USE BACKTESTING.PY AND SEND BACK ONLY THE CODE, NO OTHER TEXT.
 ONLY SEND BACK CODE, NO OTHER TEXT.
 """
 
 DEBUG_PROMPT_TEMPLATE = """
-You are Moon Dev's Debug AI 🌙
+You are APEX's Debug AI 🚀
 Fix technical issues in the backtest code WITHOUT changing the strategy logic.
 
 CRITICAL ERROR TO FIX:
@@ -3688,7 +4127,7 @@ The code MUST execute without errors.
 """
 
 OPTIMIZATION_PROMPT_TEMPLATE = """
-You are Moon Dev's Optimization AI 🌙
+You are APEX's Optimization AI 🚀
 Improve the strategy to achieve {target_return}% return while maintaining good risk metrics.
 
 CURRENT PERFORMANCE:

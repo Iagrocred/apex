@@ -1,0 +1,30 @@
+# APEX System Requirements
+# Core dependencies for autonomous trading system
+
+# Data processing
+pandas>=2.0.0
+numpy>=1.24.0
+
+# Environment variables
+python-dotenv>=1.0.0
+
+# LLM APIs
+openai>=1.0.0
+anthropic>=0.18.0
+google-generativeai>=0.3.0
+
+# Web/HTTP
+requests>=2.31.0
+
+# FastAPI server
+fastapi>=0.109.0
+uvicorn>=0.27.0
+websockets>=12.0
+
+# Terminal colors
+termcolor>=2.4.0
+
+# Backtesting (if running backtests locally)
+# backtesting>=0.3.3
+# Note: backtesting.py requires pandas_ta or ta-lib for indicators
+# We use pandas-based calculations instead to avoid talib dependency
