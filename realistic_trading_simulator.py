@@ -7,8 +7,6 @@ This replaces the naive paper trading with realistic execution simulation
 import os
 import json
 import time
-import pandas as pd
-import numpy as np
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
@@ -363,10 +361,19 @@ class RealisticTradingEngine:
         if not closed_positions:
             return {
                 'total_trades': 0,
+                'open_positions': len(open_positions),
+                'winning_trades': 0,
+                'losing_trades': 0,
+                'win_rate': 0.0,
                 'total_pnl': 0.0,
                 'total_return_pct': 0.0,
-                'avg_slippage_bps': 0.0,
-                'total_fees': 0.0
+                'current_capital': self.capital,
+                'avg_win': 0.0,
+                'avg_loss': 0.0,
+                'avg_entry_slippage_bps': 0.0,
+                'avg_exit_slippage_bps': 0.0,
+                'total_fees': 0.0,
+                'fees_pct_of_capital': 0.0
             }
         
         total_pnl = sum(p.pnl for p in closed_positions)

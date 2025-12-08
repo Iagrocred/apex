@@ -1,0 +1,22 @@
+{
+  "start_time": "2025-12-08T23:38:39.349031",
+  "end_time": "2025-12-08T23:39:15.358799",
+  "cycles": 4,
+  "summary": {
+    "total_trades": 0,
+    "open_positions": 0,
+    "winning_trades": 0,
+    "losing_trades": 0,
+    "win_rate": 0.0,
+    "total_pnl": 0.0,
+    "total_return_pct": 0.0,
+    "current_capital": 10000.0,
+    "avg_win": 0.0,
+    "avg_loss": 0.0,
+    "avg_entry_slippage_bps": 0.0,
+    "avg_exit_slippage_bps": 0.0,
+    "total_fees": 0.0,
+    "fees_pct_of_capital": 0.0
+  },
+  "trades": []
+}
