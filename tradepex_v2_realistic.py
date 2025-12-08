@@ -9,6 +9,7 @@ import json
 import time
 from datetime import datetime, timedelta
 from pathlib import Path
+from typing import Dict, List, Optional, Tuple, NamedTuple
 import logging
 
 # Import our new realistic trading components
@@ -21,6 +22,13 @@ logging.basicConfig(
     datefmt='%Y-%m-%d %H:%M:%S'
 )
 logger = logging.getLogger(__name__)
+
+
+# Position check result type
+class PositionCheck(NamedTuple):
+    """Result of position opening eligibility check"""
+    allowed: bool
+    reason: str
 
 
 # =============================================================================
@@ -169,31 +177,35 @@ class LiveTradingEngineV2:
         logger.info(f"📚 Loaded {len(strategies)} strategies")
         return strategies
     
-    def can_open_position(self, strategy_id: str, symbol: str) -> tuple[bool, str]:
-        """Check if we can open a new position"""
+    def can_open_position(self, strategy_id: str, symbol: str) -> PositionCheck:
+        """Check if we can open a new position
+        
+        Returns:
+            PositionCheck with allowed flag and reason
+        """
         open_positions = [p for p in self.trading_engine.positions.values() if p.status == "OPEN"]
         
         # Check total limit
         if len(open_positions) >= Config.MAX_TOTAL_POSITIONS:
-            return False, f"Max total positions ({Config.MAX_TOTAL_POSITIONS})"
+            return PositionCheck(False, f"Max total positions ({Config.MAX_TOTAL_POSITIONS})")
         
         # Check strategy limit
         strategy_positions = [p for p in open_positions if p.strategy_id == strategy_id]
         if len(strategy_positions) >= Config.MAX_POSITIONS_PER_STRATEGY:
-            return False, f"Max positions for {strategy_id}"
+            return PositionCheck(False, f"Max positions for {strategy_id}")
         
         # Check token limit
         token_positions = [p for p in open_positions if p.symbol == symbol]
         if len(token_positions) >= Config.MAX_POSITIONS_PER_TOKEN:
-            return False, f"Max positions for {symbol}"
+            return PositionCheck(False, f"Max positions for {symbol}")
         
         # Check if already have this exact position
         existing = [p for p in open_positions 
                    if p.strategy_id == strategy_id and p.symbol == symbol]
         if existing:
-            return False, f"Already have position"
+            return PositionCheck(False, f"Already have position")
         
-        return True, "OK"
+        return PositionCheck(True, "OK")
     
     def execute_strategy(self, strategy_id: str, symbol: str):
         """Execute strategy for a symbol"""
@@ -210,9 +222,9 @@ class LiveTradingEngineV2:
                 return
             
             # Check if we can open position
-            can_open, reason = self.can_open_position(strategy_id, symbol)
-            if not can_open:
-                logger.info(f"⏸️  {strategy_id} {symbol} - {reason}")
+            check = self.can_open_position(strategy_id, symbol)
+            if not check.allowed:
+                logger.info(f"⏸️  {strategy_id} {symbol} - {check.reason}")
                 return
             
             # Open position with realistic execution

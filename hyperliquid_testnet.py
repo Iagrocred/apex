@@ -82,12 +82,14 @@ class HyperliquidTestnetClient:
     Uses Binance API for order book data (publicly accessible)
     """
     
-    # Use Binance API as it's publicly accessible and has good liquidity data
-    BINANCE_API_URL = "https://api.binance.com"
+    # Binance API configuration - can be changed for different exchanges
+    # Set via environment variable: EXCHANGE_API_URL
+    DEFAULT_API_URL = "https://api.binance.com"
     
     def __init__(self, use_testnet: bool = True, api_key: Optional[str] = None, api_secret: Optional[str] = None):
         self.use_testnet = use_testnet
-        self.api_url = self.BINANCE_API_URL
+        # Allow override via environment variable
+        self.api_url = os.getenv('EXCHANGE_API_URL', self.DEFAULT_API_URL)
         self.api_key = api_key
         self.api_secret = api_secret
         self.session = requests.Session()
@@ -199,6 +201,11 @@ class HyperliquidTestnetClient:
         
         base_size = base_size_usd.get(symbol, 50000) / mid_price
         
+        # Liquidity distribution constants
+        SIZE_INCREASE_FACTOR = 0.1  # Size increases by 10% per level
+        MIN_SIZE_MULTIPLIER = 0.8   # Minimum size multiplier for randomness
+        SIZE_VARIANCE = 0.4         # Maximum additional variance (40%)
+        
         for i in range(depth):
             # Price moves away from best by small increments
             price_step = spread * 0.2  # 20% of spread per level
@@ -206,12 +213,12 @@ class HyperliquidTestnetClient:
             # Bid side
             bid_price = best_bid - (i * price_step)
             # Size increases slightly with depth (iceberg orders, hidden liquidity)
-            bid_size = base_size * (1 + i * 0.1) * (0.8 + 0.4 * random.random())
+            bid_size = base_size * (1 + i * SIZE_INCREASE_FACTOR) * (MIN_SIZE_MULTIPLIER + SIZE_VARIANCE * random.random())
             bids.append(OrderBookLevel(price=bid_price, size=bid_size))
             
             # Ask side
             ask_price = best_ask + (i * price_step)
-            ask_size = base_size * (1 + i * 0.1) * (0.8 + 0.4 * random.random())
+            ask_size = base_size * (1 + i * SIZE_INCREASE_FACTOR) * (MIN_SIZE_MULTIPLIER + SIZE_VARIANCE * random.random())
             asks.append(OrderBookLevel(price=ask_price, size=ask_size))
         
         logger.info(f"📊 Generated simulated order book for {symbol}")
