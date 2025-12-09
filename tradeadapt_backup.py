@@ -3,17 +3,9 @@
 TRADEPEX ADAPTIVE - Dynamic Live Strategy Analyzer & Optimizer
 =================================================================
 PAPER TRADING on HYPERLIQUID with LLM-based strategy optimization.
-NOW WITH REALISTIC EXECUTION SIMULATION!
 
 This system analyzes paper trading performance, identifies why strategies
 are losing, and dynamically adjusts parameters until profitability is achieved.
-
-🆕 REALISTIC EXECUTION (v2.0):
-- Real order book simulation with bid-ask spreads
-- Slippage calculation based on order size and liquidity
-- Rejects trades with excessive slippage (>50 bps)
-- Tracks intended vs actual fill prices
-- Shows execution costs per trade
 
 THE COMPLETE PIPELINE:
 1. APEX.py → Backtests and discovers successful strategies → successful_strategies/
@@ -28,12 +20,11 @@ IMPORTANT: This system does NOT modify the original strategy files!
 
 Key Features:
 1. HYPERLIQUID INTEGRATION - Uses Hyperliquid API for market data (lower fees!)
-2. 🆕 REALISTIC ORDER BOOK SIMULATION - Accounts for spreads, slippage, fees
-3. 8-MINUTE STRATEGY SCANNING - Picks up new strategies from APEX automatically
-4. 71% WIN RATE PROMOTION - Auto-promotes successful strategies to apexlive/
-5. LLM-BASED REASONING - Uses AI to analyze WHY trades fail and suggest improvements
-6. Adaptive Optimization Loop - Continues until target profitability is reached
-7. Strategy Recoding - Saves improved strategies as new Python files
+2. 8-MINUTE STRATEGY SCANNING - Picks up new strategies from APEX automatically
+3. 71% WIN RATE PROMOTION - Auto-promotes successful strategies to apexlive/
+4. LLM-BASED REASONING - Uses AI to analyze WHY trades fail and suggest improvements
+5. Adaptive Optimization Loop - Continues until target profitability is reached
+6. Strategy Recoding - Saves improved strategies as new Python files
 
 HYPERLIQUID ADVANTAGES:
 - Taker Fee: 0.035% (vs HTX 0.05%) 
@@ -49,12 +40,6 @@ HOW IT WORKS (LIKE APEX RBI):
 - New parameters are applied and tested
 - Process repeats until TARGET_WIN_RATE and TARGET_PROFIT_FACTOR are achieved
 - Strategies hitting 71% WR + profits → promoted to apexlive/ for LIVE trading!
-
-EXECUTION COSTS (automatically tracked):
-- Entry: Spread crossing + slippage + taker fee
-- Exit: Spread crossing + slippage + taker fee
-- Total typical: 0.6-1.2% per round trip at 8x leverage
-- System shows: Intended price vs Actual fill price
 
 TRADE DURATION:
 - max_holding_periods (default 20) * 15 minutes = 300 minutes (5 hours) max
@@ -1285,141 +1270,6 @@ class HyperliquidPaperClient:
         except Exception as e:
             print(f"❌ Hyperliquid candle fetch error for {symbol}: {e}")
         return None
-    
-    def get_order_book(self, symbol: str, depth: int = 20) -> Optional[dict]:
-        """
-        Get simulated order book for realistic execution.
-        Returns dict with bids, asks, spread info.
-        """
-        try:
-            # Get current mid price
-            mid_price = self.get_current_price(symbol)
-            if not mid_price:
-                return None
-            
-            # Typical spreads by asset (basis points)
-            spread_bps_map = {
-                'BTC': 0.8, 'ETH': 1.2, 'SOL': 2.5, 'XRP': 3.5,
-                'ADA': 4.0, 'DOT': 3.5, 'LINK': 4.0, 'AVAX': 3.5,
-                'ATOM': 3.0, 'ARB': 4.0
-            }
-            spread_bps = spread_bps_map.get(symbol, 4.0)
-            spread = mid_price * (spread_bps / 10000)
-            
-            best_bid = mid_price - (spread / 2)
-            best_ask = mid_price + (spread / 2)
-            
-            # Base liquidity (USD) per level
-            base_liquidity_map = {
-                'BTC': 300000, 'ETH': 200000, 'SOL': 80000,
-                'XRP': 40000, 'ADA': 25000, 'DOT': 30000,
-                'LINK': 35000, 'AVAX': 30000, 'ATOM': 45000, 'ARB': 35000
-            }
-            base_liquidity_usd = base_liquidity_map.get(symbol, 40000)
-            
-            import random
-            bids = []
-            asks = []
-            
-            for i in range(depth):
-                price_step = spread * 0.2
-                
-                # Bid side
-                bid_price = best_bid - (i * price_step)
-                bid_size_usd = base_liquidity_usd * (1 + i * 0.1) * (0.8 + 0.4 * random.random())
-                bid_size = bid_size_usd / bid_price
-                bids.append({'price': bid_price, 'size': bid_size})
-                
-                # Ask side
-                ask_price = best_ask + (i * price_step)
-                ask_size_usd = base_liquidity_usd * (1 + i * 0.1) * (0.8 + 0.4 * random.random())
-                ask_size = ask_size_usd / ask_price
-                asks.append({'price': ask_price, 'size': ask_size})
-            
-            return {
-                'symbol': symbol,
-                'bids': bids,
-                'asks': asks,
-                'mid_price': mid_price,
-                'best_bid': best_bid,
-                'best_ask': best_ask,
-                'spread': spread,
-                'spread_bps': spread_bps
-            }
-        except Exception as e:
-            print(f"⚠️  Order book simulation error for {symbol}: {e}")
-            return None
-    
-    def simulate_market_order(self, symbol: str, side: str, size_usd: float) -> dict:
-        """
-        Simulate market order execution with realistic slippage.
-        
-        Args:
-            symbol: Trading symbol
-            side: 'BUY' or 'SELL'
-            size_usd: Order size in USD (leveraged)
-            
-        Returns:
-            dict with execution details: avg_fill_price, slippage_bps, fees, etc.
-        """
-        order_book = self.get_order_book(symbol)
-        if not order_book:
-            # Fallback to mid price with estimated costs
-            mid_price = self.get_current_price(symbol)
-            if not mid_price:
-                return {'success': False, 'error': 'No price data'}
-            
-            estimated_slippage_bps = 5.0
-            estimated_fill_price = mid_price * (1 + estimated_slippage_bps/10000) if side == 'BUY' else \
-                                  mid_price * (1 - estimated_slippage_bps/10000)
-            
-            fees = size_usd * Config.FUTURES_TAKER_FEE
-            
-            return {
-                'success': True,
-                'avg_fill_price': estimated_fill_price,
-                'filled_size_usd': size_usd - fees,
-                'slippage_bps': estimated_slippage_bps,
-                'fees': fees,
-                'estimated': True
-            }
-        
-        # Walk through order book
-        levels = order_book['asks'] if side == 'BUY' else order_book['bids']
-        reference_price = order_book['best_ask'] if side == 'BUY' else order_book['best_bid']
-        
-        remaining_usd = size_usd
-        total_filled_qty = 0.0
-        total_cost = 0.0
-        
-        for level in levels:
-            if remaining_usd <= 0:
-                break
-            
-            level_value_usd = level['size'] * level['price']
-            fill_usd = min(remaining_usd, level_value_usd)
-            fill_qty = fill_usd / level['price']
-            
-            total_filled_qty += fill_qty
-            total_cost += fill_usd
-            remaining_usd -= fill_usd
-        
-        if total_filled_qty == 0:
-            return {'success': False, 'error': 'No liquidity'}
-        
-        avg_fill_price = total_cost / total_filled_qty
-        slippage_bps = abs((avg_fill_price - reference_price) / reference_price) * 10000
-        fees = size_usd * Config.FUTURES_TAKER_FEE
-        
-        return {
-            'success': True,
-            'avg_fill_price': avg_fill_price,
-            'filled_size_usd': total_cost - fees,
-            'slippage_bps': slippage_bps,
-            'fees': fees,
-            'remaining_usd': remaining_usd,
-            'estimated': False
-        }
 
 
 # Legacy alias for backwards compatibility
@@ -2472,8 +2322,8 @@ class AdaptivePaperTradingEngine:
     # LLM optimization handles improving losing strategies, not pausing them
 
 
-    def open_position(self, strategy_id: str, symbol: str, signal: Dict, hl_client: Optional[HyperliquidPaperClient] = None) -> Optional[str]:
-        """Open position with REALISTIC execution simulation (order book, slippage, fees)"""
+    def open_position(self, strategy_id: str, symbol: str, signal: Dict) -> Optional[str]:
+        """Open position with full context including market regime and partial TPs"""
         if signal['signal'] == 'HOLD':
             return None
 
@@ -2489,46 +2339,8 @@ class AdaptivePaperTradingEngine:
         size_usd = self.capital * params.position_size_percent
         leverage_size = size_usd * Config.DEFAULT_LEVERAGE
 
-        intended_price = signal['current_price']
+        entry_price = signal['current_price']
         direction = signal['signal']
-        
-        # ---------------------------------------------------------------------
-        # REALISTIC EXECUTION SIMULATION
-        # ---------------------------------------------------------------------
-        if hl_client:
-            execution = hl_client.simulate_market_order(symbol, direction, leverage_size)
-            
-            if not execution['success']:
-                print(f"❌ Execution failed for {symbol}: {execution.get('error', 'Unknown')}")
-                return None
-            
-            # Use ACTUAL fill price, not intended
-            entry_price = execution['avg_fill_price']
-            slippage_bps = execution['slippage_bps']
-            entry_fees = execution['fees']
-            
-            # Check if slippage is acceptable (e.g., < 50 bps)
-            MAX_SLIPPAGE_BPS = 50.0
-            if slippage_bps > MAX_SLIPPAGE_BPS:
-                print(f"⚠️  Slippage too high for {symbol}: {slippage_bps:.2f} bps > {MAX_SLIPPAGE_BPS}")
-                return None
-            
-            # Calculate total entry cost including slippage
-            entry_cost = entry_fees
-            
-            print(f"   💹 Realistic Execution:")
-            print(f"      Intended: ${intended_price:.2f}")
-            print(f"      Actual Fill: ${entry_price:.2f}")
-            print(f"      Slippage: {slippage_bps:.2f} bps")
-            print(f"      Entry Fees: ${entry_fees:.2f}")
-        else:
-            # Fallback to naive execution (old behavior)
-            entry_price = intended_price
-            slippage_bps = 0.0
-            fee_open = leverage_size * Config.FUTURES_TAKER_FEE
-            spread_cost = leverage_size * Config.ESTIMATED_SPREAD
-            entry_cost = fee_open + spread_cost
-            entry_fees = fee_open
 
         # ---------------------------------------------------------------------
         # MULTI-TP LEVELS (50% / 25% / 25%)
@@ -2580,7 +2392,14 @@ class AdaptivePaperTradingEngine:
             stop_loss = entry_price + stop_dist
 
         # ---------------------------------------------------------------------
-        # CREATE POSITION with execution details
+        # ENTRY COST MODEL (fee + spread on entry)
+        # ---------------------------------------------------------------------
+        fee_open = leverage_size * Config.FUTURES_TAKER_FEE
+        spread_cost = leverage_size * Config.ESTIMATED_SPREAD
+        entry_cost = fee_open + spread_cost
+
+        # ---------------------------------------------------------------------
+        # CREATE POSITION
         # ---------------------------------------------------------------------
         position = AdaptivePaperTrade(
             strategy_id=strategy_id,
@@ -3473,7 +3292,7 @@ class AdaptiveTradingEngine:
                 strategy_type = executor.strategy_type if hasattr(executor, 'strategy_type') else 'UNKNOWN'
                 print(f"\n🚀 SIGNAL: {strategy_id[:40]} - {signal['signal']} {token}")
                 print(f"   Type: {strategy_type} | Reason: {signal['reason']}")
-                self.paper_engine.open_position(strategy_id, token, signal, hl_client=self.htx_client)
+                self.paper_engine.open_position(strategy_id, token, signal)
 
         except Exception as e:
             print(f"❌ Error: {strategy_id[:30]} {token}: {e}")
